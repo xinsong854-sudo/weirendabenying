@@ -26,7 +26,7 @@ def init_db():
     db = get_db()
     # 成员表
     db.execute("""CREATE TABLE IF NOT EXISTS members(
-        uuid TEXT PRIMARY KEY, name TEXT, avatar TEXT, role TEXT DEFAULT 'member', title TEXT DEFAULT '', avatar_frame TEXT DEFAULT 'none',
+        uuid TEXT PRIMARY KEY, name TEXT, avatar TEXT, role TEXT DEFAULT 'member', title TEXT DEFAULT '', avatar_frame TEXT DEFAULT 'none', signature TEXT DEFAULT '',
         online INTEGER DEFAULT 0, last_seen INTEGER, joined_at INTEGER DEFAULT (strftime('%s','now'))
     )""")
     # 兼容旧库：已有 members 表时补充 title 字段
@@ -36,6 +36,10 @@ def init_db():
         pass
     try:
         db.execute("ALTER TABLE members ADD COLUMN avatar_frame TEXT DEFAULT 'none'")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute("ALTER TABLE members ADD COLUMN signature TEXT DEFAULT ''")
     except sqlite3.OperationalError:
         pass
     # 评论表
@@ -143,6 +147,78 @@ for cat, entries in ARCHIVE["lore"].items():
 
 ALL_JSON = json.dumps(ALL_ENTRIES, ensure_ascii=False)
 ARCHIVE_JSON = json.dumps(ARCHIVE, ensure_ascii=False)
+
+
+def rebuild_archive_cache():
+    global ALL_ENTRIES, ALL_JSON, ARCHIVE_JSON
+    ALL_ENTRIES = []
+    for cat, entries in ARCHIVE["lore"].items():
+        for e in entries:
+            ALL_ENTRIES.append({**e, "category": cat})
+    ALL_JSON = json.dumps(ALL_ENTRIES, ensure_ascii=False)
+    ARCHIVE_JSON = json.dumps(ARCHIVE, ensure_ascii=False)
+
+def persist_archive():
+    ARCHIVE["stats"]["lore_count"] = sum(len(v) for v in ARCHIVE.get("lore", {}).values())
+    tmp = DATA + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(ARCHIVE, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, DATA)
+    rebuild_archive_cache()
+    sync_entries_to_db()
+
+def parse_wiki_submission(row):
+    try:
+        payload = json.loads(row["content"] or "{}")
+    except Exception:
+        payload = {"content": row["content"] or ""}
+    if not isinstance(payload, dict):
+        payload = {"content": str(payload)}
+    try:
+        images = json.loads(row["images_json"] or "[]")
+    except Exception:
+        images = []
+    payload.setdefault("images", images)
+    payload.setdefault("category", row["target"])
+    payload.setdefault("entry_name", "")
+    payload.setdefault("body", payload.get("content", ""))
+    return payload
+
+def apply_wiki_submission(row):
+    payload = parse_wiki_submission(row)
+    typ = row["submit_type"] or payload.get("type") or "新增词条"
+    category = str(payload.get("category") or row["target"] or "").strip()[:80]
+    entry_name = str(payload.get("entry_name") or "").strip()[:80]
+    body = str(payload.get("body") or payload.get("content") or "").strip()
+    images = payload.get("images") if isinstance(payload.get("images"), list) else []
+    images = [str(x) for x in images if str(x).startswith(("http://", "https://"))][:9]
+    if not category:
+        raise ValueError("缺少分类名称")
+    ARCHIVE.setdefault("lore", {}).setdefault(category, [])
+    if typ == "新建分类" and not entry_name:
+        if body:
+            ARCHIVE["lore"][category].append({"name": category, "description": body + ("\n\n" + "\n".join(images) if images else ""), "uuid": hashlib.md5(f"{category}:{time.time()}".encode()).hexdigest()})
+        persist_archive(); return
+    if not entry_name:
+        raise ValueError("缺少条目名称")
+    desc = body
+    if images:
+        desc = (desc + "\n\n" if desc else "") + "图片：\n" + "\n".join(images)
+    entries = ARCHIVE["lore"][category]
+    found = None
+    for e in entries:
+        if str(e.get("name", "")).strip() == entry_name:
+            found = e; break
+    if found:
+        if typ == "修订词条":
+            found["description"] = desc
+        else:
+            old = str(found.get("description", "")).rstrip()
+            found["description"] = (old + "\n\n" + desc).strip() if old else desc
+    else:
+        uid = hashlib.md5(f"{category}:{entry_name}:{time.time()}".encode()).hexdigest()
+        entries.append({"name": entry_name, "description": desc, "uuid": uid})
+    persist_archive()
 
 def sync_entries_to_db():
     """把 JSON Wiki 同步进 SQLite，供后端参数化搜索使用。"""
@@ -495,12 +571,12 @@ class Server(BaseHTTPRequestHandler):
         elif p.path == "/api/members":
             db = get_db()
             now = int(time.time())
-            rows = db.execute("SELECT uuid,name,avatar,role,title,avatar_frame,online,last_seen FROM members ORDER BY online DESC, last_seen DESC, CASE role WHEN 'chief' THEN 0 WHEN 'deputy' THEN 1 WHEN 'admin' THEN 2 ELSE 3 END, name").fetchall()
+            rows = db.execute("SELECT uuid,name,avatar,role,title,avatar_frame,signature,online,last_seen FROM members ORDER BY online DESC, last_seen DESC, CASE role WHEN 'chief' THEN 0 WHEN 'deputy' THEN 1 WHEN 'admin' THEN 2 ELSE 3 END, name").fetchall()
             db.close()
             members = []
             for r in rows:
                 online = r["online"] and (now - r["last_seen"] < 600) if r["last_seen"] else False
-                members.append({"uuid": r["uuid"], "name": r["name"], "avatar": r["avatar"], "role": r["role"], "title": r["title"] or "", "avatar_frame": r["avatar_frame"] or "none", "online": online, "last_seen": r["last_seen"]})
+                members.append({"uuid": r["uuid"], "name": r["name"], "avatar": r["avatar"], "role": r["role"], "title": r["title"] or "", "avatar_frame": r["avatar_frame"] or "none", "signature": r["signature"] or "", "online": online, "last_seen": r["last_seen"]})
             self._json(members)
         elif p.path == "/api/members/role":
             q = parse_qs(p.query); uuid = q.get("uuid", [""])[0]
@@ -544,10 +620,14 @@ class Server(BaseHTTPRequestHandler):
             db.close()
             out = []
             for r in rows:
-                try: images = json.loads(r["images_json"] or "[]")
-                except Exception: images = []
-                out.append({"id": r["id"], "target": r["target"], "type": r["submit_type"], "content": r["content"], "images": images, "author": r["user_name"] or "成员投稿", "status": r["status"], "time": r["created_at"]})
+                payload = parse_wiki_submission(r)
+                images = payload.get("images") if isinstance(payload.get("images"), list) else []
+                title = payload.get("entry_name") or r["target"]
+                text = payload.get("body") or payload.get("content") or r["content"]
+                out.append({"id": r["id"], "target": r["target"], "entry_name": title, "type": r["submit_type"], "content": text, "images": images, "author": r["user_name"] or "成员投稿", "status": r["status"], "time": r["created_at"]})
             self._json(out)
+        elif p.path == "/api/wiki/archive":
+            self._json(ARCHIVE)
         elif p.path == "/api/search":
             q = parse_qs(p.query).get("q", [""])[0].strip()[:80]
             if not q:
@@ -724,18 +804,51 @@ class Server(BaseHTTPRequestHandler):
                 r = requests.get(f"{API}/v1/user/", headers={"x-token": token}, timeout=10); r.raise_for_status(); user = r.json()
             except Exception:
                 self._json({"error": "令牌无效"}, 401); return
-            target = str(body.get("target", "")).strip()[:80]
-            submit_type = str(body.get("type", "修订词条")).strip()[:30]
+            target = str(body.get("target") or body.get("category") or "").strip()[:80]
+            submit_type = str(body.get("type", "新增词条")).strip()[:30]
             content = str(body.get("content", "")).strip()
             images = body.get("images", [])
             if not isinstance(images, list): images = []
             images = [str(x) for x in images if str(x).startswith(("http://", "https://"))][:9]
-            if not target or not content: self._json({"error": "缺少提交目标或内容"}, 400); return
+            payload = {
+                "group": str(body.get("group", "世界信息")).strip()[:30],
+                "category": target,
+                "entry_name": str(body.get("entry_name", "")).strip()[:80],
+                "body": content,
+                "images": images,
+            }
+            if not target or not content: self._json({"error": "缺少分类名称或正文内容"}, 400); return
+            if submit_type != "新建分类" and not payload["entry_name"]: self._json({"error": "缺少条目名称"}, 400); return
             if len(content) > 5000: self._json({"error": "内容过长"}, 400); return
             db = get_db()
-            db.execute("INSERT INTO wiki_submissions(target,submit_type,content,images_json,user_uuid,user_name) VALUES(?,?,?,?,?,?)", [target, submit_type, content, json.dumps(images, ensure_ascii=False), user.get("uuid", ""), user.get("nick_name") or user.get("name", "")])
+            db.execute("INSERT INTO wiki_submissions(target,submit_type,content,images_json,user_uuid,user_name) VALUES(?,?,?,?,?,?)", [target, submit_type, json.dumps(payload, ensure_ascii=False), json.dumps(images, ensure_ascii=False), user.get("uuid", ""), user.get("nick_name") or user.get("name", "")])
             db.commit(); row = db.execute("SELECT id,target,submit_type,content,created_at FROM wiki_submissions WHERE id=last_insert_rowid()").fetchone(); db.close()
-            self._json({"id": row["id"], "target": row["target"], "type": row["submit_type"], "content": row["content"], "status": "pending", "time": row["created_at"]})
+            self._json({"id": row["id"], "target": row["target"], "type": row["submit_type"], "content": content, "status": "pending", "time": row["created_at"]})
+        elif p.path == "/api/wiki/review":
+            if not token: self._json({"error": "未登录"}, 401); return
+            try:
+                r = requests.get(f"{API}/v1/user/", headers={"x-token": token}, timeout=10); r.raise_for_status(); user = r.json()
+            except Exception:
+                self._json({"error": "令牌无效"}, 401); return
+            db = get_db(); role_row = db.execute("SELECT role FROM members WHERE uuid=?", [user.get("uuid", "")]).fetchone(); role = role_row["role"] if role_row else "member"
+            if role not in ("chief", "deputy", "admin"):
+                db.close(); self._json({"error": "权限不足"}, 403); return
+            sid = int(body.get("id", 0) or 0)
+            action = str(body.get("action", "approved")).strip()
+            row = db.execute("SELECT * FROM wiki_submissions WHERE id=?", [sid]).fetchone()
+            if not row:
+                db.close(); self._json({"error": "提交不存在"}, 404); return
+            if row["status"] != "pending":
+                db.close(); self._json({"error": "该提交已经处理过"}, 400); return
+            if action == "approved":
+                try:
+                    apply_wiki_submission(row)
+                except Exception as e:
+                    db.close(); self._json({"error": str(e)}, 400); return
+                db.execute("UPDATE wiki_submissions SET status='approved' WHERE id=?", [sid])
+            else:
+                db.execute("UPDATE wiki_submissions SET status='rejected' WHERE id=?", [sid])
+            db.commit(); db.close(); self._json({"ok": True, "status": "approved" if action == "approved" else "rejected"})
         elif p.path == "/api/activities":
             if not token: self._json({"error": "未登录"}, 401); return
             try:
@@ -795,6 +908,17 @@ class Server(BaseHTTPRequestHandler):
             db.execute("UPDATE members SET avatar_frame=? WHERE uuid=?", [frame, user.get("uuid", "")])
             db.commit(); db.close()
             self._json({"ok": True, "avatar_frame": frame})
+        elif p.path == "/api/members/signature":
+            if not token: self._json({"error": "未登录"}, 401); return
+            try:
+                r = requests.get(f"{API}/v1/user/", headers={"x-token": token}, timeout=10); r.raise_for_status(); user = r.json()
+            except Exception:
+                self._json({"error": "令牌无效"}, 401); return
+            signature = str(body.get("signature", "")).strip()[:120]
+            db = get_db()
+            db.execute("UPDATE members SET signature=?, online=1, last_seen=? WHERE uuid=?", [signature, int(time.time()), user.get("uuid", "")])
+            db.commit(); db.close()
+            self._json({"ok": True, "signature": signature})
         elif p.path == "/api/private/messages":
             if not token: self._json({"error": "未登录"}, 401); return
             try:

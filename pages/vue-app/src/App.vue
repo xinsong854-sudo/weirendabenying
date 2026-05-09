@@ -1,14 +1,22 @@
 <template>
-  <section v-if="!session.me" class="login-scene">
-    <div class="login-card labyrinth-window">
-      <div class="window-title">IDENTITY RITUAL</div>
-      <div class="emblem">✦</div>
+  <section v-if="!session.me" class="login-scene login-1999">
+    <div class="login-ornament left">1999</div>
+    <div class="login-ornament right">FILE</div>
+    <div class="login-stage-copy">
+      <span>REVERSE ARCHIVE / 1999</span>
       <h1>伪人大本营</h1>
-      <p class="tagline">机密档案库 · 身份核验</p>
+      <p>一份从旧时代回收的成员卷宗。请完成身份仪式，进入营地通讯与 Wiki 档案。</p>
+      <div class="stage-rule"><i></i><b>THE PSEUDO HUMAN DOSSIER</b><i></i></div>
+    </div>
+    <div class="login-card labyrinth-window">
+      <div class="window-title">IDENTITY RITUAL · NEW FRONTEND</div>
+      <div class="emblem">✦</div>
+      <h1>身份核验</h1>
+      <p class="tagline">卷宗编号：1999-R / 伪人内部通行证</p>
       <div class="field"><span class="prefix">+86</span><input v-model.trim="phone" type="tel" inputmode="numeric" maxlength="11" placeholder="请输入手机号" autocomplete="tel"></div>
       <div class="field"><input v-model.trim="code" type="text" inputmode="numeric" maxlength="4" placeholder="验证码" autocomplete="one-time-code"><button class="code-btn" :disabled="sending || timer > 0" @click="sendCode">{{ timer > 0 ? `${timer}s` : '获取验证码' }}</button></div>
       <label class="agree"><input v-model="agree" type="checkbox"><span>我已阅读并同意 <a href="https://oss.talesofai.cn/static/blackboard/protocol-page/user-agreement.html" target="_blank" rel="noopener noreferrer">用户协议</a> 和 <a href="https://oss.talesofai.cn/static/blackboard/protocol-page/privacy-policy.html" target="_blank" rel="noopener noreferrer">隐私政策</a></span></label>
-      <button class="submit" :disabled="logging" @click="login">{{ logging ? '登录中...' : '登 录' }}</button>
+      <button class="submit" :disabled="logging" @click="login">{{ logging ? '登录中...' : '开启卷宗' }}</button>
       <div class="msg" :class="messageType">{{ message }}</div>
       <div class="foot">未注册手机号验证后将自动登录 · t.nieta.art/UTLCFvWs</div>
     </div>
@@ -48,7 +56,7 @@
                 </div>
               </aside>
               <section v-if="selectedMember" class="friend-detail-pane">
-                  <header class="friend-detail-head"><button class="detail-avatar" @click.stop.prevent="openMemberModal(selectedMember)"><span class="framed-avatar" :class="avatarFrameClassFor(selectedMember)"><img class="avatar-base" v-if="safeUrl(selectedMember.avatar)" :src="safeUrl(selectedMember.avatar)" alt="" referrerpolicy="no-referrer"><b v-else>{{ initials(selectedMember.name) }}</b><img v-if="avatarFrameFor(selectedMember)?.type === 'frame'" class="avatar-frame" :src="avatarFrameFor(selectedMember).url" alt=""><span v-if="avatarFrameFor(selectedMember)?.type === 'roach'" class="roach-orbit" aria-hidden="true"><img :src="avatarFrameFor(selectedMember).url" alt=""></span></span></button><div><h2>{{ selectedMember.name }} <span v-if="['chief','deputy','admin'].includes(selectedMember.role)" class="verify-v">V</span></h2><p v-if="memberTitle(selectedMember)">{{ memberTitle(selectedMember) }}</p><small>{{ selectedMember.online ? '在线' : timeAgo(selectedMember.last_seen) }}</small></div><div class="detail-actions"><button class="title-auth-btn" @click="openPrivatePane(selectedMember)">私聊</button><button v-if="isAdmin" class="title-auth-btn" @click="authorizeTitle(selectedMember)">授权称号</button></div></header>
+                  <header class="friend-detail-head"><button class="detail-avatar" @click.stop.prevent="openMemberModal(selectedMember)"><span class="framed-avatar" :class="avatarFrameClassFor(selectedMember)"><img class="avatar-base" v-if="safeUrl(selectedMember.avatar)" :src="safeUrl(selectedMember.avatar)" alt="" referrerpolicy="no-referrer"><b v-else>{{ initials(selectedMember.name) }}</b><img v-if="avatarFrameFor(selectedMember)?.type === 'frame'" class="avatar-frame" :src="avatarFrameFor(selectedMember).url" alt=""><span v-if="avatarFrameFor(selectedMember)?.type === 'roach'" class="roach-orbit" aria-hidden="true"><img :src="avatarFrameFor(selectedMember).url" alt=""></span></span></button><div><h2>{{ selectedMember.name }} <span v-if="['chief','deputy','admin'].includes(selectedMember.role)" class="verify-v">V</span></h2><p v-if="memberTitle(selectedMember)">{{ memberTitle(selectedMember) }}</p><small>{{ selectedMember.online ? '在线' : timeAgo(selectedMember.last_seen) }}</small><blockquote v-if="selectedMember.signature">{{ selectedMember.signature }}</blockquote></div><div class="detail-actions"><button class="title-auth-btn" @click="openPrivatePane(selectedMember)">私聊</button><button v-if="isAdmin" class="title-auth-btn" @click="authorizeTitle(selectedMember)">授权称号</button></div></header>
               </section>
               <section v-if="selectedMember && selectedMemberTool === '私聊'" class="private-side-pane private-drawer">
                 <header><b>私聊 · {{ selectedMember.name }}</b><button @click="selectedMemberTool = '资料'">收起</button></header>
@@ -116,9 +124,20 @@
               </div>
             </div>
             <div v-else class="drill-level level-three standalone">
-              <header><div><span>栏目 / {{ selectedWikiCategory }}</span><h3>{{ selectedWikiCategory }}</h3></div><div class="wiki-actions inline"><input ref="wikiUploadInput" class="hidden-file" type="file" accept="image/*" multiple @change="onWikiImages"><button class="back-note" @click="openCategory(selectedWikiCategory)">查看全部词条</button><button class="back-note" @click="wikiUploadInput?.click()">上传图片</button><button class="back-note" @click="wikiSubmitType = '修订词条'; wikiSubmitOpen = !wikiSubmitOpen">提交编辑</button><button class="back-note" @click="wikiSubmitType = '开新栏目'; wikiSubmitOpen = !wikiSubmitOpen">开新栏目</button></div></header>
-              <div v-if="uploadedWikiImages.length" class="upload-preview wiki-preview"><span v-for="img in uploadedWikiImages" :key="img"><img :src="img" alt=""><button @click="removeUploadedImage(uploadedWikiImages, img)">×</button></span></div>
-              <div v-if="wikiSubmitOpen" class="wiki-submit-panel"><div><b>{{ wikiSubmitType }}</b><p>提交目标：<strong>{{ selectedWikiCategory }}</strong></p></div><label>选择已有栏目作为归属<select v-model="selectedWikiCategory"><option v-for="name in wikiSubmissionTargets" :key="name" :value="name">{{ name }}</option></select></label><textarea v-model.trim="wikiSubmitContent" rows="4" :placeholder="wikiSubmitType === '开新栏目' ? '写明想开的栏目名称、归属栏目和用途...' : '写明要新增/修订的词条内容、图片链接或理由...'"></textarea><button class="back-note primary" :disabled="!wikiSubmitContent" @click="submitWikiChange">提交到待审核</button></div>
+              <header><div><span>栏目 / {{ selectedWikiCategory }}</span><h3>{{ selectedWikiCategory }}</h3></div><div class="wiki-actions inline"><button class="back-note" @click="openCategory(selectedWikiCategory)">查看全部词条</button><button class="back-note primary" @click="openWikiEditor('新增词条')">改 Wiki / 新增词条</button></div></header>
+              <div v-if="wikiSubmitOpen" class="wiki-submit-panel wiki-editor-panel">
+                <div class="wiki-editor-title"><b>Wiki 编辑申请</b><p>审核通过后会直接写入 Wiki；如果分类名与已有分类一致，会自动合并到原分类。</p></div>
+                <div class="wiki-form-grid">
+                  <label>编辑类型<select v-model="wikiSubmitType"><option value="新增词条">新增词条</option><option value="修订词条">修订词条</option><option value="新建分类">新建分类</option></select></label>
+                  <label>大分类 / 归属<select v-model="wikiSubmitGroup"><option value="世界信息">世界信息</option><option value="伪物档案">伪物档案</option></select></label>
+                  <label>分类名称<input v-model.trim="wikiSubmitCategory" list="wiki-category-list" placeholder="选择或输入分类名，例如：世界观"><datalist id="wiki-category-list"><option v-for="name in wikiSubmissionTargets" :key="name" :value="name"></option></datalist></label>
+                  <label v-if="wikiSubmitType !== '新建分类'">条目名称<input v-model.trim="wikiSubmitEntryName" placeholder="要增加或修订的条目名"></label>
+                </div>
+                <label class="wiki-content-label">正文内容<textarea v-model.trim="wikiSubmitContent" rows="6" placeholder="写条目正文、修订内容、设定说明等。照片可在下方一起上传，不需要单独开上传入口。"></textarea></label>
+                <div class="wiki-photo-row"><input ref="wikiUploadInput" class="hidden-file" type="file" accept="image/*" multiple @change="onWikiImages"><button class="back-note" @click="wikiUploadInput?.click()">添加照片</button><span>{{ uploadedWikiImages.length ? `已添加 ${uploadedWikiImages.length} 张照片` : '可选：上传条目配图 / 证明图' }}</span></div>
+                <div v-if="uploadedWikiImages.length" class="upload-preview wiki-preview"><span v-for="img in uploadedWikiImages" :key="img"><img :src="img" alt=""><button @click="removeUploadedImage(uploadedWikiImages, img)">×</button></span></div>
+                <button class="back-note primary" :disabled="!canSubmitWiki" @click="submitWikiChange">提交给管理员审核</button>
+              </div>
               <div class="wiki-entry-preview"><button v-for="entry in currentWikiCategoryPreview.slice(0, 12)" :key="entry.uuid" @click="openEntry(entry.uuid)">{{ entry.name }}</button></div>
             </div>
           </section>
@@ -127,10 +146,23 @@
             <header class="drill-head artifact"><div><span class="ritual-label">PSEUDO-ARTIFACTS ARCHIVE</span><h2>伪物档案</h2><p v-if="!selectedArtifactCategory">选择伪物档案下的子栏目。</p><p v-else>当前子栏目：{{ selectedArtifactCategory }}</p></div><button class="back-note" @click="leaveWikiLevel">返回上一级</button></header>
             <div v-if="!selectedArtifactCategory" class="drill-grid level-one">
               <button v-for="cat in artifactCategories" :key="cat.name" @click="selectedArtifactCategory = cat.name"><b>{{ cat.name }}</b><small>{{ cat.count }} 件记录</small><i>进入子栏目</i></button>
-              <button class="artifact-add" @click="selectedArtifactCategory = artifactCategories[0]?.name || ''; wikiSubmitType = '开新栏目'; wikiSubmitOpen = !wikiSubmitOpen"><b>申请新图鉴栏目</b><small>向管理员提交新的伪物分类。</small><i>NEW</i></button>
+              <button class="artifact-add" @click="openArtifactEditor"><b>改 Wiki / 新增图鉴</b><small>选择分类、条目和照片，提交管理员审核。</small><i>EDIT</i></button>
             </div>
             <main v-else class="artifact-files standalone">
-              <div class="artifact-warning"><b>内部图鉴 / {{ selectedArtifactCategory }}</b><span>伪物资料需管理员审核后公开</span></div>
+              <div class="artifact-warning"><b>内部图鉴 / {{ selectedArtifactCategory }}</b><span>伪物资料需管理员审核后公开</span><button class="back-note primary" @click="openWikiEditor('新增词条', selectedArtifactCategory, '伪物档案')">改 Wiki / 新增条目</button></div>
+              <div v-if="wikiSubmitOpen" class="wiki-submit-panel wiki-editor-panel artifact-editor-panel">
+                <div class="wiki-editor-title"><b>Wiki 编辑申请</b><p>审核通过后会直接写入伪物档案；同名分类会合并。</p></div>
+                <div class="wiki-form-grid">
+                  <label>编辑类型<select v-model="wikiSubmitType"><option value="新增词条">新增词条</option><option value="修订词条">修订词条</option><option value="新建分类">新建分类</option></select></label>
+                  <label>大分类 / 归属<select v-model="wikiSubmitGroup"><option value="世界信息">世界信息</option><option value="伪物档案">伪物档案</option></select></label>
+                  <label>分类名称<input v-model.trim="wikiSubmitCategory" list="wiki-category-list-artifact" placeholder="选择或输入分类名"><datalist id="wiki-category-list-artifact"><option v-for="name in wikiSubmissionTargets" :key="name" :value="name"></option></datalist></label>
+                  <label v-if="wikiSubmitType !== '新建分类'">条目名称<input v-model.trim="wikiSubmitEntryName" placeholder="要增加或修订的条目名"></label>
+                </div>
+                <label class="wiki-content-label">正文内容<textarea v-model.trim="wikiSubmitContent" rows="6" placeholder="写条目正文、修订内容、设定说明等。照片可在下方一起上传。"></textarea></label>
+                <div class="wiki-photo-row"><input ref="wikiUploadInput" class="hidden-file" type="file" accept="image/*" multiple @change="onWikiImages"><button class="back-note" @click="wikiUploadInput?.click()">添加照片</button><span>{{ uploadedWikiImages.length ? `已添加 ${uploadedWikiImages.length} 张照片` : '可选：上传条目配图 / 证明图' }}</span></div>
+                <div v-if="uploadedWikiImages.length" class="upload-preview wiki-preview"><span v-for="img in uploadedWikiImages" :key="img"><img :src="img" alt=""><button @click="removeUploadedImage(uploadedWikiImages, img)">×</button></span></div>
+                <button class="back-note primary" :disabled="!canSubmitWiki" @click="submitWikiChange">提交给管理员审核</button>
+              </div>
               <article v-for="entry in artifactEntries" :key="entry.uuid" class="artifact-file" @click="openEntry(entry.uuid)"><div class="artifact-no">{{ entry.name.slice(0, 2) }}</div><div><h3>{{ entry.name }}</h3><p>{{ entry.description }}</p><small>ARCHIVE / {{ selectedArtifactCategory }}</small></div></article>
               <div v-if="!artifactEntries.length" class="wiki-empty-tip">暂无伪物记录。</div>
             </main>
@@ -209,9 +241,21 @@
             <button :class="{ active: activeProfilePanel === 'card' }" @click="activeProfilePanel = 'card'">身份卡</button>
             <button v-if="isAdmin" :class="{ active: activeProfilePanel === 'review' }" @click="activeProfilePanel = 'review'">待审核</button>
           </div>
-          <div v-if="activeProfilePanel === 'overview'" class="setting-block">
-            <h3>个人概览</h3>
-            <p>这里是你的营地身份页。点击上方栏目查看头像框、身份卡或管理员审核内容。</p>
+          <div v-if="activeProfilePanel === 'overview'" class="setting-block signature-block profile-dossier-block">
+            <div class="signature-stack">
+              <section class="signature-editor-card">
+                <h3>个人签名</h3>
+                <p>编辑你的资料卡签名，保存后会同步到后端。</p>
+                <textarea v-model.trim="signatureText" maxlength="120" rows="4" placeholder="写下你的个人签名..."></textarea>
+                <div class="signature-actions"><small>{{ signatureText.length }}/120</small><button class="back-note primary" :disabled="savingSignature" @click="saveSignature">{{ savingSignature ? '保存中...' : '保存签名' }}</button></div>
+              </section>
+              <section class="signature-preview-card">
+                <span class="ritual-label">SIGNATURE PREVIEW</span>
+                <h3>签名展示</h3>
+                <p class="signature-quote">{{ signatureText || '暂无签名。' }}</p>
+                <small>{{ session.me.nick_name || session.me.name }} · {{ session.me.uuid }}</small>
+              </section>
+            </div>
           </div>
           <div v-else-if="activeProfilePanel === 'frames'" class="setting-block">
             <h3>头像框权限</h3>
@@ -237,6 +281,8 @@
             <p>成员提交的新增词条与修订会出现在这里，管理员审核通过后进入 Wiki。</p>
             <div v-for="item in pendingWiki" :key="item.id" class="review-item">
               <b>{{ item.target }}</b><span>{{ item.type }}</span><small>{{ item.author }} · {{ timeAgo(item.time) }}</small><p>{{ item.content }}</p>
+              <div v-if="item.images?.length" class="review-images"><img v-for="img in item.images" :key="img" :src="img" alt=""></div>
+              <div class="review-actions"><button class="back-note primary" @click="reviewWikiSubmission(item, 'approved')">通过并写入 Wiki</button><button class="back-note" @click="reviewWikiSubmission(item, 'rejected')">驳回</button></div>
             </div>
           </div>
         </section>
@@ -250,7 +296,8 @@
         <div class="profile-pop-top"><span>USER PROFILE</span><i>{{ selectedMemberModal.online ? 'ONLINE' : 'OFFLINE' }}</i></div>
         <div class="profile-pop-avatar framed-avatar" :class="avatarFrameClassFor(selectedMemberModal)"><img v-if="safeUrl(selectedMemberModal.avatar)" class="avatar-base" :src="safeUrl(selectedMemberModal.avatar)" alt="" referrerpolicy="no-referrer"><b v-else>{{ initials(selectedMemberModal.name) }}</b><img v-if="avatarFrameFor(selectedMemberModal)?.type === 'frame'" class="avatar-frame" :src="avatarFrameFor(selectedMemberModal).url" alt=""><span v-if="avatarFrameFor(selectedMemberModal)?.type === 'roach'" class="roach-orbit" aria-hidden="true"><img :src="avatarFrameFor(selectedMemberModal).url" alt=""></span></div>
         <h2>{{ selectedMemberModal.name }} <span v-if="['chief','deputy','admin'].includes(selectedMemberModal.role)" class="verify-v">V</span></h2>
-        <p v-if="memberTitle(selectedMemberModal)">{{ memberTitle(selectedMemberModal) }}</p>
+        <p v-if="memberTitle(selectedMemberModal)" class="pop-title-badge">{{ memberTitle(selectedMemberModal) }}</p>
+        <blockquote v-if="selectedMemberModal.signature" class="pop-signature">{{ selectedMemberModal.signature }}</blockquote>
         <small>{{ selectedMemberModal.online ? '在线' : timeAgo(selectedMemberModal.last_seen) }}</small>
         <button v-if="isAdmin" class="title-auth-btn" @click="authorizeTitle(selectedMemberModal)">授权称号</button>
       </section>
@@ -267,9 +314,10 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
-import archive from './pseudo-human-data.json'
+import archiveSeed from './pseudo-human-data.json'
 
 const API = 'https://api.talesofai.cn'
+const archive = reactive(JSON.parse(JSON.stringify(archiveSeed)))
 const TOKEN_KEY = 'NIETA_ACCESS_TOKEN'
 // Forum channels and activities are persisted by backend APIs, not localStorage.
 const phone = ref('')
@@ -287,6 +335,8 @@ const globalQuery = ref('')
 const serverResults = ref([])
 const searchLoading = ref(false)
 const searchSeq = ref(0)
+const signatureText = ref('')
+const savingSignature = ref(false)
 const catQuery = ref('')
 const members = ref([])
 const comments = ref([])
@@ -312,7 +362,10 @@ const selectedWikiCategory = ref('')
 const selectedWikiSubsection = ref('')
 const selectedArtifactCategory = ref('')
 const wikiSubmitOpen = ref(false)
-const wikiSubmitType = ref('修订词条')
+const wikiSubmitType = ref('新增词条')
+const wikiSubmitGroup = ref('世界信息')
+const wikiSubmitCategory = ref('')
+const wikiSubmitEntryName = ref('')
 const wikiSubmitContent = ref('')
 const activeProfilePanel = ref('overview')
 const forumUploadInput = ref(null)
@@ -328,7 +381,7 @@ const avatarFrames = [
   { id: 'moonrise', name: '月升', url: 'https://oss.talesofai.cn/sts/49c915e649254f55a7ea399ad3b6efd1/5e22d7db-3abd-4861-864e-725538d3794b.png', type: 'frame' }
 ]
 
-const allEntries = Object.entries(archive.lore).flatMap(([category, entries]) => entries.map(e => ({ ...e, category })))
+const allEntries = computed(() => Object.entries(archive.lore).flatMap(([category, entries]) => entries.map(e => ({ ...e, category }))))
 const categoryCards = computed(() => Object.entries(archive.lore).map(([name, list]) => ({
   name,
   count: list.length,
@@ -356,10 +409,11 @@ const currentWikiCategories = computed(() => currentWikiSubsection.value?.catego
 const wikiSubmissionTargets = computed(() => archiveCategoriesList.value)
 const archiveCategoriesList = computed(() => categoryCards.value.map(c => c.name))
 const currentWikiCategoryPreview = computed(() => (archive.lore[selectedWikiCategory.value] || []))
+const canSubmitWiki = computed(() => !!wikiSubmitCategory.value.trim() && !!wikiSubmitContent.value.trim() && (wikiSubmitType.value === '新建分类' || !!wikiSubmitEntryName.value.trim()))
 const artifactEntries = computed(() => archive.lore[selectedArtifactCategory.value] || [])
 const isAdmin = computed(() => ['chief', 'deputy', 'admin'].includes(session.role))
 const forumBranches = [
-  { code: 'MAIN', name: '主论坛', desc: '公告、规则、日常讨论与营地事务。' },
+  { code: 'MAIN', name: '主论坛', desc: '公告、规则与日常讨论。' },
   { code: 'YUAN', name: '渊', desc: '渊地区、城市、国家与本地传闻。' },
   { code: 'WEST', name: '西陆', desc: '西陆联盟、派系、边境与圣使教相关讨论。' },
   { code: 'RED', name: '赤星', desc: '赤星地区记录、异常事件与地区角色。' },
@@ -401,7 +455,7 @@ const visibleThreads = computed(() => forumPosts.value.filter(t => !t.revoked))
 const globalResults = computed(() => {
   const q = globalQuery.value.trim()
   if (!q) return []
-  return serverResults.value.length ? serverResults.value : filterEntries(allEntries, q).slice(0, 20)
+  return serverResults.value.length ? serverResults.value : filterEntries(allEntries.value, q).slice(0, 20)
 })
 const categoryEntries = computed(() => filterEntries(archive.lore[currentCat.value] || [], catQuery.value))
 const sortedMembers = computed(() => [...members.value].sort((a, b) => Number(b.online) - Number(a.online) || (Number(b.last_seen || 0) - Number(a.last_seen || 0))))
@@ -471,12 +525,43 @@ async function deleteActivity(event) {
   } catch (e) { showMsg(`删除活动失败：${e.message}`) }
 }
 async function submitWikiChange() {
-  if (!selectedWikiCategory.value || !wikiSubmitContent.value) return
+  if (!canSubmitWiki.value) return
+  const category = wikiSubmitCategory.value.trim()
+  const entryName = wikiSubmitEntryName.value.trim()
+  const payload = { target: category, group: wikiSubmitGroup.value, category, entry_name: entryName, type: wikiSubmitType.value, content: wikiSubmitContent.value, images: uploadedWikiImages.value }
   try {
-    await api('/api/wiki/submissions', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ target: selectedWikiCategory.value, type: wikiSubmitType.value, content: wikiSubmitContent.value, images: uploadedWikiImages.value }) })
-    wikiSubmitContent.value = ''; uploadedWikiImages.value = []; wikiSubmitOpen.value = false
-    await loadForumMeta(); showMsg('已提交到后端待审核', 'ok')
+    await api('/api/wiki/submissions', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify(payload) })
+    wikiSubmitContent.value = ''; wikiSubmitEntryName.value = ''; uploadedWikiImages.value = []; wikiSubmitOpen.value = false
+    await loadForumMeta(); showMsg('已提交给管理员审核', 'ok')
   } catch (e) { showMsg(`提交失败：${e.message}`) }
+}
+function openWikiEditor(type = '新增词条', category = selectedWikiCategory.value, group = selectedWikiGroup.value === '伪物档案' ? '伪物档案' : '世界信息') {
+  wikiSubmitType.value = type
+  wikiSubmitGroup.value = group
+  wikiSubmitCategory.value = category || ''
+  wikiSubmitEntryName.value = ''
+  wikiSubmitContent.value = ''
+  uploadedWikiImages.value = []
+  wikiSubmitOpen.value = true
+}
+function openArtifactEditor() {
+  selectedArtifactCategory.value = artifactCategories.value[0]?.name || '伪物档案'
+  openWikiEditor('新增词条', selectedArtifactCategory.value, '伪物档案')
+}
+async function loadWikiArchive() {
+  const data = await api('/api/wiki/archive').catch(() => null)
+  if (data?.lore) archive.lore = data.lore
+  if (data?.stats) archive.stats = data.stats
+}
+async function reviewWikiSubmission(item, action) {
+  if (!item?.id) return
+  if (action === 'approved' && !window.confirm(`通过并写入 Wiki：${item.target}？`)) return
+  if (action === 'rejected' && !window.confirm(`驳回这条 Wiki 提交？`)) return
+  try {
+    await api('/api/wiki/review', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ id: item.id, action }) })
+    await Promise.all([loadWikiArchive(), loadForumMeta()])
+    showMsg(action === 'approved' ? '已通过并写入 Wiki' : '已驳回', 'ok')
+  } catch (e) { showMsg(`审核失败：${e.message}`) }
 }
 function filterEntries(list, q) {
   const needle = String(q || '').toLowerCase()
@@ -487,6 +572,16 @@ function vp(p) { return /^1[3456789]\d{9}$/.test(p) }
 function memberTitle(m) { return (m?.title || '').trim() }
 function initials(name = '') { return String(name || '?').trim().slice(0, 1).toUpperCase() || '?' }
 function showMsg(text, type = 'error') { message.value = text; messageType.value = type; clearTimeout(showMsg._t); showMsg._t = setTimeout(() => { if (message.value === text) message.value = '' }, type === 'error' ? 3200 : 1500) }
+async function saveSignature() {
+  try {
+    savingSignature.value = true
+    const res = await api('/api/members/signature', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ signature: signatureText.value }) })
+    signatureText.value = res?.signature || ''
+    if (session.me) session.me.signature = signatureText.value
+    members.value = members.value.map(m => m.uuid === session.me?.uuid ? { ...m, signature: signatureText.value } : m)
+    showMsg('签名已保存', 'ok')
+  } catch (e) { showMsg(`保存失败：${e.message}`) } finally { savingSignature.value = false }
+}
 async function authorizeTitle(member) {
   const title = window.prompt(`给 ${member.name} 授权称号：`, member.title || '')
   if (title === null) return
@@ -625,12 +720,18 @@ async function useToken(token) {
   const role = await api(`/api/members/role?uuid=${encodeURIComponent(me.uuid)}`)
   session.role = role?.role || 'member'
   avatarFrame.value = ['none', 'roach', 'moonrise'].includes(role?.avatar_frame) ? role.avatar_frame : 'none'
+  signatureText.value = me?.signature || ''
   localStorage.setItem('NIETA_AVATAR_FRAME', avatarFrame.value)
   await loadMembers()
+  await loadWikiArchive()
   await loadForumMeta()
   await loadForumPosts()
 }
-async function loadMembers() { members.value = await api('/api/members').catch(() => []) }
+async function loadMembers() {
+  members.value = await api('/api/members').catch(() => [])
+  const mine = members.value.find(m => m.uuid === session.me?.uuid)
+  if (mine) signatureText.value = mine.signature || ''
+}
 async function searchEntries() {
   const q = globalQuery.value.trim()
   const seq = ++searchSeq.value
@@ -647,12 +748,12 @@ async function searchEntries() {
   }
 }
 function openForum() { view.value = 'forum'; currentEntry.value = null; globalQuery.value = ''; serverResults.value = []; window.scrollTo(0, 0); loadMembers(); loadForumMeta(); loadForumPosts() }
-function openArchive() { view.value = 'archive'; currentEntry.value = null; currentCat.value = ''; catQuery.value = ''; selectedWikiGroup.value = ''; selectedWikiSubsection.value = ''; selectedWikiCategory.value = ''; selectedArtifactCategory.value = ''; wikiSubmitOpen.value = false; window.scrollTo(0, 0); loadMembers(); loadForumMeta() }
+function openArchive() { view.value = 'archive'; currentEntry.value = null; currentCat.value = ''; catQuery.value = ''; selectedWikiGroup.value = ''; selectedWikiSubsection.value = ''; selectedWikiCategory.value = ''; selectedArtifactCategory.value = ''; wikiSubmitOpen.value = false; window.scrollTo(0, 0); loadMembers(); loadWikiArchive(); loadForumMeta() }
 function enterWikiGroup(group) { selectedWikiGroup.value = group; selectedWikiSubsection.value = ''; selectedWikiCategory.value = ''; selectedArtifactCategory.value = ''; wikiSubmitOpen.value = false; window.scrollTo(0, 0) }
 function leaveWikiLevel() { if (selectedWikiGroup.value === '世界信息') { if (selectedWikiCategory.value) { selectedWikiCategory.value = ''; wikiSubmitOpen.value = false; return } if (selectedWikiSubsection.value) { selectedWikiSubsection.value = ''; return } selectedWikiGroup.value = ''; return } if (selectedWikiGroup.value === '伪物档案') { if (selectedArtifactCategory.value) { selectedArtifactCategory.value = ''; wikiSubmitOpen.value = false; return } selectedWikiGroup.value = '' } }
 function openExplore() { view.value = 'explore'; currentEntry.value = null; window.scrollTo(0, 0) }
 function openCategory(cat) { currentCat.value = cat; catQuery.value = ''; currentEntry.value = null; view.value = 'category'; window.scrollTo(0, 0) }
-async function openEntry(uuid, fromGlobal = false) { const entry = allEntries.find(e => e.uuid === uuid); if (!entry) return; currentEntry.value = entry; currentCat.value = entry.category; view.value = 'entry'; if (fromGlobal) globalQuery.value = ''; window.scrollTo(0, 0); await loadComments(uuid) }
+async function openEntry(uuid, fromGlobal = false) { const entry = allEntries.value.find(e => e.uuid === uuid); if (!entry) return; currentEntry.value = entry; currentCat.value = entry.category; view.value = 'entry'; if (fromGlobal) globalQuery.value = ''; window.scrollTo(0, 0); await loadComments(uuid) }
 async function loadComments(uuid) { comments.value = await api(`/api/comments?entry_uuid=${encodeURIComponent(uuid)}`).catch(() => []); commentCounts.value = { ...commentCounts.value, [uuid]: comments.value.length } }
 async function postComment() { if (!currentEntry.value || !commentText.value) return; posting.value = true; try { await api('/api/comments', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ entry_uuid: currentEntry.value.uuid, content: commentText.value }) }); commentText.value = ''; await loadComments(currentEntry.value.uuid) } finally { posting.value = false } }
 function logout() { localStorage.removeItem(TOKEN_KEY); session.me = null; session.token = ''; session.role = 'member'; view.value = 'forum' }
@@ -661,6 +762,7 @@ function badgeClass(d = '') { const m = badgeMark(d); return { '🟥': 'b-red', 
 function timeAgo(ts) { if (!ts) return ''; const d = Date.now() / 1000 - Number(ts); if (d < 0) return '在线'; if (d < 60) return '刚刚在线'; if (d < 3600) return `${Math.floor(d / 60)}分钟前`; if (d < 86400) return `${Math.floor(d / 3600)}小时前`; return `${Math.floor(d / 86400)}天前` }
 
 onMounted(async () => {
+  await loadWikiArchive()
   const saved = localStorage.getItem(TOKEN_KEY)
   if (saved) { logging.value = true; showMsg('检测到已保存的登录状态', 'muted'); try { await useToken(saved) } catch { localStorage.removeItem(TOKEN_KEY); showMsg('登录状态已过期，请重新登录') } finally { logging.value = false } }
 })
