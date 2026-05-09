@@ -352,6 +352,23 @@
         let tokenExpireTime = null;
         let refreshTimer = null;
         let countdownTimer = null;
+        let serverLLMEnabled = false;
+
+        async function loadLLMConfig() {
+            try {
+                const r = await fetch(API + '/config');
+                const cfg = await r.json();
+                serverLLMEnabled = !!cfg.llm_enabled;
+                if (serverLLMEnabled && !currentToken) {
+                    const dot = document.getElementById('tokenDot');
+                    const txt = document.getElementById('tokenStatusText');
+                    dot.className = 'token-status-dot green';
+                    txt.className = 'value green';
+                    txt.textContent = `后端 LLM 已接入 (${cfg.llm_model || '默认模型'})`;
+                    document.getElementById('chatHistory').innerHTML = '<div style="color:rgba(42,36,32,.55);text-align:center;margin-top:100px;letter-spacing:.08em;">后端 LLM 已接入，可以直接聊天 ✨</div>';
+                }
+            } catch(e) {}
+        }
 
         // 解析 JWT 过期时间
         function parseTokenExpiry(token) {
@@ -369,6 +386,12 @@
             const dot = document.getElementById('tokenDot');
             const txt = document.getElementById('tokenStatusText');
             if (!currentToken) {
+                if (serverLLMEnabled) {
+                    dot.className = 'token-status-dot green';
+                    txt.className = 'value green';
+                    txt.textContent = '后端 LLM 已接入';
+                    return;
+                }
                 dot.className = 'token-status-dot gray';
                 txt.className = 'value gray';
                 txt.textContent = '未配置';
@@ -521,6 +544,7 @@
             const savedSecret = localStorage.getItem('neta_client_secret') || '';
             if (savedClientId) document.getElementById('clientIdInput').value = savedClientId;
             if (savedSecret) document.getElementById('clientSecretInput').value = savedSecret;
+            loadLLMConfig();
         })();
 
         // ===== AI 聊天 =====
@@ -543,7 +567,7 @@
             const text = input.value.trim();
             if (!text) return;
 
-            if (!currentToken) {
+            if (!currentToken && !serverLLMEnabled) {
                 appendSystemMsg('⚠️ 请先配置 Token');
                 return;
             }
@@ -563,7 +587,7 @@
                 const r = await fetch(API + '/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ token: currentToken, messages: conversation })
+                    body: JSON.stringify({ token: currentToken, messages: conversation, mode: serverLLMEnabled ? 'llm' : 'neta' })
                 });
                 document.getElementById('chatLoading')?.remove();
                 if (!r.ok) { const err = await r.json(); appendMessage('ai', '错误: ' + (err.error || r.statusText)); return; }

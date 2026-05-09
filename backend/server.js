@@ -1,15 +1,48 @@
-const express = require('express');
-const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
+const express = require('express');
+const cors = require('cors');
+
+function loadEnvFile(filePath) {
+    if (!fs.existsSync(filePath)) return;
+
+    const content = fs.readFileSync(filePath, 'utf8');
+    content.split(/\r?\n/).forEach(line => {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) return;
+
+        const eqIndex = trimmed.indexOf('=');
+        if (eqIndex === -1) return;
+
+        const key = trimmed.slice(0, eqIndex).trim();
+        let value = trimmed.slice(eqIndex + 1).trim();
+
+        if (!key || process.env[key] !== undefined) return;
+
+        if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+            value = value.slice(1, -1);
+        }
+
+        process.env[key] = value;
+    });
+}
+
+// 兼容本地 .env 和父级 .env
+loadEnvFile(path.join(__dirname, '.env'));
+loadEnvFile(path.join(__dirname, '../.env'));
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 const DATA_FILE = path.join(__dirname, 'data.json');
 const PUBLIC_DIR = path.join(__dirname, '../my-page');
 
+const LLM_URL = process.env.LLM_URL || 'https://litellm.talesofai.cn/v1/chat/completions';
+const LLM_API_KEY = process.env.LLM_API_KEY || '';
+const LLM_MODEL = process.env.LLM_MODEL || 'qwen3.5-plus-no-think';
+const NETA_CHAT_URL = process.env.NETA_CHAT_URL || 'https://neta.art/api/v1/chat/completions';
+
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '5mb' }));
 
 // 静态文件服务（前端页面）
 app.use(express.static(PUBLIC_DIR));
@@ -25,6 +58,31 @@ function loadData() {
 
 function saveData(data) {
     fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+}
+
+async function callOpenAICompatibleChat({ url, apiKey, model, messages, max_tokens, temperature }) {
+    const payload = { model, messages };
+    if (typeof max_tokens === 'number') payload.max_tokens = max_tokens;
+    if (typeof temperature === 'number') payload.temperature = temperature;
+
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            ...(apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {})
+        },
+        body: JSON.stringify(payload)
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+        const message = data?.error?.message || data?.error || data?.message || `请求失败 (${response.status})`;
+        throw new Error(message);
+    }
+
+    const reply = data?.choices?.[0]?.message?.content ?? data?.reply ?? data?.output_text ?? '';
+    return { data, reply };
 }
 
 // 获取所有数据
@@ -104,34 +162,66 @@ app.post('/api/refresh-token', async (req, res) => {
     }
 });
 
+// 配置查询：方便前端判断是否启用了后端 LLM
+app.get('/api/config', (req, res) => {
+    res.json({
+        llm_enabled: Boolean(LLM_API_KEY),
+        llm_model: LLM_MODEL,
+        llm_url: LLM_URL,
+        chat_mode: LLM_API_KEY ? 'server-llm' : 'token-proxy'
+    });
+});
+
 // LLM 聊天代理
 app.post('/api/chat', async (req, res) => {
-    const { token, messages, model = 'gpt-4o-mini' } = req.body;
+    const { token, messages, model = LLM_MODEL, max_tokens, temperature, mode } = req.body;
 
-    if (!token) {
-        return res.status(401).json({ error: '请提供 neta.art Access Token' });
+    if (!Array.isArray(messages) || messages.length === 0) {
+        return res.status(400).json({ error: '请提供 messages 数组' });
     }
 
     try {
-        const response = await fetch('https://neta.art/api/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({
-                model: model,
-                messages: messages
-            })
-        });
+        const wantServerLLM = mode === 'llm' || (mode !== 'neta' && Boolean(LLM_API_KEY));
 
-        const data = await response.json();
+        if (wantServerLLM) {
+            if (!LLM_API_KEY) {
+                return res.status(503).json({ error: '后端未配置 LLM_API_KEY' });
+            }
 
-        if (!response.ok) {
-            return res.status(response.status).json({ error: data.error || '请求失败' });
+            const { reply } = await callOpenAICompatibleChat({
+                url: LLM_URL,
+                apiKey: LLM_API_KEY,
+                model,
+                messages,
+                max_tokens,
+                temperature
+            });
+
+            return res.json({
+                reply,
+                mode: 'server-llm',
+                model
+            });
         }
 
-        res.json({ reply: data.choices[0].message.content });
+        if (!token) {
+            return res.status(401).json({ error: '请提供 neta.art Access Token' });
+        }
+
+        const { reply } = await callOpenAICompatibleChat({
+            url: NETA_CHAT_URL,
+            apiKey: token,
+            model,
+            messages,
+            max_tokens,
+            temperature
+        });
+
+        res.json({
+            reply,
+            mode: 'neta-token',
+            model
+        });
     } catch (error) {
         console.error('LLM Error:', error);
         res.status(500).json({ error: '后端调用 LLM 失败: ' + error.message });
@@ -141,9 +231,12 @@ app.post('/api/chat', async (req, res) => {
 app.listen(PORT, () => {
     console.log(`🚀 Backend running on http://localhost:${PORT}`);
     console.log(`📝 API endpoints:`);
-    console.log(`   GET    /api/data     - 获取所有数据`);
-    console.log(`   GET    /api/notes    - 获取笔记列表`);
-    console.log(`   POST   /api/counter  - 更新计数器`);
-    console.log(`   POST   /api/notes    - 添加笔记`);
+    console.log(`   GET    /api/data      - 获取所有数据`);
+    console.log(`   GET    /api/notes     - 获取笔记列表`);
+    console.log(`   GET    /api/config    - LLM 配置状态`);
+    console.log(`   POST   /api/counter   - 更新计数器`);
+    console.log(`   POST   /api/notes     - 添加笔记`);
     console.log(`   DELETE /api/notes/:id - 删除笔记`);
+    console.log(`   POST   /api/chat      - LLM 聊天代理`);
+    console.log(`   POST   /api/refresh-token - 刷新 neta.art Token`);
 });
