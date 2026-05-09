@@ -27,8 +27,8 @@
             </div>
             <div class="sub-channel-panel" v-if="selectedForumGroup !== '成员'">
               <div class="chat-brand"><span>FORUM</span><b>{{ selectedForumGroup }}</b><small>{{ currentForumGroup?.desc }}</small></div>
-              <button v-for="item in currentForumGroup?.items || []" :key="item.name" class="channel-row" :class="{ active: item.name === selectedForum }" :title="item.name" @click="selectedForum = item.name; loadForumPosts()"><span>{{ item.code }}</span><b>{{ item.short || item.name }}</b></button>
-              <button v-if="isAdmin && selectedForumGroup === '地区分支'" class="channel-row create-branch-row" @click="showMsg('管理员新分支功能预留中', 'muted')"><span>＋</span><b>开新分支</b></button>
+              <button v-for="item in currentForumGroup?.items || []" :key="item.name" class="channel-row" :class="{ active: item.name === selectedForum, custom: item.custom }" :title="item.name" @click="selectedForum = item.name; loadForumPosts()"><span>{{ item.code }}</span><b>{{ item.short || item.name }}</b><i v-if="isAdmin && item.custom" class="branch-delete" title="删除分支" @click.stop="deleteForumBranch(item)">×</i></button>
+              <button v-if="isAdmin && selectedForumGroup === '地区分支'" class="channel-row create-branch-row" @click="createForumBranch"><span>＋</span><b>开新分支</b></button>
             </div>
           </aside>
           <section class="chat-room">
@@ -36,7 +36,7 @@
               <div><span class="ritual-label">CURRENT CHANNEL</span><h1>{{ selectedForum }}</h1><p>{{ selectedForumDescription }}</p></div>
               <button v-if="false" class="back-note">＋ 发帖</button>
             </header>
-            <div v-if="selectedForum === '成员'" class="member-board friend-list-board">
+            <div v-if="selectedForum === '成员'" class="member-board friend-list-board" :class="{ 'private-open': selectedMember && selectedMemberTool === '私聊' }">
               <aside class="friend-list-pane">
                 <div class="member-board-head"><h2>成员</h2><input v-model.trim="memberQuery" type="search" placeholder="搜索成员昵称或称号..."></div>
                 <div class="friend-list">
@@ -50,25 +50,24 @@
               <section v-if="selectedMember" class="friend-detail-pane">
                   <header class="friend-detail-head"><button class="detail-avatar" @click.stop.prevent="openMemberModal(selectedMember)"><span class="framed-avatar" :class="avatarFrameClassFor(selectedMember)"><img class="avatar-base" v-if="safeUrl(selectedMember.avatar)" :src="safeUrl(selectedMember.avatar)" alt="" referrerpolicy="no-referrer"><b v-else>{{ initials(selectedMember.name) }}</b><img v-if="avatarFrameFor(selectedMember)?.type === 'frame'" class="avatar-frame" :src="avatarFrameFor(selectedMember).url" alt=""><span v-if="avatarFrameFor(selectedMember)?.type === 'roach'" class="roach-orbit" aria-hidden="true"><img :src="avatarFrameFor(selectedMember).url" alt=""></span></span></button><div><h2>{{ selectedMember.name }} <span v-if="['chief','deputy','admin'].includes(selectedMember.role)" class="verify-v">V</span></h2><p v-if="memberTitle(selectedMember)">{{ memberTitle(selectedMember) }}</p><small>{{ selectedMember.online ? '在线' : timeAgo(selectedMember.last_seen) }}</small></div><div class="detail-actions"><button class="title-auth-btn" @click="openPrivatePane(selectedMember)">私聊</button><button v-if="isAdmin" class="title-auth-btn" @click="authorizeTitle(selectedMember)">授权称号</button></div></header>
               </section>
-              <section v-if="selectedMember && selectedMemberTool === '私聊'" class="private-side-pane">
+              <section v-if="selectedMember && selectedMemberTool === '私聊'" class="private-side-pane private-drawer">
                 <header><b>私聊 · {{ selectedMember.name }}</b><button @click="selectedMemberTool = '资料'">收起</button></header>
                 <div class="private-thread private-thread-log"></div>
                 <div class="private-compose"><input v-model.trim="privateText" type="text" :placeholder="`私聊 ${selectedMember.name}...`" @keydown.enter="sendPrivateMessage"><button :disabled="!privateText" @click="sendPrivateMessage">发送</button></div>
               </section>
             </div>
             <div v-else-if="selectedForum === '活动颁布'" class="activity-board">
-              <section><div class="activity-head"><h2>当前活动</h2><button v-if="isAdmin" class="back-note" @click="showMsg('新增活动功能预留中', 'muted')">＋ 新增活动</button></div><article v-for="event in currentActivities" :key="event.title" class="activity-card"><b>{{ event.title }}</b><span>{{ event.status }}</span><p>{{ event.desc }}</p></article></section>
+              <section><div class="activity-head"><h2>当前活动</h2><button v-if="isAdmin" class="back-note" @click="createActivity">＋ 新增活动</button></div><article v-for="event in currentActivities" :key="event.title" class="activity-card"><b>{{ event.title }}</b><span>{{ event.status }}</span><p>{{ event.desc }}</p><button v-if="isAdmin && event.custom" class="activity-delete" @click="deleteActivity(event)">删除活动</button></article></section>
               <section><h2>往期活动</h2><article v-for="event in pastActivities" :key="event.title" class="activity-card past"><b>{{ event.title }}</b><span>{{ event.status }}</span><p>{{ event.desc }}</p></article></section>
             </div>
             <div v-else class="thread-list">
               <div v-if="forumLoading" class="item muted">正在同步论坛消息...</div>
-              <article v-for="thread in visibleThreads" :key="thread.id" class="thread-message" :class="{ revoked: thread.revoked }">
+              <article v-for="thread in visibleThreads" :key="thread.id" class="thread-message" :class="{ own: thread.user_uuid === session.me?.uuid }">
                 <button class="forum-avatar" @click="openForumUser(thread)"><span class="framed-avatar" :class="avatarFrameClassFor(thread)"><img class="avatar-base" v-if="safeUrl(thread.user_avatar)" :src="safeUrl(thread.user_avatar)" alt="" loading="lazy" referrerpolicy="no-referrer"><b v-else>{{ initials(thread.user_name) }}</b><img v-if="avatarFrameFor(thread)?.type === 'frame'" class="avatar-frame" :src="avatarFrameFor(thread).url" alt=""><span v-if="avatarFrameFor(thread)?.type === 'roach'" class="roach-orbit" aria-hidden="true"><img :src="avatarFrameFor(thread).url" alt=""></span></span></button>
                 <div class="message-bubble">
-                  <header><b>{{ thread.user_name }}</b><time>{{ timeAgo(thread.created_at) }}</time><span>{{ thread.channel }}</span></header>
-                  <p>{{ thread.revoked ? '该发言已被管理员撤销' : thread.content }}</p>
-                  <div v-if="!thread.revoked && thread.images?.length" class="message-images"><img v-for="img in thread.images" :key="img" :src="img" alt="" loading="lazy"></div>
-                  <footer><button @click="showMsg('回复功能预留中', 'muted')">回复</button><button v-if="isAdmin && !thread.revoked" class="danger-mini" @click="revokeThread(thread.id)">撤销发言</button></footer>
+                  <header><b>{{ thread.user_name }}</b><time>{{ timeAgo(thread.created_at) }}</time><button v-if="isAdmin" class="danger-mini revoke-inline" @click="revokeThread(thread.id)">撤销</button></header>
+                  <p v-if="thread.content">{{ thread.content }}</p>
+                  <div v-if="thread.images?.length" class="message-images"><img v-for="img in thread.images" :key="img" :src="img" alt="" loading="lazy"></div>
                 </div>
               </article>
               <div v-if="!forumLoading && visibleThreads.length === 0" class="item muted">这个频道还没有发言，来发第一条吧。</div>
@@ -97,43 +96,44 @@
             <p>先选择大类和子目录，再在对应栏目内提交新增、修订或开新栏目申请。</p>
           </div>
         </header>
-        <div class="wiki-hierarchy">
-          <aside class="wiki-major">
-            <button v-for="group in wikiGroups" :key="group.name" :class="{ active: selectedWikiGroup === group.name }" @click="selectedWikiGroup = group.name; selectedWikiSubsection = ''; selectedWikiCategory = ''; wikiSubmitOpen = false"><b>{{ group.short }}</b><small>{{ group.desc }}</small></button>
-          </aside>
-
-          <section v-if="selectedWikiGroup === '世界观信息'" class="wiki-drill-panel">
-            <header class="drill-head"><div><span class="ritual-label">WORLD LORE</span><h2>世界观信息</h2><p>先进入专栏，再选择小分类，最后进入更细的栏目与词条。</p></div></header>
-            <div class="drill-grid level-one">
-              <button v-for="sec in wikiSubsections" :key="sec.name" :class="{ active: selectedWikiSubsection === sec.name }" @click="selectedWikiSubsection = sec.name; selectedWikiCategory = ''; wikiSubmitOpen = false"><b>{{ sec.name }}</b><small>{{ sec.desc }}</small><i>{{ sec.categories.length }} 个小分类</i></button>
+        <div class="wiki-hierarchy" :class="{ 'is-root': !selectedWikiGroup }">
+          <section v-if="!selectedWikiGroup" class="wiki-drill-panel wiki-root-panel">
+            <header class="drill-head"><div><span class="ritual-label">SELECT ARCHIVE VOLUME</span><h2>选择档案卷宗</h2><p>Wiki 首页只保留两个主入口。进入后会切换到下一层页面，不再显示另一个主栏目。</p></div></header>
+            <div class="drill-grid wiki-root-grid">
+              <button v-for="group in wikiGroups" :key="group.name" @click="enterWikiGroup(group.name)"><b>{{ group.short }}</b><small>{{ group.desc }}</small><i>进入卷宗</i></button>
             </div>
-            <div v-if="currentWikiSubsection" class="drill-level level-two">
-              <header><span>小分类 / {{ currentWikiSubsection.name }}</span><p>{{ currentWikiSubsection.desc }}</p></header>
+          </section>
+
+          <section v-else-if="selectedWikiGroup === '世界信息'" class="wiki-drill-panel">
+            <header class="drill-head"><div><span class="ritual-label">WORLD INFORMATION</span><h2>世界信息</h2><p v-if="!selectedWikiSubsection">选择一个子栏目进入下一层。</p><p v-else-if="!selectedWikiCategory">{{ currentWikiSubsection?.desc }}</p><p v-else>当前栏目：{{ selectedWikiCategory }}</p></div><button class="back-note" @click="leaveWikiLevel">返回上一级</button></header>
+            <div v-if="!selectedWikiSubsection" class="drill-grid level-one">
+              <button v-for="sec in wikiSubsections" :key="sec.name" @click="selectedWikiSubsection = sec.name; selectedWikiCategory = ''; wikiSubmitOpen = false"><b>{{ sec.name }}</b><small>{{ sec.desc }}</small><i>{{ sec.categories.length }} 个子栏目</i></button>
+            </div>
+            <div v-else-if="!selectedWikiCategory" class="drill-level level-two standalone">
+              <header><span>子栏目 / {{ currentWikiSubsection.name }}</span><p>选择更小栏目进入词条页。</p></header>
               <div class="drill-grid compact">
-                <button v-for="cat in currentWikiCategories" :key="cat.name" :class="{ active: selectedWikiCategory === cat.name }" @click="selectedWikiCategory = cat.name; wikiSubmitOpen = false"><b>{{ cat.name }}</b><small>{{ cat.count }} 条 · {{ cat.preview }}</small></button>
+                <button v-for="cat in currentWikiCategories" :key="cat.name" @click="selectedWikiCategory = cat.name; wikiSubmitOpen = false"><b>{{ cat.name }}</b><small>{{ cat.count }} 条 · {{ cat.preview }}</small></button>
               </div>
             </div>
-            <div v-if="selectedWikiCategory" class="drill-level level-three">
-              <header><div><span>更小栏目 / {{ selectedWikiCategory }}</span><h3>{{ selectedWikiCategory }}</h3></div><div class="wiki-actions inline"><input ref="wikiUploadInput" class="hidden-file" type="file" accept="image/*" multiple @change="onWikiImages"><button class="back-note" @click="openCategory(selectedWikiCategory)">查看词条</button><button class="back-note" @click="wikiUploadInput?.click()">上传图片</button><button class="back-note" @click="wikiSubmitType = '修订词条'; wikiSubmitOpen = !wikiSubmitOpen">提交编辑</button><button class="back-note" @click="wikiSubmitType = '开新栏目'; wikiSubmitOpen = !wikiSubmitOpen">开新栏目</button></div></header>
+            <div v-else class="drill-level level-three standalone">
+              <header><div><span>栏目 / {{ selectedWikiCategory }}</span><h3>{{ selectedWikiCategory }}</h3></div><div class="wiki-actions inline"><input ref="wikiUploadInput" class="hidden-file" type="file" accept="image/*" multiple @change="onWikiImages"><button class="back-note" @click="openCategory(selectedWikiCategory)">查看全部词条</button><button class="back-note" @click="wikiUploadInput?.click()">上传图片</button><button class="back-note" @click="wikiSubmitType = '修订词条'; wikiSubmitOpen = !wikiSubmitOpen">提交编辑</button><button class="back-note" @click="wikiSubmitType = '开新栏目'; wikiSubmitOpen = !wikiSubmitOpen">开新栏目</button></div></header>
               <div v-if="uploadedWikiImages.length" class="upload-preview wiki-preview"><span v-for="img in uploadedWikiImages" :key="img"><img :src="img" alt=""><button @click="removeUploadedImage(uploadedWikiImages, img)">×</button></span></div>
-              <div v-if="wikiSubmitOpen" class="wiki-submit-panel"><div><b>{{ wikiSubmitType }}</b><p>提交目标：<strong>{{ selectedWikiCategory }}</strong></p></div><label>选择已有栏目作为归属<select v-model="selectedWikiCategory"><option v-for="name in wikiSubmissionTargets" :key="name" :value="name">{{ name }}</option></select></label><textarea rows="4" :placeholder="wikiSubmitType === '开新栏目' ? '写明想开的栏目名称、归属栏目和用途...' : '写明要新增/修订的词条内容、图片链接或理由...'"></textarea><button class="back-note primary" @click="showMsg(`${wikiSubmitType} 已提交到 ${selectedWikiCategory} 的待审核队列（功能预留）`, 'muted')">提交到待审核</button></div>
+              <div v-if="wikiSubmitOpen" class="wiki-submit-panel"><div><b>{{ wikiSubmitType }}</b><p>提交目标：<strong>{{ selectedWikiCategory }}</strong></p></div><label>选择已有栏目作为归属<select v-model="selectedWikiCategory"><option v-for="name in wikiSubmissionTargets" :key="name" :value="name">{{ name }}</option></select></label><textarea v-model.trim="wikiSubmitContent" rows="4" :placeholder="wikiSubmitType === '开新栏目' ? '写明想开的栏目名称、归属栏目和用途...' : '写明要新增/修订的词条内容、图片链接或理由...'"></textarea><button class="back-note primary" :disabled="!wikiSubmitContent" @click="submitWikiChange">提交到待审核</button></div>
               <div class="wiki-entry-preview"><button v-for="entry in currentWikiCategoryPreview.slice(0, 12)" :key="entry.uuid" @click="openEntry(entry.uuid)">{{ entry.name }}</button></div>
             </div>
           </section>
 
-          <section v-else class="wiki-drill-panel artifact-drill">
-            <header class="drill-head artifact"><div><span class="ritual-label">PSEUDO-ARTIFACTS ARCHIVE</span><h2>伪物图鉴</h2><p>档案式伪物图鉴，参考旧图鉴站：编号、等级、描述与收容记录。</p></div></header>
-            <div class="artifact-console nested">
-              <aside class="artifact-index">
-                <button v-for="cat in artifactCategories" :key="cat.name" :class="{ active: selectedArtifactCategory === cat.name }" @click="selectedArtifactCategory = cat.name"><span>FILE</span><b>{{ cat.name }}</b><small>{{ cat.count }} 件记录</small></button>
-                <button class="artifact-add" @click="selectedArtifactCategory = artifactCategories[0]?.name || ''; wikiSubmitType = '开新栏目'; wikiSubmitOpen = !wikiSubmitOpen">＋ 申请新图鉴栏目</button>
-              </aside>
-              <main class="artifact-files">
-                <div class="artifact-warning"><b>内部图鉴</b><span>伪物资料需管理员审核后公开</span></div>
-                <article v-for="entry in artifactEntries" :key="entry.uuid" class="artifact-file" @click="openEntry(entry.uuid)"><div class="artifact-no">{{ entry.name.slice(0, 2) }}</div><div><h3>{{ entry.name }}</h3><p>{{ entry.description }}</p><small>ARCHIVE / {{ selectedArtifactCategory || '伪物图鉴' }}</small></div></article>
-                <div v-if="!artifactEntries.length" class="wiki-empty-tip">暂无伪物记录。</div>
-              </main>
+          <section v-else-if="selectedWikiGroup === '伪物档案'" class="wiki-drill-panel artifact-drill">
+            <header class="drill-head artifact"><div><span class="ritual-label">PSEUDO-ARTIFACTS ARCHIVE</span><h2>伪物档案</h2><p v-if="!selectedArtifactCategory">选择伪物档案下的子栏目。</p><p v-else>当前子栏目：{{ selectedArtifactCategory }}</p></div><button class="back-note" @click="leaveWikiLevel">返回上一级</button></header>
+            <div v-if="!selectedArtifactCategory" class="drill-grid level-one">
+              <button v-for="cat in artifactCategories" :key="cat.name" @click="selectedArtifactCategory = cat.name"><b>{{ cat.name }}</b><small>{{ cat.count }} 件记录</small><i>进入子栏目</i></button>
+              <button class="artifact-add" @click="selectedArtifactCategory = artifactCategories[0]?.name || ''; wikiSubmitType = '开新栏目'; wikiSubmitOpen = !wikiSubmitOpen"><b>申请新图鉴栏目</b><small>向管理员提交新的伪物分类。</small><i>NEW</i></button>
             </div>
+            <main v-else class="artifact-files standalone">
+              <div class="artifact-warning"><b>内部图鉴 / {{ selectedArtifactCategory }}</b><span>伪物资料需管理员审核后公开</span></div>
+              <article v-for="entry in artifactEntries" :key="entry.uuid" class="artifact-file" @click="openEntry(entry.uuid)"><div class="artifact-no">{{ entry.name.slice(0, 2) }}</div><div><h3>{{ entry.name }}</h3><p>{{ entry.description }}</p><small>ARCHIVE / {{ selectedArtifactCategory }}</small></div></article>
+              <div v-if="!artifactEntries.length" class="wiki-empty-tip">暂无伪物记录。</div>
+            </main>
           </section>
         </div>
       </section>
@@ -218,7 +218,7 @@
             <p>选择当前身份记录的外显装饰。权限仅保存在本机，不会改动账号资料。</p>
             <div class="frame-grid">
               <button v-for="frame in avatarFrames" :key="frame.id" class="frame-option" :class="{ active: avatarFrame === frame.id }" @click="selectAvatarFrame(frame.id)">
-                <span class="frame-preview framed-avatar" :class="frame.type === 'roach' ? 'has-roach-frame' : ''">
+                <span class="frame-preview framed-avatar" :class="[frame.type === 'roach' ? 'has-roach-frame' : '', frame.id === 'moonrise' ? 'avatar-frame-moonrise' : '']">
                   <img class="avatar-base" :src="safeUrl(session.me.avatar_url)" alt="">
                   <img v-if="frame.type === 'frame'" class="avatar-frame" :src="frame.url" alt="">
                   <span v-if="frame.type === 'roach'" class="roach-orbit" aria-hidden="true"><img :src="frame.url" alt=""></span>
@@ -236,7 +236,7 @@
             <h3>待审核 Wiki 内容</h3>
             <p>成员提交的新增词条与修订会出现在这里，管理员审核通过后进入 Wiki。</p>
             <div v-for="item in pendingWiki" :key="item.id" class="review-item">
-              <b>{{ item.title }}</b><span>{{ item.type }}</span><small>{{ item.author }} · {{ item.time }}</small>
+              <b>{{ item.target }}</b><span>{{ item.type }}</span><small>{{ item.author }} · {{ timeAgo(item.time) }}</small><p>{{ item.content }}</p>
             </div>
           </div>
         </section>
@@ -271,6 +271,7 @@ import archive from './pseudo-human-data.json'
 
 const API = 'https://api.talesofai.cn'
 const TOKEN_KEY = 'NIETA_ACCESS_TOKEN'
+// Forum channels and activities are persisted by backend APIs, not localStorage.
 const phone = ref('')
 const code = ref('')
 const agree = ref(false)
@@ -294,6 +295,8 @@ const posting = ref(false)
 const commentCounts = ref({})
 const forumText = ref('')
 const forumPosts = ref([])
+const customForumBranches = ref([])
+const customActivities = ref([])
 const forumLoading = ref(false)
 const forumPosting = ref(false)
 const forumSeq = ref(0)
@@ -304,12 +307,13 @@ const memberQuery = ref('')
 const selectedMember = ref(null)
 const selectedMemberModal = ref(null)
 const privateText = ref('')
-const selectedWikiGroup = ref('世界观')
+const selectedWikiGroup = ref('')
 const selectedWikiCategory = ref('')
 const selectedWikiSubsection = ref('')
-const selectedArtifactCategory = ref('伪物档案')
+const selectedArtifactCategory = ref('')
 const wikiSubmitOpen = ref(false)
 const wikiSubmitType = ref('修订词条')
+const wikiSubmitContent = ref('')
 const activeProfilePanel = ref('overview')
 const forumUploadInput = ref(null)
 const wikiUploadInput = ref(null)
@@ -334,8 +338,8 @@ const artifactCategoryNames = ['伪物档案']
 const worldCategories = computed(() => categoryCards.value.filter(cat => !artifactCategoryNames.includes(cat.name)))
 const artifactCategories = computed(() => categoryCards.value.filter(cat => artifactCategoryNames.includes(cat.name)))
 const wikiGroups = computed(() => [
-  { name: '世界观信息', short: '世界观', desc: '表界、里界、组织、地点、人物与活动。' },
-  { name: '伪物图鉴', short: '伪物', desc: '伪物、异常物件与收容记录。' }
+  { name: '世界信息', short: '世界信息', desc: '表界、里界、组织、地点、人物与活动。' },
+  { name: '伪物档案', short: '伪物档案', desc: '伪物、异常物件与收容记录。' }
 ])
 const wikiSubsections = computed(() => {
   const pick = names => categoryCards.value.filter(c => names.includes(c.name))
@@ -356,7 +360,7 @@ const artifactEntries = computed(() => archive.lore[selectedArtifactCategory.val
 const isAdmin = computed(() => ['chief', 'deputy', 'admin'].includes(session.role))
 const forumBranches = [
   { code: 'MAIN', name: '主论坛', desc: '公告、规则、日常讨论与营地事务。' },
-  { code: 'EAST', name: '东陆', desc: '东陆地区、城市、国家与本地传闻。' },
+  { code: 'YUAN', name: '渊', desc: '渊地区、城市、国家与本地传闻。' },
   { code: 'WEST', name: '西陆', desc: '西陆联盟、派系、边境与圣使教相关讨论。' },
   { code: 'RED', name: '赤星', desc: '赤星地区记录、异常事件与地区角色。' },
   { code: 'ABYSS', name: '里界', desc: '里界地点、异常坐标与探索报告。' },
@@ -372,30 +376,28 @@ const forumColumns = [
   { code: 'EVT', name: '活动颁布', desc: '活动规则、奖励、时间与投稿入口。管理员可编辑。', note: 'ADMIN EDITABLE' },
   { code: 'AD', name: '广告区', desc: '成员作品、摊位、招募与交换信息张贴处。', note: 'AD BOARD' }
 ]
-const forumGroups = [
+const forumGroups = computed(() => [
   { icon: '主', name: '主论坛', desc: '公告、规则、日常聊天与综合讨论。', items: [forumBranches[0], ...forumColumns] },
-  { icon: '地', name: '地区分支', desc: '参考伪人大本营地区国家的分支频道。', items: forumBranches.slice(1) },
+  { icon: '地', name: '地区分支', desc: '参考伪人大本营地区国家的分支频道。', items: [...forumBranches.slice(1), ...customForumBranches.value] },
   { icon: '员', name: '成员', short: '成员', desc: '查看全部成员、头像、称号与在线状态。', items: [{ code: 'MEM', name: '成员', short: '成员', desc: '查看全部成员、头像、称号与在线状态。' }] }
-]
-const currentForumGroup = computed(() => forumGroups.find(g => g.name === selectedForumGroup.value) || forumGroups[0])
-const currentActivities = [
+])
+const currentForumGroup = computed(() => forumGroups.value.find(g => g.name === selectedForumGroup.value) || forumGroups.value[0])
+const baseActivities = [
   { title: '熙熙攘攘，我们的哨站', status: '进行中', desc: '当前开放的哨站主题活动，成员可提交设定、记录与作品。' }
 ]
+const currentActivities = computed(() => [...customActivities.value, ...baseActivities])
 const pastActivities = [
   { title: '槐安身份卡', status: '归档', desc: '身份卡相关活动记录，后续身份卡功能开放后可继续承接。' },
   { title: '一起来交换礼物吧', status: '已颁奖', desc: '礼物交换活动已结束，获奖与参与记录归档。' },
   { title: '真偷只有一个', status: '已颁奖', desc: '往期推理/互动活动，结果已归档。' }
 ]
-const pendingWiki = [
-  { id: 1, title: '新增：里界异常坐标记录模板', type: '新增词条', author: '成员投稿', time: '待审核' },
-  { id: 2, title: '修订：ABSC 简称说明', type: '修订', author: '成员投稿', time: '待审核' }
-]
+const pendingWiki = ref([])
 const selectedForumDescription = computed(() => {
-  const branch = forumBranches.find(x => x.name === selectedForum.value)
+  const branch = [...forumBranches, ...customForumBranches.value].find(x => x.name === selectedForum.value)
   const col = forumColumns.find(x => x.name === selectedForum.value)
   return branch?.desc || col?.desc || '论坛频道'
 })
-const visibleThreads = computed(() => forumPosts.value)
+const visibleThreads = computed(() => forumPosts.value.filter(t => !t.revoked))
 const globalResults = computed(() => {
   const q = globalQuery.value.trim()
   if (!q) return []
@@ -408,14 +410,74 @@ const filteredMembers = computed(() => {
   return sortedMembers.value.filter(m => !q || `${m.name} ${memberTitle(m)}`.toLowerCase().includes(q))
 })
 const currentAvatarFrame = computed(() => avatarFrames.find(f => f.id === avatarFrame.value && f.url) || null)
-const avatarFrameClass = computed(() => currentAvatarFrame.value?.type === 'roach' ? 'has-roach-frame' : '')
+const avatarFrameClass = computed(() => currentAvatarFrame.value ? (currentAvatarFrame.value.type === 'roach' ? 'has-roach-frame avatar-frame-roach' : `avatar-frame-${currentAvatarFrame.value.id}`) : '')
 function avatarFrameFor(member) {
   const uid = member?.uuid || member?.user_uuid
   const frameId = uid && uid === session.me?.uuid ? avatarFrame.value : (member?.avatar_frame || 'none')
   return avatarFrames.find(f => f.id === frameId && f.url) || null
 }
-function avatarFrameClassFor(member) { return avatarFrameFor(member)?.type === 'roach' ? 'has-roach-frame' : '' }
+function avatarFrameClassFor(member) { const f = avatarFrameFor(member); return f ? (f.type === 'roach' ? 'has-roach-frame avatar-frame-roach' : `avatar-frame-${f.id}`) : '' }
 
+function makeBranchCode(name) { return String(name || 'NEW').trim().replace(/\s+/g, '').slice(0, 4).toUpperCase() || 'NEW' }
+async function loadForumMeta() {
+  const [channels, acts, wikiRows] = await Promise.all([
+    api('/api/forum/channels').catch(() => []),
+    api('/api/activities').catch(() => []),
+    api('/api/wiki/submissions').catch(() => [])
+  ])
+  customForumBranches.value = Array.isArray(channels) ? channels : []
+  customActivities.value = Array.isArray(acts) ? acts : []
+  pendingWiki.value = Array.isArray(wikiRows) ? wikiRows : []
+}
+async function createForumBranch() {
+  const name = window.prompt('新分支名称：')?.trim()
+  if (!name) return
+  const exists = [...forumBranches, ...forumColumns, ...customForumBranches.value].some(x => x.name === name)
+  if (exists) { showMsg('这个分支/频道已经存在'); return }
+  const desc = window.prompt('分支说明（可留空）：', `${name}地区分支讨论区。`)?.trim() || `${name}地区分支讨论区。`
+  try {
+    await api('/api/forum/channels', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ code: makeBranchCode(name), name, desc }) })
+    await loadForumMeta()
+    selectedForumGroup.value = '地区分支'; selectedForum.value = name.slice(0, 30); await loadForumPosts(); showMsg('新分支已创建', 'ok')
+  } catch (e) { showMsg(`创建失败：${e.message}`) }
+}
+async function deleteForumBranch(item) {
+  if (!item?.custom) return
+  if (!window.confirm(`删除分支「${item.name}」？\n只会删除分支入口，不会删除该频道历史发言。`)) return
+  try {
+    await api('/api/forum/channels/delete', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ name: item.name }) })
+    await loadForumMeta()
+    if (selectedForum.value === item.name) selectedForum.value = forumBranches[1]?.name || '渊'
+    await loadForumPosts(); showMsg('分支入口已删除', 'muted')
+  } catch (e) { showMsg(`删除失败：${e.message}`) }
+}
+async function createActivity() {
+  const title = window.prompt('活动标题：')?.trim()
+  if (!title) return
+  if (currentActivities.value.some(x => x.title === title)) { showMsg('这个活动已经存在'); return }
+  const desc = window.prompt('活动说明：', '写下活动规则、时间、奖励或投稿方式。')?.trim() || '暂无说明。'
+  const status = window.prompt('活动状态：', '进行中')?.trim() || '进行中'
+  try {
+    await api('/api/activities', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ title, status, desc }) })
+    await loadForumMeta(); showMsg('活动已新增', 'ok')
+  } catch (e) { showMsg(`新增活动失败：${e.message}`) }
+}
+async function deleteActivity(event) {
+  if (!event?.custom) return
+  if (!window.confirm(`删除活动「${event.title}」？`)) return
+  try {
+    await api('/api/activities/delete', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ id: event.id }) })
+    await loadForumMeta(); showMsg('活动已删除', 'muted')
+  } catch (e) { showMsg(`删除活动失败：${e.message}`) }
+}
+async function submitWikiChange() {
+  if (!selectedWikiCategory.value || !wikiSubmitContent.value) return
+  try {
+    await api('/api/wiki/submissions', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ target: selectedWikiCategory.value, type: wikiSubmitType.value, content: wikiSubmitContent.value, images: uploadedWikiImages.value }) })
+    wikiSubmitContent.value = ''; uploadedWikiImages.value = []; wikiSubmitOpen.value = false
+    await loadForumMeta(); showMsg('已提交到后端待审核', 'ok')
+  } catch (e) { showMsg(`提交失败：${e.message}`) }
+}
 function filterEntries(list, q) {
   const needle = String(q || '').toLowerCase()
   if (!needle) return list
@@ -565,6 +627,7 @@ async function useToken(token) {
   avatarFrame.value = ['none', 'roach', 'moonrise'].includes(role?.avatar_frame) ? role.avatar_frame : 'none'
   localStorage.setItem('NIETA_AVATAR_FRAME', avatarFrame.value)
   await loadMembers()
+  await loadForumMeta()
   await loadForumPosts()
 }
 async function loadMembers() { members.value = await api('/api/members').catch(() => []) }
@@ -583,8 +646,10 @@ async function searchEntries() {
     if (seq === searchSeq.value) searchLoading.value = false
   }
 }
-function openForum() { view.value = 'forum'; currentEntry.value = null; globalQuery.value = ''; serverResults.value = []; window.scrollTo(0, 0); loadMembers(); loadForumPosts() }
-function openArchive() { view.value = 'archive'; currentEntry.value = null; currentCat.value = ''; catQuery.value = ''; window.scrollTo(0, 0); loadMembers() }
+function openForum() { view.value = 'forum'; currentEntry.value = null; globalQuery.value = ''; serverResults.value = []; window.scrollTo(0, 0); loadMembers(); loadForumMeta(); loadForumPosts() }
+function openArchive() { view.value = 'archive'; currentEntry.value = null; currentCat.value = ''; catQuery.value = ''; selectedWikiGroup.value = ''; selectedWikiSubsection.value = ''; selectedWikiCategory.value = ''; selectedArtifactCategory.value = ''; wikiSubmitOpen.value = false; window.scrollTo(0, 0); loadMembers(); loadForumMeta() }
+function enterWikiGroup(group) { selectedWikiGroup.value = group; selectedWikiSubsection.value = ''; selectedWikiCategory.value = ''; selectedArtifactCategory.value = ''; wikiSubmitOpen.value = false; window.scrollTo(0, 0) }
+function leaveWikiLevel() { if (selectedWikiGroup.value === '世界信息') { if (selectedWikiCategory.value) { selectedWikiCategory.value = ''; wikiSubmitOpen.value = false; return } if (selectedWikiSubsection.value) { selectedWikiSubsection.value = ''; return } selectedWikiGroup.value = ''; return } if (selectedWikiGroup.value === '伪物档案') { if (selectedArtifactCategory.value) { selectedArtifactCategory.value = ''; wikiSubmitOpen.value = false; return } selectedWikiGroup.value = '' } }
 function openExplore() { view.value = 'explore'; currentEntry.value = null; window.scrollTo(0, 0) }
 function openCategory(cat) { currentCat.value = cat; catQuery.value = ''; currentEntry.value = null; view.value = 'category'; window.scrollTo(0, 0) }
 async function openEntry(uuid, fromGlobal = false) { const entry = allEntries.find(e => e.uuid === uuid); if (!entry) return; currentEntry.value = entry; currentCat.value = entry.category; view.value = 'entry'; if (fromGlobal) globalQuery.value = ''; window.scrollTo(0, 0); await loadComments(uuid) }

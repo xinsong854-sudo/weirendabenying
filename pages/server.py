@@ -57,6 +57,33 @@ def init_db():
         revoked_by TEXT,
         created_at INTEGER DEFAULT (strftime('%s','now'))
     )""")
+    db.execute("""CREATE TABLE IF NOT EXISTS forum_channels(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        code TEXT,
+        name TEXT NOT NULL UNIQUE,
+        description TEXT DEFAULT '',
+        created_by TEXT,
+        created_at INTEGER DEFAULT (strftime('%s','now'))
+    )""")
+    db.execute("""CREATE TABLE IF NOT EXISTS activities(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        status TEXT DEFAULT '进行中',
+        description TEXT DEFAULT '',
+        created_by TEXT,
+        created_at INTEGER DEFAULT (strftime('%s','now'))
+    )""")
+    db.execute("""CREATE TABLE IF NOT EXISTS wiki_submissions(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        target TEXT NOT NULL,
+        submit_type TEXT NOT NULL,
+        content TEXT NOT NULL,
+        images_json TEXT DEFAULT '[]',
+        user_uuid TEXT,
+        user_name TEXT,
+        status TEXT DEFAULT 'pending',
+        created_at INTEGER DEFAULT (strftime('%s','now'))
+    )""")
     db.execute("""CREATE TABLE IF NOT EXISTS private_messages(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         from_uuid TEXT NOT NULL,
@@ -79,6 +106,9 @@ def init_db():
     db.execute("CREATE INDEX IF NOT EXISTS idx_entries_category ON entries(category)")
     db.execute("CREATE INDEX IF NOT EXISTS idx_entries_name ON entries(name)")
     db.execute("CREATE INDEX IF NOT EXISTS idx_forum_channel_time ON forum_posts(channel, created_at DESC)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_forum_channels_time ON forum_channels(created_at DESC)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_activities_time ON activities(created_at DESC)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_wiki_submissions_time ON wiki_submissions(created_at DESC)")
     db.execute("CREATE INDEX IF NOT EXISTS idx_private_pair_time ON private_messages(from_uuid, to_uuid, created_at DESC)")
     
     # 初始化管理员
@@ -443,10 +473,9 @@ class Server(BaseHTTPRequestHandler):
         ctype = mimetypes.guess_type(full)[0] or "application/octet-stream"
         self.send_response(200)
         self.send_header("Content-Type", ctype + ("; charset=utf-8" if ctype.startswith("text/") or ctype in ("application/javascript", "application/json") else ""))
-        if "/assets/" in full:
-            self.send_header("Cache-Control", "public, max-age=31536000, immutable")
-        else:
-            self.send_header("Cache-Control", "no-cache")
+        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Expires", "0")
         self._security_headers()
         self.end_headers()
         with open(full, "rb") as f:
@@ -499,6 +528,26 @@ class Server(BaseHTTPRequestHandler):
                 except Exception: images = []
                 posts.append({"id": r["id"], "channel": r["channel"], "user_uuid": r["user_uuid"], "user_name": r["user_name"], "user_avatar": r["user_avatar"], "avatar_frame": r["avatar_frame"] or "none", "content": r["content"], "images": images, "revoked": bool(r["revoked"]), "created_at": r["created_at"]})
             self._json(posts)
+        elif p.path == "/api/forum/channels":
+            db = get_db()
+            rows = db.execute("SELECT id,code,name,description,created_at FROM forum_channels ORDER BY created_at ASC, id ASC").fetchall()
+            db.close()
+            self._json([{"id": r["id"], "code": r["code"] or "NEW", "name": r["name"], "desc": r["description"] or "自定义地区分支。", "custom": True, "created_at": r["created_at"]} for r in rows])
+        elif p.path == "/api/activities":
+            db = get_db()
+            rows = db.execute("SELECT id,title,status,description,created_at FROM activities ORDER BY created_at DESC, id DESC").fetchall()
+            db.close()
+            self._json([{"id": r["id"], "title": r["title"], "status": r["status"] or "进行中", "desc": r["description"] or "暂无说明。", "custom": True, "created_at": r["created_at"]} for r in rows])
+        elif p.path == "/api/wiki/submissions":
+            db = get_db()
+            rows = db.execute("SELECT id,target,submit_type,content,images_json,user_uuid,user_name,status,created_at FROM wiki_submissions ORDER BY created_at DESC LIMIT 100").fetchall()
+            db.close()
+            out = []
+            for r in rows:
+                try: images = json.loads(r["images_json"] or "[]")
+                except Exception: images = []
+                out.append({"id": r["id"], "target": r["target"], "type": r["submit_type"], "content": r["content"], "images": images, "author": r["user_name"] or "成员投稿", "status": r["status"], "time": r["created_at"]})
+            self._json(out)
         elif p.path == "/api/search":
             q = parse_qs(p.query).get("q", [""])[0].strip()[:80]
             if not q:
@@ -635,6 +684,85 @@ class Server(BaseHTTPRequestHandler):
             db.execute("UPDATE forum_posts SET revoked=1,revoked_by=? WHERE id=?", [user.get("uuid", ""), post_id])
             db.commit(); db.close()
             self._json({"ok": True})
+        elif p.path == "/api/forum/channels":
+            if not token: self._json({"error": "未登录"}, 401); return
+            try:
+                r = requests.get(f"{API}/v1/user/", headers={"x-token": token}, timeout=10); r.raise_for_status(); user = r.json()
+            except Exception:
+                self._json({"error": "令牌无效"}, 401); return
+            db = get_db()
+            role_row = db.execute("SELECT role FROM members WHERE uuid=?", [user.get("uuid", "")]).fetchone()
+            role = role_row["role"] if role_row else "member"
+            if role not in ("chief", "deputy", "admin"):
+                db.close(); self._json({"error": "权限不足"}, 403); return
+            name = str(body.get("name", "")).strip()[:30]
+            desc = str(body.get("desc", "")).strip()[:120] or "自定义地区分支。"
+            code = str(body.get("code", "")).strip()[:8] or "NEW"
+            if not name: db.close(); self._json({"error": "缺少分支名称"}, 400); return
+            try:
+                db.execute("INSERT INTO forum_channels(code,name,description,created_by) VALUES(?,?,?,?)", [code, name, desc, user.get("uuid", "")])
+                db.commit()
+            except sqlite3.IntegrityError:
+                db.close(); self._json({"error": "分支已存在"}, 400); return
+            row = db.execute("SELECT id,code,name,description,created_at FROM forum_channels WHERE name=?", [name]).fetchone()
+            db.close(); self._json({"id": row["id"], "code": row["code"], "name": row["name"], "desc": row["description"], "custom": True, "created_at": row["created_at"]})
+        elif p.path == "/api/forum/channels/delete":
+            if not token: self._json({"error": "未登录"}, 401); return
+            try:
+                r = requests.get(f"{API}/v1/user/", headers={"x-token": token}, timeout=10); r.raise_for_status(); user = r.json()
+            except Exception:
+                self._json({"error": "令牌无效"}, 401); return
+            db = get_db(); role_row = db.execute("SELECT role FROM members WHERE uuid=?", [user.get("uuid", "")]).fetchone(); role = role_row["role"] if role_row else "member"
+            if role not in ("chief", "deputy", "admin"):
+                db.close(); self._json({"error": "权限不足"}, 403); return
+            name = str(body.get("name", "")).strip()[:30]
+            if not name: db.close(); self._json({"error": "缺少分支名称"}, 400); return
+            db.execute("DELETE FROM forum_channels WHERE name=?", [name]); db.commit(); db.close(); self._json({"ok": True})
+        elif p.path == "/api/wiki/submissions":
+            if not token: self._json({"error": "未登录"}, 401); return
+            try:
+                r = requests.get(f"{API}/v1/user/", headers={"x-token": token}, timeout=10); r.raise_for_status(); user = r.json()
+            except Exception:
+                self._json({"error": "令牌无效"}, 401); return
+            target = str(body.get("target", "")).strip()[:80]
+            submit_type = str(body.get("type", "修订词条")).strip()[:30]
+            content = str(body.get("content", "")).strip()
+            images = body.get("images", [])
+            if not isinstance(images, list): images = []
+            images = [str(x) for x in images if str(x).startswith(("http://", "https://"))][:9]
+            if not target or not content: self._json({"error": "缺少提交目标或内容"}, 400); return
+            if len(content) > 5000: self._json({"error": "内容过长"}, 400); return
+            db = get_db()
+            db.execute("INSERT INTO wiki_submissions(target,submit_type,content,images_json,user_uuid,user_name) VALUES(?,?,?,?,?,?)", [target, submit_type, content, json.dumps(images, ensure_ascii=False), user.get("uuid", ""), user.get("nick_name") or user.get("name", "")])
+            db.commit(); row = db.execute("SELECT id,target,submit_type,content,created_at FROM wiki_submissions WHERE id=last_insert_rowid()").fetchone(); db.close()
+            self._json({"id": row["id"], "target": row["target"], "type": row["submit_type"], "content": row["content"], "status": "pending", "time": row["created_at"]})
+        elif p.path == "/api/activities":
+            if not token: self._json({"error": "未登录"}, 401); return
+            try:
+                r = requests.get(f"{API}/v1/user/", headers={"x-token": token}, timeout=10); r.raise_for_status(); user = r.json()
+            except Exception:
+                self._json({"error": "令牌无效"}, 401); return
+            db = get_db(); role_row = db.execute("SELECT role FROM members WHERE uuid=?", [user.get("uuid", "")]).fetchone(); role = role_row["role"] if role_row else "member"
+            if role not in ("chief", "deputy", "admin"):
+                db.close(); self._json({"error": "权限不足"}, 403); return
+            title = str(body.get("title", "")).strip()[:40]
+            status = str(body.get("status", "进行中")).strip()[:12] or "进行中"
+            desc = str(body.get("desc", "")).strip()[:300] or "暂无说明。"
+            if not title: db.close(); self._json({"error": "缺少活动标题"}, 400); return
+            db.execute("INSERT INTO activities(title,status,description,created_by) VALUES(?,?,?,?)", [title, status, desc, user.get("uuid", "")])
+            db.commit(); row = db.execute("SELECT id,title,status,description,created_at FROM activities WHERE id=last_insert_rowid()").fetchone(); db.close()
+            self._json({"id": row["id"], "title": row["title"], "status": row["status"], "desc": row["description"], "custom": True, "created_at": row["created_at"]})
+        elif p.path == "/api/activities/delete":
+            if not token: self._json({"error": "未登录"}, 401); return
+            try:
+                r = requests.get(f"{API}/v1/user/", headers={"x-token": token}, timeout=10); r.raise_for_status(); user = r.json()
+            except Exception:
+                self._json({"error": "令牌无效"}, 401); return
+            db = get_db(); role_row = db.execute("SELECT role FROM members WHERE uuid=?", [user.get("uuid", "")]).fetchone(); role = role_row["role"] if role_row else "member"
+            if role not in ("chief", "deputy", "admin"):
+                db.close(); self._json({"error": "权限不足"}, 403); return
+            aid = int(body.get("id", 0) or 0)
+            db.execute("DELETE FROM activities WHERE id=?", [aid]); db.commit(); db.close(); self._json({"ok": True})
         elif p.path == "/api/members/title":
             if not token: self._json({"error": "未登录"}, 401); return
             try:
