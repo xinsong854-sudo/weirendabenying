@@ -51,6 +51,22 @@ npx skills add talesofai/neta-skills/skills/neta-adventure
 
 **Region / fallback**: Device login is only supported when the CLI is using the **global** API host (see `NETA_API_BASE_URL` / `talesofai.com`). If the command errors with “not supported in the current region”, tell the user to authenticate via the **`NETA_TOKEN`** environment variable instead.
 
+## Local runtime configuration for this workspace
+
+This workspace uses the China Neta API host. Before running Neta CLI commands, load the existing environment file instead of using device login:
+
+```bash
+cd /workspace
+set -a && . /workspace/.env && set +a
+```
+
+Configured values are stored in `/workspace/.env`:
+
+- `NETA_API_BASE_URL=https://api.talesofai.cn`
+- `NETA_TOKEN` is already configured there for authenticated calls.
+
+Do not paste or print the raw token in normal responses; just source `/workspace/.env` when needed.
+
 ## Capability map and sub-skill overview
 
 ### 1. Spaces and worldbuilding: `neta-space`

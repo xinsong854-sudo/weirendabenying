@@ -1,7 +1,13 @@
 <template>
-  <section v-if="!session.me" class="login-wrap">
-    <div class="login-card">
-      <div class="emblem">⚜️</div>
+  <section v-if="!session.me" class="login-scene">
+    <div class="login-orbit" aria-hidden="true">
+      <img src="/cutouts/snakeoil-bottle.svg" alt="">
+      <img src="/cutouts/syringe.svg" alt="">
+      <img src="/cutouts/candy.svg" alt="">
+    </div>
+    <div class="login-card labyrinth-window">
+      <div class="window-title">IDENTITY RITUAL</div>
+      <div class="emblem">✦</div>
       <h1>伪人大本营</h1>
       <p class="tagline">机密档案库 · 身份核验</p>
       <div class="field"><span class="prefix">+86</span><input v-model.trim="phone" type="tel" inputmode="numeric" maxlength="11" placeholder="请输入手机号" autocomplete="tel"></div>
@@ -13,105 +19,150 @@
     </div>
   </section>
 
-  <section v-else>
-    <header class="topbar">
-      <button class="logo" @click="showHome">伪人大本营</button>
-      <div class="user-grp">
-        <img :src="safeUrl(session.me.avatar_url)" alt="avatar" loading="lazy" referrerpolicy="no-referrer">
+  <section v-else class="labyrinth-app">
+    <header class="stage-top">
+      <button class="brand-ticket" @click="showHome">伪人大本营</button>
+      <nav class="stage-nav" aria-label="主导航">
+        <button :class="{ active: view === 'home' }" @click="showHome">结界入口</button>
+        <button :class="{ active: ['archive','category','entry'].includes(view) }" @click="openArchive">档案馆</button>
+        <button @click="showMsg('讨论区即将开放', 'muted')">讨论幕布</button>
+        <button @click="openSettings">设置</button>
+      </nav>
+      <div class="identity-tag">
+        <div class="mini-avatar framed-avatar" :class="avatarFrameClass">
+          <img class="avatar-base" :src="safeUrl(session.me.avatar_url)" alt="avatar" loading="lazy" referrerpolicy="no-referrer">
+          <img v-if="currentAvatarFrame?.type === 'frame'" class="avatar-frame" :src="currentAvatarFrame.url" alt="">
+          <span v-if="currentAvatarFrame?.type === 'roach'" class="roach-orbit" aria-hidden="true"><img :src="currentAvatarFrame.url" alt=""></span>
+        </div>
         <span>{{ session.me.nick_name || session.me.name }}</span>
-        <span v-if="session.role === 'chief'" class="badge-chief">⚜️ 营长</span>
-        <span v-else-if="session.role === 'deputy'" class="badge-deputy">⚜️ 二营长</span>
-        <span v-else-if="session.role === 'admin'" class="badge-admin">管理员</span>
-        <button @click="logout">注销</button>
+        <button @click="logout">退出</button>
       </div>
     </header>
 
-    <main class="main">
-      <section class="hero">
-        <h2>伪人大本营</h2>
-        <p class="sub">{{ archive.tagline }}</p>
-        <div class="stats-row">
-          <div class="stat"><div class="val">{{ Math.round(archive.stats.heat / 1e4) }}万</div><div class="lbl">热度</div></div>
-          <div class="stat"><div class="val">{{ archive.stats.subscribers }}</div><div class="lbl">订阅</div></div>
-          <div class="stat"><div class="val">{{ archive.stats.lore_count }}</div><div class="lbl">条目</div></div>
-          <div class="stat"><div class="val">{{ members.length }}</div><div class="lbl">成员</div></div>
-        </div>
-      </section>
-
-      <div class="search-bar">
-        <span class="sicon">🔍</span>
-        <input v-model.trim="globalQuery" type="search" placeholder="搜索全部档案..." autocomplete="off">
-        <div v-if="globalQuery" class="search-results">
-          <button v-for="item in globalResults" :key="item.uuid" class="item" @click="openEntry(item.uuid, true)"><span class="name">{{ item.name }}</span><span class="cat">{{ item.category }}</span></button>
-          <div v-if="globalResults.length === 0" class="item muted">无匹配</div>
-        </div>
-      </div>
-
-      <section v-if="view === 'home'" class="forum-shell">
-        <div class="forum-main">
-          <div class="forum-head">
-            <div>
-              <h3>档案版块</h3>
-              <p>按分类浏览、搜索和讨论伪人大本营档案。</p>
-            </div>
-            <span class="forum-count">{{ archive.stats.lore_count }} 条档案</span>
+    <main class="stage-main">
+      <Transition name="page-shift" mode="out-in">
+      <section v-if="view === 'home'" key="home" class="game-home">
+        <aside class="profile-panel">
+          <div class="avatar-ring framed-avatar" :class="avatarFrameClass">
+            <img class="avatar-base" :src="safeUrl(session.me.avatar_url)" alt="avatar" loading="lazy" referrerpolicy="no-referrer">
+            <img v-if="currentAvatarFrame?.type === 'frame'" class="avatar-frame" :src="currentAvatarFrame.url" alt="">
+            <span v-if="currentAvatarFrame?.type === 'roach'" class="roach-orbit" aria-hidden="true"><img :src="currentAvatarFrame.url" alt=""></span>
           </div>
-          <div class="forum-list">
-            <button v-for="cat in categories" :key="cat.name" class="forum-row" @click="openCategory(cat.name)">
-              <span class="forum-icon">档</span>
-              <span class="forum-info">
-                <span class="forum-title">{{ cat.name }}</span>
-                <span class="forum-desc">{{ cat.preview }}</span>
-              </span>
-              <span class="forum-meta"><b>{{ cat.count }}</b><small>条档案</small></span>
-            </button>
-          </div>
-        </div>
-
-        <aside class="forum-side">
-          <div class="side-card profile-card">
-            <div class="side-title">当前身份</div>
-            <div class="mini-user"><img :src="safeUrl(session.me.avatar_url)" alt="" loading="lazy" referrerpolicy="no-referrer"><div><b>{{ session.me.nick_name || session.me.name }}</b><span>{{ session.role === 'member' ? '大本营成员' : '管理成员' }}</span></div></div>
-          </div>
-          <details class="side-card members-card">
-            <summary><span>成员</span><b>{{ members.length }}</b></summary>
-            <div class="member-strip">
-              <div v-for="m in memberPreview" :key="m.uuid" class="member-chip" :title="m.name">
-                <img :src="safeUrl(m.avatar)" alt="" loading="lazy" referrerpolicy="no-referrer">
-                <span :class="m.online ? 'dot online' : 'dot'"></span>
-              </div>
-            </div>
-            <div class="member-mini-list">
-              <div v-for="m in memberPreview" :key="`list-${m.uuid}`" class="member-mini">
-                <img :src="safeUrl(m.avatar)" alt="" loading="lazy" referrerpolicy="no-referrer">
-                <span>{{ m.name }}</span>
-                <small>{{ m.online ? '在线' : timeAgo(m.last_seen) }}</small>
-              </div>
-            </div>
-          </details>
-          <div class="side-card stat-card">
-            <div><b>{{ onlineCount }}</b><span>在线</span></div>
-            <div><b>{{ Math.round(archive.stats.heat / 1e4) }}万</b><span>热度</span></div>
-          </div>
+          <span class="profile-name">{{ session.me.nick_name || session.me.name }}</span>
+          <h2>一席界面</h2>
+          <p>深夜的玻璃教堂里，论坛入口、档案索引和成员活动被收纳在同一座异空间大厅。</p>
+          <h2>梦梦局</h2>
+          <p>从这里进入档案馆、悬挂新讨论，或打开后续预留的功能入口。</p>
+          <div class="profile-gems"><i></i><i></i><i></i></div>
         </aside>
+
+        <section class="main-gate">
+          <h1>伪人大本营</h1>
+          <p>{{ archive.tagline }}</p>
+          <div class="gate-actions">
+            <button class="start-btn" @click="openArchive">进入档案馆</button>
+            <button class="sub-btn" @click="showMsg('发帖功能预留中', 'muted')">发布讨论</button>
+          </div>
+        </section>
+
+        <aside class="route-panel">
+          <div class="route-head">迁回</div>
+          <button v-for="board in boards" :key="board.title" class="route-card" @click="board.action">
+            <span>{{ board.icon }}</span>
+            <b>{{ board.title }}</b>
+            <small>{{ board.count }} {{ board.label }}</small>
+          </button>
+        </aside>
+
+        <div class="quick-orbs" aria-label="快捷入口">
+          <button @click="openArchive">✦</button>
+          <button @click="showMsg('成员中心即将开放', 'muted')">◈</button>
+          <button @click="showMsg('工具箱即将开放', 'muted')">☰</button>
+        </div>
+
+        <footer class="bottom-dock">
+          <button @click="openArchive">档案馆</button>
+          <button @click="showMsg('讨论区即将开放', 'muted')">讨论</button>
+          <button @click="showMsg('任务板即将开放', 'muted')">任务</button>
+          <button @click="openSettings">设置</button>
+        </footer>
       </section>
 
-      <section v-else-if="view === 'category'">
-        <button class="breadcrumb" @click="showHome"><b>←</b> 返回档案分类</button>
-        <div class="search-bar"><span class="sicon">🔍</span><input v-model.trim="catQuery" type="search" placeholder="在当前分类中搜索..." autocomplete="off"></div>
-        <article v-for="e in categoryEntries" :key="e.uuid" class="entry" role="button" tabindex="0" @click="openEntry(e.uuid)" @keydown.enter="openEntry(e.uuid)">
-          <div class="entry-head"><span v-if="badgeMark(e.description)" class="badge" :class="badgeClass(e.description)">{{ badgeMark(e.description) }}</span><span class="entry-title">{{ e.name }}</span></div>
-          <div class="body">{{ e.description }}</div>
-          <div class="entry-foot">💬 {{ commentCounts[e.uuid] || 0 }} 条评论</div>
+      <section v-else-if="view === 'archive'" key="archive" class="archive-theater">
+        <div class="page-actions"><button class="back-note primary" @click="showHome">← 返回主页</button></div>
+        <header class="archive-marquee">
+          <div>
+            <span class="ritual-label">ARCHIVE CABINET / PAPER INDEX</span>
+            <h1>档案馆</h1>
+            <p>词条集中收纳于此，像贴在结界墙面的索引牌。</p>
+          </div>
+          <img src="/cutouts/snakeoil-bottle.svg" alt="" aria-hidden="true">
+        </header>
+        <div class="search-bar"><span class="sicon">⌕</span><input v-model.trim="globalQuery" type="search" placeholder="搜索档案馆词条..." autocomplete="off"><div v-if="globalQuery" class="search-results"><button v-for="item in globalResults" :key="item.uuid" class="item" @click="openEntry(item.uuid, true)"><span class="name">{{ item.name }}</span><span class="cat">{{ item.category }}</span></button><div v-if="globalResults.length === 0" class="item muted">无匹配</div></div></div>
+        <div class="specimen-grid">
+          <button v-for="cat in categories" :key="cat.name" class="specimen-card" @click="openCategory(cat.name)">
+            <span class="specimen-no">{{ cat.count }}</span>
+            <b>{{ cat.name }}</b>
+            <small>{{ cat.preview }}</small>
+          </button>
+        </div>
+      </section>
+
+      <section v-else-if="view === 'category'" key="category" class="category-theater">
+        <div class="page-actions"><button class="back-note primary" @click="showHome">← 返回主页</button><button class="back-note" @click="openArchive">返回档案馆</button></div>
+        <div class="search-bar"><span class="sicon">⌕</span><input v-model.trim="catQuery" type="search" placeholder="在当前分类中搜索..." autocomplete="off"></div>
+        <article v-for="e in categoryEntries" :key="e.uuid" class="entry-note" role="button" tabindex="0" @click="openEntry(e.uuid)" @keydown.enter="openEntry(e.uuid)">
+          <span v-if="badgeMark(e.description)" class="badge" :class="badgeClass(e.description)">{{ badgeMark(e.description) }}</span>
+          <h2>{{ e.name }}</h2>
+          <p>{{ e.description }}</p>
+          <footer>💬 {{ commentCounts[e.uuid] || 0 }} 条评论</footer>
         </article>
       </section>
 
-      <section v-else-if="view === 'entry' && currentEntry">
-        <button class="breadcrumb" @click="openCategory(currentEntry.category)"><b>←</b> 返回 {{ currentEntry.category }}</button>
-        <article class="entry"><div class="entry-head"><span v-if="badgeMark(currentEntry.description)" class="badge" :class="badgeClass(currentEntry.description)">{{ badgeMark(currentEntry.description) }}</span><span class="entry-title big">{{ currentEntry.name }}</span></div><div class="body">{{ currentEntry.description }}</div></article>
-        <section class="comments-section"><h3>档案评论</h3><div class="comment-list"><article v-for="c in comments" :key="`${c.created_at}-${c.user_name}-${c.content}`" class="comment"><img :src="safeUrl(c.user_avatar)" alt="" loading="lazy" referrerpolicy="no-referrer"><div class="c-body"><div class="c-head"><span class="c-name">{{ c.user_name }}</span><span class="c-time">{{ timeAgo(c.created_at) }}</span></div><div class="c-text">{{ c.content }}</div></div></article></div><div class="comment-form"><img :src="safeUrl(session.me.avatar_url)" alt="" loading="lazy"><textarea v-model.trim="commentText" maxlength="2000" placeholder="写下你的评论..." rows="2"></textarea><button :disabled="posting || !commentText" @click="postComment">{{ posting ? '发送中...' : '发表' }}</button></div></section>
+      <section v-else-if="view === 'entry' && currentEntry" key="entry" class="entry-theater">
+        <div class="page-actions"><button class="back-note primary" @click="showHome">← 返回主页</button><button class="back-note" @click="openCategory(currentEntry.category)">返回 {{ currentEntry.category }}</button></div>
+        <article class="entry-full">
+          <span v-if="badgeMark(currentEntry.description)" class="badge" :class="badgeClass(currentEntry.description)">{{ badgeMark(currentEntry.description) }}</span>
+          <h1>{{ currentEntry.name }}</h1>
+          <p>{{ currentEntry.description }}</p>
+        </article>
+        <section class="comment-stage">
+          <h3>档案评论</h3>
+          <article v-for="c in comments" :key="`${c.created_at}-${c.user_name}-${c.content}`" class="comment">
+            <img :src="safeUrl(c.user_avatar)" alt="" loading="lazy" referrerpolicy="no-referrer">
+            <div><b>{{ c.user_name }}</b><time>{{ timeAgo(c.created_at) }}</time><p>{{ c.content }}</p></div>
+          </article>
+          <div class="comment-form"><img :src="safeUrl(session.me.avatar_url)" alt="" loading="lazy"><textarea v-model.trim="commentText" maxlength="2000" placeholder="写下你的评论..." rows="2"></textarea><button :disabled="posting || !commentText" @click="postComment">{{ posting ? '发送中...' : '发表' }}</button></div>
+        </section>
       </section>
+      </Transition>
     </main>
+
+    <div v-if="settingsOpen" class="settings-mask" @click.self="settingsOpen = false">
+      <section class="settings-panel" role="dialog" aria-modal="true" aria-label="设置">
+        <header>
+          <div>
+            <span>SETTINGS</span>
+            <h2>设置</h2>
+          </div>
+          <button class="settings-close" @click="settingsOpen = false">×</button>
+        </header>
+        <div class="setting-block">
+          <h3>头像框</h3>
+          <p>选择一个头像框，会保存在本机，下次打开仍然生效。</p>
+          <div class="frame-grid">
+            <button v-for="frame in avatarFrames" :key="frame.id" class="frame-option" :class="{ active: avatarFrame === frame.id }" @click="setAvatarFrame(frame.id)">
+              <span class="frame-preview framed-avatar" :class="frame.type === 'roach' ? 'has-roach-frame' : ''">
+                <img class="avatar-base" :src="safeUrl(session.me.avatar_url)" alt="">
+                <img v-if="frame.type === 'frame'" class="avatar-frame" :src="frame.url" alt="">
+                <span v-if="frame.type === 'roach'" class="roach-orbit" aria-hidden="true"><img :src="frame.url" alt=""></span>
+              </span>
+              <b>{{ frame.name }}</b>
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
   </section>
 </template>
 
@@ -139,7 +190,15 @@ const comments = ref([])
 const commentText = ref('')
 const posting = ref(false)
 const commentCounts = ref({})
+const settingsOpen = ref(false)
+const avatarFrame = ref(localStorage.getItem('NIETA_AVATAR_FRAME') || 'blue')
 const session = reactive({ me: null, role: 'member', token: '' })
+const avatarFrames = [
+  { id: 'none', name: '无头像框', url: '', type: 'none' },
+  { id: 'blue', name: '蓝晶', url: 'https://oss.talesofai.cn/sts/49c915e649254f55a7ea399ad3b6efd1/1666693f-f7b8-4ca2-a31f-354463acbeff.png', type: 'frame' },
+  { id: 'pink', name: '粉金', url: 'https://oss.talesofai.cn/sts/49c915e649254f55a7ea399ad3b6efd1/cf29f296-f1d5-484e-8fe4-0b02177fd9ca.png', type: 'frame' },
+  { id: 'roach', name: '乱爬蟑螂', url: 'https://oss.talesofai.cn/sts/49c915e649254f55a7ea399ad3b6efd1/53710f82-1ad8-4863-98ee-4d7bed45f215.png', type: 'roach' }
+]
 
 const allEntries = Object.entries(archive.lore).flatMap(([category, entries]) => entries.map(e => ({ ...e, category })))
 const categories = computed(() => Object.entries(archive.lore).map(([name, list]) => ({
@@ -149,8 +208,16 @@ const categories = computed(() => Object.entries(archive.lore).map(([name, list]
 })).sort((a, b) => b.count - a.count))
 const memberPreview = computed(() => [...members.value].sort((a, b) => Number(b.online) - Number(a.online)).slice(0, 12))
 const onlineCount = computed(() => members.value.filter(m => m.online).length)
+const boards = computed(() => [
+  { icon: '📌', title: '公告与规则', desc: '置顶公告、营地规则、更新记录', count: 3, label: '置顶', action: () => showMsg('公告板预留中', 'muted') },
+  { icon: '💬', title: '日常讨论', desc: '成员交流、脑洞、提问与闲聊', count: members.value.length, label: '成员', action: () => showMsg('讨论区即将开放', 'muted') },
+  { icon: '📚', title: '档案馆', desc: '词条索引、分类浏览、档案评论', count: archive.stats.lore_count, label: '词条', action: () => openArchive() },
+  { icon: '🧪', title: '功能实验室', desc: '后续功能、投稿、活动、管理工具入口', count: 4, label: '模块', action: () => showMsg('功能实验室即将开放', 'muted') }
+])
 const globalResults = computed(() => filterEntries(allEntries, globalQuery.value).slice(0, 20))
 const categoryEntries = computed(() => filterEntries(archive.lore[currentCat.value] || [], catQuery.value))
+const currentAvatarFrame = computed(() => avatarFrames.find(f => f.id === avatarFrame.value && f.url) || null)
+const avatarFrameClass = computed(() => currentAvatarFrame.value?.type === 'roach' ? 'has-roach-frame' : '')
 
 function filterEntries(list, q) {
   const needle = String(q || '').toLowerCase()
@@ -159,6 +226,8 @@ function filterEntries(list, q) {
 }
 function vp(p) { return /^1[3456789]\d{9}$/.test(p) }
 function showMsg(text, type = 'error') { message.value = text; messageType.value = type }
+function openSettings() { settingsOpen.value = true }
+function setAvatarFrame(id) { avatarFrame.value = id; localStorage.setItem('NIETA_AVATAR_FRAME', id); showMsg(id === 'none' ? '已取消头像框' : '头像框已更换', 'muted') }
 function safeUrl(url) { const s = String(url || '').trim(); return /^(https?:)?\/\//i.test(s) ? s : '' }
 async function readJson(res) { const text = await res.text(); try { return text ? JSON.parse(text) : null } catch { return { error: text.slice(0, 500) } } }
 async function api(path, options) { const res = await fetch(path, options); const data = await readJson(res); if (!res.ok) throw new Error(data?.message || data?.msg || data?.error || data?.detail || res.statusText); return data }
@@ -227,6 +296,7 @@ async function useToken(token) {
 }
 async function loadMembers() { members.value = await api('/api/members').catch(() => []) }
 function showHome() { view.value = 'home'; currentEntry.value = null; globalQuery.value = ''; loadMembers() }
+function openArchive() { view.value = 'archive'; currentEntry.value = null; currentCat.value = ''; catQuery.value = ''; window.scrollTo(0, 0); loadMembers() }
 function openCategory(cat) { currentCat.value = cat; catQuery.value = ''; currentEntry.value = null; view.value = 'category'; window.scrollTo(0, 0) }
 async function openEntry(uuid, fromGlobal = false) { const entry = allEntries.find(e => e.uuid === uuid); if (!entry) return; currentEntry.value = entry; currentCat.value = entry.category; view.value = 'entry'; if (fromGlobal) globalQuery.value = ''; window.scrollTo(0, 0); await loadComments(uuid) }
 async function loadComments(uuid) { comments.value = await api(`/api/comments?entry_uuid=${encodeURIComponent(uuid)}`).catch(() => []); commentCounts.value = { ...commentCounts.value, [uuid]: comments.value.length } }

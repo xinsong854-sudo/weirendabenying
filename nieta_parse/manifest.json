@@ -1,0 +1,110 @@
+[
+  {
+    "url": "https://oss.talesofai.cn/static/nieta-app/assets/index-C6ybIWzf.js",
+    "file": "/workspace/nieta_parse/assets/index-C6ybIWzf.js",
+    "bytes": 1756730,
+    "content_type": null
+  },
+  {
+    "url": "https://oss.talesofai.cn/static/nieta-app/assets/polyfills-legacy-CRChUl9A.js",
+    "file": "/workspace/nieta_parse/assets/polyfills-legacy-CRChUl9A.js",
+    "bytes": 137338,
+    "content_type": null
+  },
+  {
+    "url": "https://oss.talesofai.cn/static/nieta-app/assets/index-legacy-CXGuZtui.js",
+    "file": "/workspace/nieta_parse/assets/index-legacy-CXGuZtui.js",
+    "bytes": 1949980,
+    "content_type": null
+  },
+  {
+    "url": "https://oss.talesofai.cn/static/talesofai-h5/favicon.ico",
+    "file": "/workspace/nieta_parse/assets/favicon.ico",
+    "bytes": 15406,
+    "content_type": null
+  },
+  {
+    "url": "https://oss.talesofai.cn/static/nieta-app/assets/solid-C4eIoo57.js",
+    "file": "/workspace/nieta_parse/assets/solid-C4eIoo57.js",
+    "bytes": 18697,
+    "content_type": null
+  },
+  {
+    "url": "https://oss.talesofai.cn/static/nieta-app/assets/talesofai-framework-DDGVqry5.js",
+    "file": "/workspace/nieta_parse/assets/talesofai-framework-DDGVqry5.js",
+    "bytes": 201527,
+    "content_type": null
+  },
+  {
+    "url": "https://oss.talesofai.cn/static/nieta-app/assets/talesofai-modules-common-ED_nEx2U.js",
+    "file": "/workspace/nieta_parse/assets/talesofai-modules-common-ED_nEx2U.js",
+    "bytes": 497918,
+    "content_type": null
+  },
+  {
+    "url": "https://oss.talesofai.cn/static/nieta-app/assets/talesofai-modules-core-cSUdSjKQ.js",
+    "file": "/workspace/nieta_parse/assets/talesofai-modules-core-cSUdSjKQ.js",
+    "bytes": 133520,
+    "content_type": null
+  },
+  {
+    "url": "https://oss.talesofai.cn/static/nieta-app/assets/hls-C_enWRl4.js",
+    "file": "/workspace/nieta_parse/assets/hls-C_enWRl4.js",
+    "bytes": 404835,
+    "content_type": null
+  },
+  {
+    "url": "https://oss.talesofai.cn/static/nieta-app/assets/talesofai-modules-components-CdAzhYAV.js",
+    "file": "/workspace/nieta_parse/assets/talesofai-modules-components-CdAzhYAV.js",
+    "bytes": 44345,
+    "content_type": null
+  },
+  {
+    "url": "https://oss.talesofai.cn/static/nieta-app/assets/talesofai-modules-mqtt-C3VSOOaa.js",
+    "file": "/workspace/nieta_parse/assets/talesofai-modules-mqtt-C3VSOOaa.js",
+    "bytes": 440642,
+    "content_type": null
+  },
+  {
+    "url": "https://oss.talesofai.cn/static/nieta-app/assets/talesofai-modules-router-eJu73Ha4.js",
+    "file": "/workspace/nieta_parse/assets/talesofai-modules-router-eJu73Ha4.js",
+    "bytes": 14789,
+    "content_type": null
+  },
+  {
+    "url": "https://oss.talesofai.cn/static/nieta-app/assets/talesofai-modules-generate-mkiii-BWxD3gnq.js",
+    "file": "/workspace/nieta_parse/assets/talesofai-modules-generate-mkiii-BWxD3gnq.js",
+    "bytes": 729949,
+    "content_type": null
+  },
+  {
+    "url": "https://oss.talesofai.cn/static/nieta-app/assets/talesofai-modules-litellm-DFSSRCuD.js",
+    "file": "/workspace/nieta_parse/assets/talesofai-modules-litellm-DFSSRCuD.js",
+    "bytes": 109987,
+    "content_type": null
+  },
+  {
+    "url": "https://oss.talesofai.cn/static/nieta-app/assets/gsap-Dd0P3ExI.js",
+    "file": "/workspace/nieta_parse/assets/gsap-Dd0P3ExI.js",
+    "bytes": 69963,
+    "content_type": null
+  },
+  {
+    "url": "https://oss.talesofai.cn/static/nieta-app/assets/talesofai-modules-common-Dy3LuHfY.css",
+    "file": "/workspace/nieta_parse/assets/talesofai-modules-common-Dy3LuHfY.css",
+    "bytes": 320,
+    "content_type": null
+  },
+  {
+    "url": "https://oss.talesofai.cn/static/nieta-app/assets/talesofai-modules-generate-mkiii-AaPdC6hL.css",
+    "file": "/workspace/nieta_parse/assets/talesofai-modules-generate-mkiii-AaPdC6hL.css",
+    "bytes": 16891,
+    "content_type": null
+  },
+  {
+    "url": "https://oss.talesofai.cn/static/nieta-app/assets/index-tTDGH6DQ.css",
+    "file": "/workspace/nieta_parse/assets/index-tTDGH6DQ.css",
+    "bytes": 213476,
+    "content_type": null
+  }
+]

@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "skills": {
+    "neta": {
+      "source": "talesofai/neta-skills",
+      "sourceType": "github",
+      "skillPath": "skills/neta/SKILL.md",
+      "computedHash": "fa368ed997829d3735fddfe615b1a153bed3e6959499d6e5159b62bb345257dd"
+    },
+    "neta-creative": {
+      "source": "talesofai/neta-skills",
+      "sourceType": "github",
+      "skillPath": "skills/neta-creative/SKILL.md",
+      "computedHash": "fb4cb6ff1bf1c36d499c3d924c6066b497fec0f0c5881f01691e9c952f94c427"
+    }
+  }
+}

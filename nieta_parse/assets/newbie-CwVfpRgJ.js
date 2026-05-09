@@ -1,0 +1,1 @@
+const C="NIETA_CREATED_CHARACTER_SUCCESS";export{C as N};
