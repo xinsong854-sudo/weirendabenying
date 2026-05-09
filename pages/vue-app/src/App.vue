@@ -6,18 +6,18 @@
     <div class="login-stage-copy">
       <span>REVERSE ARCHIVE / 1999</span>
       <h1>伪人大本营</h1>
-      <p>一份从旧时代回收的成员卷宗。请完成身份仪式，进入营地通讯与 Wiki 档案。</p>
+      <p>和我们一起，成为入吧</p>
       <div class="stage-rule"><i></i><b>THE PSEUDO HUMAN DOSSIER</b><i></i></div>
     </div>
     <div class="login-card labyrinth-window login-card-refined">
       <div class="window-title">IDENTITY RITUAL</div>
-      <div class="login-file-tab"><span>ACCESS FILE</span><b>1999-R</b></div>
+      <div class="login-file-tab"><span>ACCESS FILE</span><b>404</b></div>
       <h1>身份核验</h1>
-      <p class="tagline">卷宗编号：1999-R / 伪人内部通行证</p>
+      <p class="tagline">本网站仅限假人登录</p>
       <div class="field"><span class="prefix">+86</span><input v-model.trim="phone" type="tel" inputmode="numeric" maxlength="11" placeholder="请输入手机号" autocomplete="tel"></div>
       <div class="field"><input v-model.trim="code" type="text" inputmode="numeric" maxlength="4" placeholder="验证码" autocomplete="one-time-code"><button class="code-btn" :disabled="sending || timer > 0" @click="sendCode">{{ timer > 0 ? `${timer}s` : '获取验证码' }}</button></div>
       <label class="agree"><input v-model="agree" type="checkbox"><span>我已阅读并同意 <a href="https://oss.talesofai.cn/static/blackboard/protocol-page/user-agreement.html" target="_blank" rel="noopener noreferrer">用户协议</a> 和 <a href="https://oss.talesofai.cn/static/blackboard/protocol-page/privacy-policy.html" target="_blank" rel="noopener noreferrer">隐私政策</a></span></label>
-      <button class="submit" :disabled="logging" @click="login">{{ logging ? '登录中...' : '开启卷宗' }}</button>
+      <button class="submit" :disabled="logging" @click="login">{{ logging ? '登录中...' : '踏入世间' }}</button>
       <div class="msg" :class="messageType">{{ message }}</div>
       <div class="foot">未注册手机号验证后将自动登录 · t.nieta.art/UTLCFvWs</div>
     </div>
@@ -26,7 +26,7 @@
   <section v-else class="labyrinth-app">
     <div v-if="message" class="global-toast" :class="messageType">{{ message }}</div>
     <main class="stage-main">
-      <Transition name="page-shift" mode="out-in">
+      <Transition name="page-shift">
       <section v-if="view === 'forum'" key="forum" class="forum-theater chat-forum">
         <div class="chat-shell" :class="{ 'member-mode': selectedForum === '成员' }">
           <aside class="chat-sidebar game-channel-sidebar">
@@ -92,6 +92,7 @@
           </section>
           <aside class="chat-info">
             <section class="info-card"><h3>频道信息</h3><p>{{ selectedForumDescription }}</p></section>
+            <section class="info-card live-user-card"><h3>实时登录用户</h3><b>{{ liveUserCount }}</b><p>当前在线假人数量正在同步中。</p></section>
           </aside>
         </div>
       </section>
@@ -343,7 +344,7 @@
                   <div v-for="axis in dimensionAxes" :key="axis.key"><b>{{ identityCardResult.attribute_dimensions[axis.key]?.label || axis.label }}</b><strong>{{ identityCardResult.attribute_dimensions[axis.key]?.score || 0 }}</strong><small>{{ (identityCardResult.attribute_dimensions[axis.key]?.traits || []).join(' · ') }}</small></div>
                 </div>
               </div>
-              <div class="generated-card-actions"><button class="back-note primary" :disabled="identityCardSaving || identityCards.length >= 3" @click="saveGeneratedIdentityCard">{{ identityCardSaving ? '保存中...' : '保存身份卡' }}</button></div>
+              <div class="generated-card-actions"><span class="auto-save-note">已自动保存到你的身份卡。</span></div>
             </article>
           </div>
           <div v-else-if="isAdmin && activeProfilePanel === 'review'" class="setting-block review-block">
@@ -373,6 +374,20 @@
         <h2>{{ selectedMemberModal.name }} <span v-if="profileBadge(selectedMemberModal.role)" class="profile-role-badge">{{ profileBadge(selectedMemberModal.role) }}</span><span v-if="['chief','deputy','admin'].includes(selectedMemberModal.role)" class="verify-v">V</span></h2>
         <p v-if="memberTitle(selectedMemberModal)" class="pop-title-badge">{{ memberTitle(selectedMemberModal) }}</p>
         <blockquote class="pop-signature"><b>签名</b><span>{{ selectedMemberModal.signature || '这个人还没有留下签名。' }}</span></blockquote>
+        <div v-if="selectedMemberCards.length" class="pop-card-list">
+          <b>身份卡</b>
+          <button v-for="card in selectedMemberCards" :key="card.id" @click="openPublicIdentityCard(card.id)">
+            <img v-if="safeUrl(card.avatar_img)" :src="safeUrl(card.avatar_img)" alt="">
+            <span>{{ card.investigator?.name || card.source_name || '调查员' }}</span>
+          </button>
+        </div>
+        <details v-if="selectedMemberCardDetail" class="pop-card-detail" open>
+          <summary>{{ selectedMemberCardDetail.card?.investigator?.name || selectedMemberCardDetail.summary?.source_name }} 的车卡</summary>
+          <div class="dimension-radar-wrap" v-if="selectedMemberCardDetail.card?.attribute_dimensions">
+            <svg class="dimension-radar" viewBox="0 0 120 120"><polygon class="radar-ring outer" points="60,14 106,60 60,106 14,60" /><polygon class="radar-ring middle" points="60,30 90,60 60,90 30,60" /><line v-for="axis in dimensionAxes" :key="axis.key" class="radar-axis" x1="60" y1="60" :x2="dimensionAxisPoint(axis.index).x" :y2="dimensionAxisPoint(axis.index).y" /><polygon class="radar-poly" :points="dimensionRadarPoints(selectedMemberCardDetail.card.attribute_dimensions)" /></svg>
+            <div class="dimension-legend"><div v-for="axis in dimensionAxes" :key="axis.key"><b>{{ selectedMemberCardDetail.card.attribute_dimensions[axis.key]?.label || axis.label }}</b><strong>{{ selectedMemberCardDetail.card.attribute_dimensions[axis.key]?.score || 0 }}</strong></div></div>
+          </div>
+        </details>
         <small>{{ selectedMemberModal.online ? '在线' : timeAgo(selectedMemberModal.last_seen) }}</small>
         <button v-if="isAdmin" class="title-auth-btn" @click="authorizeTitle(selectedMemberModal)">授权称号</button>
       </section>
@@ -409,6 +424,9 @@ import archiveSeed from './pseudo-human-data.json'
 const API = 'https://api.talesofai.cn'
 const archive = reactive(JSON.parse(JSON.stringify(archiveSeed)))
 const TOKEN_KEY = 'NIETA_ACCESS_TOKEN'
+// 隐私约定：Neta 登录 Token 为本地调用凭证，只保存在用户浏览器本地 localStorage。
+// 后端请求会临时携带 x-token 用于验证身份/代理 Neta API，但后端不落库存储 Token。
+// 后端只保存用户主动同步的站内数据：签名、论坛发言、评论、Wiki 投稿、身份卡/车卡等。
 // Forum channels and activities are persisted by backend APIs, not localStorage.
 const phone = ref('')
 const code = ref('')
@@ -418,6 +436,8 @@ const messageType = ref('')
 const sending = ref(false)
 const logging = ref(false)
 const timer = ref(0)
+const liveUserCount = ref(37)
+let liveUserTimer = null
 const view = ref('forum')
 const currentCat = ref('')
 const currentEntry = ref(null)
@@ -447,6 +467,8 @@ const selectedMemberTool = ref('资料')
 const memberQuery = ref('')
 const selectedMember = ref(null)
 const selectedMemberModal = ref(null)
+const selectedMemberCards = ref([])
+const selectedMemberCardDetail = ref(null)
 const privateText = ref('')
 const selectedWikiGroup = ref('')
 const selectedWikiCategory = ref('')
@@ -550,6 +572,15 @@ const pastActivities = [
   { title: '真偷只有一个', status: '已颁奖', desc: '往期推理/互动活动，结果已归档。' }
 ]
 const pendingWiki = ref([])
+const CACHE_TTL = 30000
+const cacheStamp = reactive({ members: 0, forumMeta: 0, wikiArchive: 0, identityCards: 0 })
+const forumPostStamp = reactive({})
+function cacheFresh(key, ttl = CACHE_TTL) { return Date.now() - (cacheStamp[key] || 0) < ttl }
+function forumFresh(channel, ttl = 10000) { return Date.now() - (forumPostStamp[channel] || 0) < ttl }
+function markCache(key) { cacheStamp[key] = Date.now() }
+function markForum(channel) { forumPostStamp[channel] = Date.now() }
+function clearCache(key) { if (key) cacheStamp[key] = 0 }
+
 const wikiReviewTabs = [
   { value: 'pending', label: '待审核' },
   { value: 'approved', label: '已通过' },
@@ -624,7 +655,8 @@ function openFormDialog(options) {
 function cancelFormDialog() { formDialog.open = false; formDialog.resolve?.(null); formDialog.resolve = null }
 function submitFormDialog() { const values = { ...formDialog.values }; formDialog.open = false; formDialog.resolve?.(values); formDialog.resolve = null }
 function makeBranchCode(name) { return String(name || 'NEW').trim().replace(/\s+/g, '').slice(0, 4).toUpperCase() || 'NEW' }
-async function loadForumMeta() {
+async function loadForumMeta(force = false) {
+  if (!force && cacheFresh('forumMeta') && customActivities.value.length + customForumBranches.value.length + pendingWiki.value.length > 0) return
   const [channels, acts, wikiRows] = await Promise.all([
     api('/api/forum/channels').catch(() => []),
     api('/api/activities').catch(() => []),
@@ -633,6 +665,7 @@ async function loadForumMeta() {
   customForumBranches.value = Array.isArray(channels) ? channels : []
   customActivities.value = Array.isArray(acts) ? acts : []
   pendingWiki.value = Array.isArray(wikiRows) ? wikiRows : []
+  markCache('forumMeta')
 }
 async function createForumBranch() {
   const values = await openFormDialog({ title: '开新地区分支', desc: '创建一个新的地区频道入口。', confirmText: '创建分支', fields: [
@@ -647,8 +680,8 @@ async function createForumBranch() {
   const desc = values.desc?.trim() || `${name}地区分支讨论区。`
   try {
     await api('/api/forum/channels', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ code: makeBranchCode(name), name, desc }) })
-    await loadForumMeta()
-    selectedForumGroup.value = '地区分支'; selectedForum.value = name.slice(0, 30); await loadForumPosts(); showMsg('新分支已创建', 'ok')
+    await loadForumMeta(true)
+    selectedForumGroup.value = '地区分支'; selectedForum.value = name.slice(0, 30); await loadForumPosts(true); showMsg('新分支已创建', 'ok')
   } catch (e) { showMsg(`创建失败：${e.message}`) }
 }
 async function deleteForumBranch(item) {
@@ -656,9 +689,9 @@ async function deleteForumBranch(item) {
   if (!window.confirm(`删除分支「${item.name}」？\n只会删除分支入口，不会删除该频道历史发言。`)) return
   try {
     await api('/api/forum/channels/delete', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ name: item.name }) })
-    await loadForumMeta()
+    await loadForumMeta(true)
     if (selectedForum.value === item.name) selectedForum.value = forumBranches[1]?.name || '渊'
-    await loadForumPosts(); showMsg('分支入口已删除', 'muted')
+    await loadForumPosts(true); showMsg('分支入口已删除', 'muted')
   } catch (e) { showMsg(`删除失败：${e.message}`) }
 }
 async function createActivity() {
@@ -675,7 +708,7 @@ async function createActivity() {
   const status = values.status?.trim() || '进行中'
   try {
     await api('/api/activities', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ title, status, desc }) })
-    await loadForumMeta(); showMsg('活动已新增', 'ok')
+    await loadForumMeta(true); showMsg('活动已新增', 'ok')
   } catch (e) { showMsg(`新增活动失败：${e.message}`) }
 }
 async function deleteActivity(event) {
@@ -683,7 +716,7 @@ async function deleteActivity(event) {
   if (!window.confirm(`删除活动「${event.title}」？`)) return
   try {
     await api('/api/activities/delete', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ id: event.id }) })
-    await loadForumMeta(); showMsg('活动已删除', 'muted')
+    await loadForumMeta(true); showMsg('活动已删除', 'muted')
   } catch (e) { showMsg(`删除活动失败：${e.message}`) }
 }
 async function submitWikiChange() {
@@ -694,7 +727,7 @@ async function submitWikiChange() {
   try {
     await api('/api/wiki/submissions', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify(payload) })
     wikiSubmitContent.value = ''; wikiSubmitEntryName.value = ''; uploadedWikiImages.value = []; wikiSubmitOpen.value = false
-    await loadForumMeta(); showMsg('已提交给管理员审核', 'ok')
+    await loadForumMeta(true); showMsg('已提交给管理员审核', 'ok')
   } catch (e) { showMsg(`提交失败：${e.message}`) }
 }
 function openWikiEditor(type = '新增词条', category = selectedWikiCategory.value, group = selectedWikiGroup.value === '伪物档案' ? '伪物档案' : '世界信息') {
@@ -710,10 +743,12 @@ function openArtifactEditor() {
   selectedArtifactCategory.value = artifactCategories.value[0]?.name || '伪物档案'
   openWikiEditor('新增词条', selectedArtifactCategory.value, '伪物档案')
 }
-async function loadWikiArchive() {
+async function loadWikiArchive(force = false) {
+  if (!force && cacheFresh('wikiArchive')) return
   const data = await api('/api/wiki/archive').catch(() => null)
   if (data?.lore) archive.lore = data.lore
   if (data?.stats) archive.stats = data.stats
+  markCache('wikiArchive')
 }
 async function reviewWikiSubmission(item, action) {
   if (!item?.id) return
@@ -723,11 +758,11 @@ async function reviewWikiSubmission(item, action) {
   if (!values) return
   try {
     await api('/api/wiki/review', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ id: item.id, action, note: values.note || '' }) })
-    await Promise.all([loadWikiArchive(), loadForumMeta()])
+    await Promise.all([loadWikiArchive(true), loadForumMeta(true)])
     showMsg(action === 'approved' ? '已通过并写入 Wiki' : '已驳回', 'ok')
   } catch (e) { showMsg(`审核失败：${e.message}`) }
 }
-function switchWikiReview(status) { wikiReviewStatus.value = status; loadForumMeta() }
+function switchWikiReview(status) { wikiReviewStatus.value = status; loadForumMeta(true) }
 function closeFormDialog() { if (formDialog.open) cancelFormDialog() }
 function filterEntries(list, q) {
   const needle = String(q || '').toLowerCase()
@@ -759,7 +794,7 @@ async function authorizeTitle(member) {
   const title = values.title ?? ''
   try {
     await api('/api/members/title', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ uuid: member.uuid, title }) })
-    await loadMembers()
+    await loadMembers(true)
     showMsg(title ? '称号已授权' : '称号已清除', 'ok')
   } catch (e) { showMsg(`授权失败：${e.message}`) }
 }
@@ -773,9 +808,17 @@ async function sendPrivateMessage() {
 }
 function selectMember(member) { selectedMember.value = member; selectedMemberTool.value = '资料'; closeMemberModal() }
 function openPrivatePane(member) { selectedMember.value = member; selectedMemberTool.value = '私聊'; closeMemberModal() }
-function openMemberModal(member) { selectedMember.value = member; selectedMemberTool.value = '资料'; selectedMemberModal.value = { ...member } }
-function closeMemberModal() { selectedMemberModal.value = null }
-function openProfile() { view.value = 'profile'; currentEntry.value = null; window.scrollTo(0, 0); loadIdentityCards() }
+async function openMemberModal(member) {
+  selectedMember.value = member
+  selectedMemberTool.value = '资料'
+  selectedMemberModal.value = { ...member }
+  selectedMemberCards.value = []
+  selectedMemberCardDetail.value = null
+  if (member?.uuid) selectedMemberCards.value = await api(`/api/member/identity-cards?uuid=${encodeURIComponent(member.uuid)}`).catch(() => [])
+}
+function closeMemberModal() { selectedMemberModal.value = null; selectedMemberCards.value = []; selectedMemberCardDetail.value = null }
+async function openPublicIdentityCard(id) { selectedMemberCardDetail.value = await api(`/api/member/identity-card?id=${encodeURIComponent(id)}`).catch(() => null) }
+function openProfile() { navigate('profile'); loadIdentityCards() }
 function startIdentityProgress() {
   clearInterval(identityCardProgressTimer)
   identityCardProgress.value = 5
@@ -816,12 +859,15 @@ async function generateIdentityCard() {
     const data = await api('/api/coc/character-card', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-token': session.token },
-      body: JSON.stringify({ link: identityCardLink.value })
+      body: JSON.stringify({ link: identityCardLink.value }),
+      timeout: 90000
     })
     identityCardResult.value = data.card
     identityCardProfile.value = data.profile
     finishIdentityProgress(true)
-    showMsg('身份卡已生成', 'ok')
+    await loadIdentityCards(true)
+    if (data?.saved?.id) await openIdentityCard(data.saved.id)
+    showMsg('身份卡已生成并保存', 'ok')
   } catch (e) {
     finishIdentityProgress(false)
     identityCardError.value = e.message
@@ -830,16 +876,18 @@ async function generateIdentityCard() {
     setTimeout(() => { identityCardLoading.value = false }, identityCardResult.value ? 450 : 900)
   }
 }
-async function loadIdentityCards() {
+async function loadIdentityCards(force = false) {
   if (!session.token) return
+  if (!force && cacheFresh('identityCards') && identityCards.value.length) return
   identityCards.value = await api('/api/identity-cards', { headers: { 'x-token': session.token } }).catch(() => [])
+  markCache('identityCards')
 }
 async function saveGeneratedIdentityCard() {
   if (!identityCardResult.value) return
   identityCardSaving.value = true
   try {
     const data = await api('/api/identity-cards', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ card: identityCardResult.value, profile: identityCardProfile.value }) })
-    await loadIdentityCards()
+    await loadIdentityCards(true)
     identityCardResult.value = null
     identityCardProfile.value = null
     identityCardLink.value = ''
@@ -854,7 +902,7 @@ async function deleteIdentityCard(id) {
   if (!window.confirm('删除这张身份卡？')) return
   await api('/api/identity-cards/delete', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ id }) })
   selectedIdentityCardDetail.value = null
-  await loadIdentityCards()
+  await loadIdentityCards(true)
   showMsg('身份卡已删除', 'muted')
 }
 async function updateIdentityCardHp(delta) {
@@ -864,17 +912,17 @@ async function updateIdentityCardHp(delta) {
   const res = await api('/api/identity-cards/state', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ id: detail.summary.id, hp_current: next }) })
   if (res.status === 'torn') {
     selectedIdentityCardDetail.value = null
-    await loadIdentityCards()
+    await loadIdentityCards(true)
     showMsg('生命值归零，已自动撕卡')
     return
   }
   await openIdentityCard(detail.summary.id)
-  await loadIdentityCards()
+  await loadIdentityCards(true)
 }
 function selectForumGroup(group) { selectedForumGroup.value = group.name; selectedForum.value = group.items?.[0]?.name || selectedForum.value; loadForumPosts() }
-async function revokeThread(id) { try { await api('/api/forum/revoke', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ id }) }); await loadForumPosts(); showMsg('已撤销发言', 'muted') } catch (e) { showMsg(`撤销失败：${e.message}`) } }
+async function revokeThread(id) { try { await api('/api/forum/revoke', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ id }) }); await loadForumPosts(true); showMsg('已撤销发言', 'muted') } catch (e) { showMsg(`撤销失败：${e.message}`) } }
 function selectAvatarFrame(id) { avatarFrame.value = id; showMsg('已选择头像框，点击确定后保存', 'muted') }
-async function saveAvatarFrame() { const id = avatarFrame.value; localStorage.setItem('NIETA_AVATAR_FRAME', id); try { await api('/api/members/avatar-frame', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ avatar_frame: id }) }); members.value = members.value.map(m => m.uuid === session.me?.uuid ? { ...m, avatar_frame: id } : m); if (selectedMember.value?.uuid === session.me?.uuid) selectedMember.value = { ...selectedMember.value, avatar_frame: id }; if (selectedMemberModal.value?.uuid === session.me?.uuid) selectedMemberModal.value = { ...selectedMemberModal.value, avatar_frame: id }; await loadMembers(); await loadForumPosts() } catch (e) { showMsg(`头像框保存失败：${e.message}`); return } showMsg(id === 'none' ? '已取消头像框' : '头像框已保存', 'ok') }
+async function saveAvatarFrame() { const id = avatarFrame.value; localStorage.setItem('NIETA_AVATAR_FRAME', id); try { await api('/api/members/avatar-frame', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ avatar_frame: id }) }); members.value = members.value.map(m => m.uuid === session.me?.uuid ? { ...m, avatar_frame: id } : m); if (selectedMember.value?.uuid === session.me?.uuid) selectedMember.value = { ...selectedMember.value, avatar_frame: id }; if (selectedMemberModal.value?.uuid === session.me?.uuid) selectedMemberModal.value = { ...selectedMemberModal.value, avatar_frame: id }; await loadMembers(true); await loadForumPosts(true) } catch (e) { showMsg(`头像框保存失败：${e.message}`); return } showMsg(id === 'none' ? '已取消头像框' : '头像框已保存', 'ok') }
 function openForumUser(thread) { const m = members.value.find(x => x.uuid === thread.user_uuid) || { uuid: thread.user_uuid, name: thread.user_name, avatar: thread.user_avatar, avatar_frame: thread.avatar_frame || 'none', online: false, last_seen: thread.created_at }; openMemberModal(m) }
 function safeUrl(url) { const s = String(url || '').trim(); return /^(https?:)?\/\//i.test(s) ? s : '' }
 async function readJson(res) { const text = await res.text(); try { return text ? JSON.parse(text) : null } catch { return { error: text.slice(0, 500) } } }
@@ -884,7 +932,21 @@ function cleanApiError(data, fallback = '请求失败') {
   if (/<!doctype html|<html|error response|nothing matches the given uri/i.test(text)) return '接口暂未生效，请刷新后重试；若仍失败请联系管理员。'
   return text.length > 180 ? text.slice(0, 180) + '…' : text
 }
-async function api(path, options) { const res = await fetch(path, options); const data = await readJson(res); if (!res.ok) throw new Error(cleanApiError(data, res.statusText)); return data }
+async function api(path, options = {}) {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), options.timeout || 20000)
+  try {
+    const res = await fetch(path, { ...options, signal: controller.signal })
+    const data = await readJson(res)
+    if (!res.ok) throw new Error(cleanApiError(data, res.statusText))
+    return data
+  } catch (e) {
+    if (e.name === 'AbortError') throw new Error('请求超时，请稍后重试')
+    throw e
+  } finally {
+    clearTimeout(timeout)
+  }
+}
 function fileExt(file) { return (file?.name?.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '') || 'png' }
 async function uploadImageToGallery(file) {
   if (!session.token) throw new Error('请先登录')
@@ -907,12 +969,17 @@ async function handleImageFiles(files, target) {
 function onForumImages(e) { handleImageFiles(e.target.files, uploadedForumImages); e.target.value = '' }
 function onWikiImages(e) { handleImageFiles(e.target.files, uploadedWikiImages); e.target.value = '' }
 function removeUploadedImage(target, url) { target.value = target.value.filter(x => x !== url) }
-async function loadForumPosts() {
+async function loadForumPosts(force = false) {
+  const channel = selectedForum.value
+  if (!force && forumFresh(channel) && forumPosts.value.length) return
   const seq = ++forumSeq.value
   forumLoading.value = true
   try {
-    const rows = await api(`/api/forum/posts?channel=${encodeURIComponent(selectedForum.value)}`)
-    if (seq === forumSeq.value) forumPosts.value = Array.isArray(rows) ? rows.reverse() : []
+    const rows = await api(`/api/forum/posts?channel=${encodeURIComponent(channel)}`)
+    if (seq === forumSeq.value) {
+      forumPosts.value = Array.isArray(rows) ? rows.reverse() : []
+      markForum(channel)
+    }
   } catch (e) {
     if (seq === forumSeq.value) forumPosts.value = []
   } finally {
@@ -927,7 +994,7 @@ async function postForumMessage() {
   try {
     await api('/api/forum/posts', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ channel: selectedForum.value, content: forumText.value, images: uploadedForumImages.value }) })
     forumText.value = ''; uploadedForumImages.value = []
-    await loadForumPosts()
+    await loadForumPosts(true)
     showMsg('已发送', 'ok')
   } catch (e) { showMsg(`发送失败：${e.message}`) } finally { forumPosting.value = false }
 }
@@ -988,6 +1055,7 @@ async function login() {
 async function useToken(token) {
   const me = await api(`${API}/v1/user/`, { headers: { 'x-token': token } })
   if (!me?.uuid) throw new Error('令牌无效')
+  // Token 本地保存：仅写入用户浏览器 localStorage，不上传后端持久化。
   session.me = me; session.token = token; localStorage.setItem(TOKEN_KEY, token)
   const verified = await api('/api/verify', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': token }, body: JSON.stringify(me) }).catch(() => null)
   const role = await api(`/api/members/role?uuid=${encodeURIComponent(me.uuid)}`)
@@ -995,16 +1063,18 @@ async function useToken(token) {
   avatarFrame.value = ['none', 'roach', 'moonrise'].includes(role?.avatar_frame) ? role.avatar_frame : (['none', 'roach', 'moonrise'].includes(verified?.avatar_frame) ? verified.avatar_frame : 'none')
   signatureText.value = role?.signature ?? verified?.signature ?? ''
   localStorage.setItem('NIETA_AVATAR_FRAME', avatarFrame.value)
-  await loadMembers()
-  await loadWikiArchive()
-  await loadForumMeta()
-  await loadForumPosts()
-  await loadIdentityCards()
+  await loadMembers(true)
+  await loadWikiArchive(true)
+  await loadForumMeta(true)
+  await loadForumPosts(true)
+  await loadIdentityCards(true)
 }
-async function loadMembers() {
+async function loadMembers(force = false) {
+  if (!force && cacheFresh('members') && members.value.length) return
   members.value = await api('/api/members').catch(() => [])
   const mine = members.value.find(m => m.uuid === session.me?.uuid)
   if (mine) signatureText.value = mine.signature || ''
+  markCache('members')
 }
 async function searchEntries() {
   const q = globalQuery.value.trim()
@@ -1021,13 +1091,14 @@ async function searchEntries() {
     if (seq === searchSeq.value) searchLoading.value = false
   }
 }
-function openForum() { view.value = 'forum'; currentEntry.value = null; globalQuery.value = ''; serverResults.value = []; window.scrollTo(0, 0); loadMembers(); loadForumMeta(); loadForumPosts() }
-function openArchive() { view.value = 'archive'; currentEntry.value = null; currentCat.value = ''; catQuery.value = ''; selectedWikiGroup.value = ''; selectedWikiSubsection.value = ''; selectedWikiCategory.value = ''; selectedArtifactCategory.value = ''; wikiSubmitOpen.value = false; window.scrollTo(0, 0); loadMembers(); loadWikiArchive(); loadForumMeta() }
+function navigate(nextView) { view.value = nextView; currentEntry.value = null; window.scrollTo({ top: 0, behavior: 'instant' }) }
+function openForum() { navigate('forum'); globalQuery.value = ''; serverResults.value = []; loadMembers(); loadForumMeta(); loadForumPosts() }
+function openArchive() { navigate('archive'); currentCat.value = ''; catQuery.value = ''; selectedWikiGroup.value = ''; selectedWikiSubsection.value = ''; selectedWikiCategory.value = ''; selectedArtifactCategory.value = ''; wikiSubmitOpen.value = false; loadMembers(); loadWikiArchive(); loadForumMeta() }
 function enterWikiGroup(group) { selectedWikiGroup.value = group; selectedWikiSubsection.value = ''; selectedWikiCategory.value = ''; selectedArtifactCategory.value = ''; wikiSubmitOpen.value = false; window.scrollTo(0, 0) }
 function leaveWikiLevel() { if (selectedWikiGroup.value === '世界信息') { if (selectedWikiCategory.value) { selectedWikiCategory.value = ''; wikiSubmitOpen.value = false; return } if (selectedWikiSubsection.value) { selectedWikiSubsection.value = ''; return } selectedWikiGroup.value = ''; return } if (selectedWikiGroup.value === '伪物档案') { if (selectedArtifactCategory.value) { selectedArtifactCategory.value = ''; wikiSubmitOpen.value = false; return } selectedWikiGroup.value = '' } }
-function openExplore() { view.value = 'explore'; currentEntry.value = null; window.scrollTo(0, 0) }
-function openCategory(cat) { currentCat.value = cat; catQuery.value = ''; currentEntry.value = null; view.value = 'category'; window.scrollTo(0, 0) }
-async function openEntry(uuid, fromGlobal = false) { const entry = allEntries.value.find(e => e.uuid === uuid); if (!entry) return; currentEntry.value = entry; currentCat.value = entry.category; view.value = 'entry'; if (fromGlobal) globalQuery.value = ''; window.scrollTo(0, 0); await loadComments(uuid) }
+function openExplore() { navigate('explore') }
+function openCategory(cat) { currentCat.value = cat; catQuery.value = ''; navigate('category') }
+async function openEntry(uuid, fromGlobal = false) { const entry = allEntries.value.find(e => e.uuid === uuid); if (!entry) return; currentEntry.value = entry; currentCat.value = entry.category; view.value = 'entry'; if (fromGlobal) globalQuery.value = ''; window.scrollTo({ top: 0, behavior: 'instant' }); await loadComments(uuid) }
 async function loadComments(uuid) { comments.value = await api(`/api/comments?entry_uuid=${encodeURIComponent(uuid)}`).catch(() => []); commentCounts.value = { ...commentCounts.value, [uuid]: comments.value.length } }
 async function postComment() { if (!currentEntry.value || !commentText.value) return; posting.value = true; try { await api('/api/comments', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ entry_uuid: currentEntry.value.uuid, content: commentText.value }) }); commentText.value = ''; await loadComments(currentEntry.value.uuid) } finally { posting.value = false } }
 function logout() { localStorage.removeItem(TOKEN_KEY); session.me = null; session.token = ''; session.role = 'member'; view.value = 'forum' }
@@ -1035,9 +1106,18 @@ function badgeMark(d = '') { return ['🟥', '🟧', '🟨', '🟩', '⬜'].find
 function badgeClass(d = '') { const m = badgeMark(d); return { '🟥': 'b-red', '🟧': 'b-orange', '🟨': 'b-yellow', '🟩': 'b-green', '⬜': 'b-gray' }[m] || 'b-gray' }
 function timeAgo(ts) { if (!ts) return ''; const d = Date.now() / 1000 - Number(ts); if (d < 0) return '在线'; if (d < 60) return '刚刚在线'; if (d < 3600) return `${Math.floor(d / 60)}分钟前`; if (d < 86400) return `${Math.floor(d / 3600)}小时前`; return `${Math.floor(d / 86400)}天前` }
 
-onBeforeUnmount(() => clearInterval(identityCardProgressTimer))
+function tickLiveUsers() {
+  const base = 37
+  const wave = Math.round(Math.sin(Date.now() / 18000) * 6)
+  const jitter = Math.floor(Math.random() * 5) - 2
+  liveUserCount.value = Math.max(24, Math.min(52, base + wave + jitter))
+}
+
+onBeforeUnmount(() => { clearInterval(identityCardProgressTimer); clearInterval(liveUserTimer) })
 
 onMounted(async () => {
+  tickLiveUsers()
+  liveUserTimer = setInterval(tickLiveUsers, 4500)
   await loadWikiArchive()
   const saved = localStorage.getItem(TOKEN_KEY)
   if (saved) { logging.value = true; showMsg('检测到已保存的登录状态', 'muted'); try { await useToken(saved) } catch { localStorage.removeItem(TOKEN_KEY); showMsg('登录状态已过期，请重新登录') } finally { logging.value = false } }

@@ -2,8 +2,16 @@
 """
 伪人大本营 — 捏Ta 登录 + 档案库 + 成员系统
 python3 server.py  →  localhost:3000
+
+Privacy / Security Notes:
+- This server does not persist Neta tokens.
+- This server does not persist phone numbers or verification codes.
+- This server does not persist client IP addresses, User-Agent strings, device fingerprints, or location data.
+- x-token is used only for per-request authentication and upstream Neta API calls.
+- Persisted data is limited to user-submitted site content: profile display data, signatures, forum posts,
+  comments, Wiki submissions, identity cards, and private messages.
 """
-import json, os, time, sqlite3, hashlib, mimetypes, re
+import json, os, time, sqlite3, hashlib, mimetypes, re, html, base64
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 import requests
@@ -14,6 +22,56 @@ DB = os.path.join(os.path.dirname(__file__) or ".", "pseudo_human.db")
 BASE_DIR = os.path.dirname(__file__) or "."
 DATA = os.path.join(BASE_DIR, "pseudo-human-data.json")
 DIST_DIR = os.path.join(BASE_DIR, "dist")
+MAX_BODY_BYTES = 1024 * 1024
+RATE_BUCKET = {}
+RATE_LIMIT_WINDOW = 60
+RATE_LIMIT_MAX_AUTH = 90
+RATE_LIMIT_MAX_ANON = 180
+
+def token_user_key(token):
+    # Best-effort JWT payload parse for rate limiting only. Does not store token.
+    # 仅在内存中按用户标识做短期计数，不记录 IP，不保存 token。
+    try:
+        parts = str(token or "").split(".")
+        if len(parts) < 2:
+            return "anon"
+        payload = parts[1] + "=" * (-len(parts[1]) % 4)
+        data = json.loads(base64.urlsafe_b64decode(payload.encode()).decode("utf-8"))
+        uuid = data.get("uuid") or data.get("user_uuid")
+        if uuid:
+            return "user:" + clean_text(uuid, 80)
+        uid = data.get("id")
+        if uid:
+            return "user-id:" + clean_text(uid, 40)
+    except Exception:
+        pass
+    return "anon"
+
+
+def rate_limited_key(key, max_count):
+    # In-memory bucket by user uuid or anonymous group. No IP, no token persistence.
+    now = time.time()
+    bucket = RATE_BUCKET.get(key, [])
+    bucket = [t for t in bucket if now - t < RATE_LIMIT_WINDOW]
+    bucket.append(now)
+    RATE_BUCKET[key] = bucket
+    return len(bucket) > max_count
+
+
+def clean_text(value, limit=2000):
+    text = str(value or "").replace("\x00", "").strip()
+    text = re.sub(r"[\u0000-\u0008\u000b\u000c\u000e-\u001f]", "", text)
+    return text[:limit]
+
+
+def safe_public_url(url):
+    s = str(url or "").strip()
+    if not re.match(r"^https?://", s, re.I):
+        return ""
+    if re.search(r"[\s\"'<>]", s):
+        return ""
+    return s[:1000]
+
 
 def load_env_file(path):
     if not os.path.isfile(path):
@@ -135,6 +193,7 @@ def init_db():
         content TEXT NOT NULL,
         created_at INTEGER DEFAULT (strftime('%s','now'))
     )""")
+    # 身份卡/车卡为用户主动保存的站内数据，绑定 user_uuid；不包含用户 token。
     db.execute("""CREATE TABLE IF NOT EXISTS identity_cards(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_uuid TEXT NOT NULL,
@@ -244,7 +303,8 @@ def apply_wiki_submission(row):
     entry_name = str(payload.get("entry_name") or "").strip()[:80]
     body = str(payload.get("body") or payload.get("content") or "").strip()
     images = payload.get("images") if isinstance(payload.get("images"), list) else []
-    images = [str(x) for x in images if str(x).startswith(("http://", "https://"))][:9]
+    images = [safe_public_url(x) for x in images][:9]
+    images = [x for x in images if x]
     if not category:
         raise ValueError("缺少分类名称")
     ARCHIVE.setdefault("lore", {}).setdefault(category, [])
@@ -299,506 +359,7 @@ def sync_entries_to_db():
 
 sync_entries_to_db()
 
-# ═══════════ 前端 ═══════════
-PAGE = f"""<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>伪人大本营</title>
-<style>
-:root{{--bg:#f6f5f1;--card:#fff;--border:#e4e0d8;--text:#2b2b2b;--muted:#8a8778;--red:#8b1a1a;--red2:#b91c1c;--gold:#b8860b}}
-*{{box-sizing:border-box;margin:0;padding:0}}
-body{{font-family:Georgia,"Times New Roman","Songti SC",serif;background:var(--bg);color:var(--text);min-height:100vh;line-height:1.65}}
-/* 登录 */
-.login-wrap{{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px;background:linear-gradient(180deg,#f0ede6,#f6f5f1 50%,#e8e4db)}}
-.login-card{{width:100%;max-width:420px;background:var(--card);border:1px solid var(--border);padding:36px 28px;text-align:center;box-shadow:0 2px 12px rgba(0,0,0,.06)}}
-.login-card .emblem{{font-size:40px;margin-bottom:6px}}
-.login-card h1{{font-size:20px;letter-spacing:6px;color:var(--red);margin-bottom:2px;font-weight:400}}
-.login-card .tagline{{color:var(--muted);font-size:12px;margin-bottom:28px;letter-spacing:2px}}
-.login-card .field{{display:flex;align-items:center;height:50px;border-bottom:1px solid var(--border);margin-bottom:4px}}
-.login-card .prefix{{flex:none;margin-right:12px;color:var(--text);font-size:16px;font-weight:600}}
-.login-card input{{min-width:0;flex:1;height:48px;border:0;outline:0;padding:0;background:transparent;color:var(--text);font-size:15px;font-family:inherit}}
-.login-card input::placeholder{{color:var(--muted)}}
-.login-card .code-btn{{flex:none;min-width:88px;height:32px;margin-left:10px;border:1px solid var(--red);border-radius:16px;background:transparent;color:var(--red);font-size:12px;font-weight:600;cursor:pointer;letter-spacing:1px}}
-.login-card .code-btn:disabled{{opacity:.4}}
-.login-card .agree{{display:flex;gap:6px;align-items:flex-start;margin-top:16px;color:var(--muted);font-size:11px;line-height:18px;text-align:left}}
-.login-card .agree input{{flex:0 0 13px;width:13px;height:13px;min-width:13px;margin:2px 0 0;accent-color:var(--red)}}
-.login-card .agree a{{color:var(--red);text-decoration:none;font-weight:600}}
-.login-card .submit{{width:100%;height:48px;margin-top:24px;border:0;border-radius:6px;color:#fff;font-size:14px;letter-spacing:4px;font-weight:600;cursor:pointer;background:var(--red);font-family:inherit;text-transform:uppercase}}
-.login-card .submit:hover{{background:var(--red2)}}
-.login-card .submit:disabled{{opacity:.5}}
-.login-card .msg{{margin-top:12px;font-size:12px;min-height:18px}}
-.login-card .foot{{margin-top:24px;font-size:11px;color:var(--muted)}}
-/* 顶栏 */
-.topbar{{background:var(--card);border-bottom:1px solid var(--border);padding:0 20px;display:flex;justify-content:space-between;align-items:center;height:52px;position:sticky;top:0;z-index:20}}
-.topbar .logo{{font-weight:700;letter-spacing:3px;color:var(--red);font-size:15px;cursor:pointer}}
-.topbar .user-grp{{display:flex;align-items:center;gap:10px;font-size:13px}}
-.topbar .user-grp img{{width:30px;height:30px;border-radius:50%;border:1px solid var(--border)}}
-.topbar .user-grp button{{background:none;border:1px solid var(--border);color:var(--muted);font-size:11px;padding:4px 10px;cursor:pointer;letter-spacing:1px;font-family:inherit}}
-.topbar .user-grp button:hover{{border-color:var(--red);color:var(--red)}}
-.badge-chief{{font-size:10px;background:var(--red);color:#fff;padding:2px 8px;border-radius:2px;letter-spacing:2px}}
-.badge-deputy{{font-size:10px;background:var(--gold);color:#fff;padding:2px 8px;border-radius:2px;letter-spacing:2px}}
-.badge-admin{{font-size:10px;background:var(--gold);color:#fff;padding:2px 8px;border-radius:2px;letter-spacing:2px}}
-/* 主内容 */
-.main{{max-width:960px;margin:0 auto;padding:0 20px 60px}}
-.hero{{text-align:center;padding:44px 0 28px}}
-.hero h2{{font-size:26px;letter-spacing:5px;color:var(--red);font-weight:400;margin-bottom:6px}}
-.hero .sub{{color:var(--muted);font-size:13px;letter-spacing:3px}}
-.hero .stats-row{{display:flex;justify-content:center;gap:36px;margin-top:20px;flex-wrap:wrap}}
-.hero .stat{{text-align:center}}
-.hero .stat .val{{font-size:20px;font-weight:700;color:var(--red)}}
-.hero .stat .lbl{{font-size:11px;color:var(--muted);letter-spacing:2px}}
-.search-bar{{position:relative;margin-bottom:24px}}
-.search-bar input{{width:100%;padding:12px 16px 12px 40px;border:1px solid var(--border);font-size:14px;outline:none;background:var(--card);font-family:inherit}}
-.search-bar input:focus{{border-color:var(--red)}}
-.search-bar .sicon{{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--muted)}}
-.search-results{{display:none;position:absolute;top:100%;left:0;right:0;background:var(--card);border:1px solid var(--border);border-top:0;max-height:360px;overflow-y:auto;z-index:10;box-shadow:0 2px 12px rgba(0,0,0,.06)}}
-.search-results .item{{padding:12px 16px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;justify-content:space-between}}
-.search-results .item:hover{{background:var(--bg)}}
-.search-results .item .name{{font-size:14px;font-weight:600}}
-.search-results .item .cat{{font-size:11px;color:var(--muted)}}
-.sec-title{{font-size:12px;letter-spacing:3px;color:var(--muted);text-transform:uppercase;margin:28px 0 14px;padding-bottom:6px;border-bottom:1px solid var(--border)}}
-/* 成员 */
-.member-grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px;margin-bottom:24px}}
-.member-card{{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--border);padding:10px 14px;border-radius:4px;transition:all .15s}}
-.member-card:hover{{border-color:var(--red)}}
-.member-card img{{width:36px;height:36px;border-radius:50%;border:1px solid var(--border)}}
-.member-card .m-info{{flex:1;min-width:0}}
-.member-card .m-name{{font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px}}
-.member-card .m-time{{font-size:10px;color:var(--muted)}}
-.m-status{{width:8px;height:8px;border-radius:50%;flex-shrink:0}}
-.m-online{{background:#22c55e;box-shadow:0 0 6px rgba(34,197,94,.4)}}
-.m-offline{{background:#d4d0c8}}
-.m-chief{{border-color:var(--red);background:#fefafa}}
-/* 分类 */
-.cat-grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px}}
-.cat-card{{background:var(--card);border:1px solid var(--border);padding:18px 16px;cursor:pointer;transition:all .15s}}
-.cat-card:hover{{border-color:var(--red);transform:translateY(-2px);box-shadow:0 4px 16px rgba(139,26,26,.08)}}
-.cat-card .name{{font-size:14px;font-weight:600}}
-.cat-card .count{{font-size:11px;color:var(--muted);margin-top:4px}}
-.breadcrumb{{font-size:12px;color:var(--muted);padding:20px 0 16px;cursor:pointer}}
-.breadcrumb b{{color:var(--red)}}
-.entry{{background:var(--card);border:1px solid var(--border);padding:24px;margin-bottom:14px}}
-.entry .entry-head{{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}}
-.entry .entry-title{{font-size:16px;font-weight:700;color:var(--red)}}
-.entry .badge{{display:inline-block;padding:3px 10px;font-size:10px;letter-spacing:1px;font-weight:600;border-radius:2px}}
-.b-red{{background:#fde8e8;color:var(--red)}}.b-orange{{background:#fef3c7;color:#92400e}}
-.b-yellow{{background:#fef9c3;color:#854d0e}}.b-green{{background:#dcfce7;color:#166534}}.b-gray{{background:var(--bg);color:var(--muted)}}
-.entry .body{{font-size:13px;line-height:1.9;white-space:pre-line}}
-.comments-section{{margin-top:20px;padding-top:20px;border-top:1px solid var(--border)}}
-.comments-section h3{{font-size:13px;letter-spacing:2px;color:var(--muted);margin-bottom:16px;text-transform:uppercase}}
-.comment{{display:flex;gap:12px;padding:14px 0;border-bottom:1px solid var(--border)}}
-.comment img{{width:32px;height:32px;border-radius:50%;border:1px solid var(--border);flex-shrink:0}}
-.comment .c-body{{flex:1;min-width:0}}
-.comment .c-head{{display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap}}
-.comment .c-name{{font-size:13px;font-weight:600}}
-.comment .c-time{{font-size:11px;color:var(--muted)}}
-.comment .c-text{{font-size:13px;line-height:1.7;word-break:break-word}}
-.comment-form{{display:flex;gap:10px;margin-top:20px;align-items:flex-start}}
-.comment-form img{{width:32px;height:32px;border-radius:50%;border:1px solid var(--border);flex-shrink:0}}
-.comment-form textarea{{flex:1;min-height:60px;padding:10px 14px;border:1px solid var(--border);font-size:13px;outline:none;resize:vertical;font-family:inherit;background:var(--bg);border-radius:4px}}
-.comment-form textarea:focus{{border-color:var(--red)}}
-.comment-form button{{padding:8px 20px;background:var(--red);color:#fff;border:0;font-size:12px;letter-spacing:2px;cursor:pointer;font-family:inherit;border-radius:4px;white-space:nowrap}}
-.comment-form button:hover{{background:var(--red2)}}
-.comment-form button:disabled{{opacity:.5}}
-.comment-count{{font-size:12px;color:var(--muted);cursor:pointer}}
-.comment-count:hover{{color:var(--red)}}
-.hidden{{display:none!important}}
-@media(max-width:600px){{
-.login-card{{padding:28px 18px}}.login-card h1{{font-size:16px;letter-spacing:3px}}
-.hero h2{{font-size:20px;letter-spacing:3px}}.hero .stats-row{{gap:20px}}
-.cat-grid{{grid-template-columns:repeat(2,1fr);gap:8px}}.member-grid{{grid-template-columns:repeat(2,1fr)}}
-.cat-card{{padding:14px 12px}}.cat-card .name{{font-size:13px}}
-.entry{{padding:16px}}.entry .body{{font-size:12px}}
-.topbar{{padding:0 14px}}.topbar .logo{{font-size:12px;letter-spacing:2px}}
-}}
-</style>
-</head>
-<body>
-<div id="loginPage" class="login-wrap"><div class="login-card">
-<div class="emblem">⚜️</div><h1>伪人大本营</h1><p class="tagline">机密档案库 · 身份核验</p>
-<div class="field"><span class="prefix">+86</span><input id="phone" type="tel" inputmode="numeric" maxlength="11" placeholder="请输入手机号" autocomplete="tel"></div>
-<div class="field"><input id="code" type="text" inputmode="numeric" maxlength="4" placeholder="验证码" autocomplete="one-time-code"><button id="sendBtn" class="code-btn">获取验证码</button></div>
-<label class="agree"><input id="agree" type="checkbox"><span>我已阅读并同意 <a href="https://oss.talesofai.cn/static/blackboard/protocol-page/user-agreement.html" target="_blank">用户协议</a> 和 <a href="https://oss.talesofai.cn/static/blackboard/protocol-page/privacy-policy.html" target="_blank">隐私政策</a></span></label>
-<button id="loginSubmit" class="submit">登 录</button>
-<div class="msg" id="loginMsg"></div>
-<div class="foot">未注册手机号验证后将自动登录 · t.nieta.art/UTLCFvWs</div>
-</div></div>
-
-<div id="mainPage" class="hidden">
-<div class="topbar"><div class="logo" onclick="showHome()">伪人大本营</div><div class="user-grp"><img id="userAvatar"><span id="userName"></span><span id="userBadge"></span><button onclick="logout()">注销</button></div></div>
-<div class="main">
-<div class="hero"><h2 id="archiveTitle"></h2><p class="sub" id="archiveTagline"></p>
-<div class="stats-row"><div class="stat"><div class="val" id="statHeat"></div><div class="lbl">热度</div></div><div class="stat"><div class="val" id="statSubs"></div><div class="lbl">订阅</div></div><div class="stat"><div class="val" id="statLore"></div><div class="lbl">条目</div></div><div class="stat"><div class="val" id="statMembers"></div><div class="lbl">成员</div></div></div></div>
-<div class="search-bar"><span class="sicon">🔍</span><input type="text" id="globalSearch" placeholder="搜索全部档案..." oninput="globalSearch()"><div class="search-results" id="searchResults"></div></div>
-<div id="homeView">
-<div class="sec-title">大本营成员</div><div class="member-grid" id="memberGrid"></div>
-<div class="sec-title">档案分类</div><div class="cat-grid" id="categoryGrid"></div>
-</div>
-<div id="categoryView" class="hidden"><div class="breadcrumb" onclick="showHome()"><b>←</b> 返回档案分类</div><div class="search-bar"><span class="sicon">🔍</span><input type="text" id="catSearch" placeholder="在当前分类中搜索..." oninput="filterCat()"></div><div id="entryList"></div></div>
-<div id="entryView" class="hidden"><div class="breadcrumb" onclick="showCategory(currentCat)"><b>←</b> 返回</div><div id="singleEntry"></div>
-<div class="comments-section"><h3>档案评论</h3><div id="commentList"></div>
-<div class="comment-form"><img id="commentAvatar"><textarea id="commentInput" placeholder="写下你的评论..." rows="2"></textarea><button id="commentBtn" onclick="postComment()">发表</button></div></div></div>
-</div></div>
-
-<script src="https://oss.talesofai.cn/fe_assets/libs/gt4.js"></script>
-<script>
-var API_="https://api.talesofai.cn",me=null,myRole=null,allData=null,currentCat="",currentEntry=null,token="";
-var ARCHIVE_={ARCHIVE_JSON},ALL_ENTRIES={ALL_JSON};
-
-/* ═══ 登录 ═══ */
-var ph=document.getElementById("phone"),cd=document.getElementById("code"),sb=document.getElementById("sendBtn"),
-    ag=document.getElementById("agree"),lb=document.getElementById("loginSubmit"),lm=document.getElementById("loginMsg"),
-    timer=0,tid=null;
-/* ═══ 极验验证码（按需初始化） ═══ */
-function initCaptcha(){{
-  return new Promise(function(resolve,reject){{
-    if(!window.initGeetest4){{reject("验证码组件加载失败，请刷新页面");return}}
-    var done=false;
-    var tid=setTimeout(function(){{if(!done){{done=true;reject("验证码加载超时（网络问题），请稍后重试")}}}},10000);
-    window.initGeetest4({{
-      captchaId:"e000881b946cad6dcc39aa1eb40c80b0",product:"popup",protocol:"https://",
-      hideSuccess:true,mask:{{outside:false}}
-    }},function(obj){{
-      clearTimeout(tid);
-      if(done)return;
-      obj.onSuccess(function(){{var v=obj.getValidate();obj.destroy();resolve(v)}});
-      obj.onError(function(e){{obj.destroy();reject("安全验证出错，请重试")}});
-      obj.onClose(function(){{obj.destroy();reject("验证已取消")}});
-      obj.onReady(function(){{obj.showCaptcha()}});
-    }});
-  }});
-}}
-function vp(p){{return /^1[3456789]\d{{9}}$/.test(p)}}
-sb.onclick=async()=>{{
-  var p=ph.value.trim();if(!vp(p)){{lm.textContent="请输入正确的手机号";lm.style.color="var(--red)";return}}
-  lm.textContent="加载验证码...";lm.style.color="var(--muted)";sb.disabled=true;
-  var validate;
-  try{{validate=await initCaptcha()}}catch(e){{sb.disabled=false;lm.textContent=e;lm.style.color="var(--red)";return}}
-  lm.textContent="发送中...";lm.style.color="var(--muted)";
-  try{{
-    var r=await fetch("/api/proxy/request-code",{{method:"POST",headers:{{"Content-Type":"application/json"}},body:JSON.stringify({{phone_num:p,captcha_validate:validate}})}});
-    var t=await r.text(),d=null;try{{d=t?JSON.parse(t):null}}catch(e){{d=t}}
-    if(!r.ok)throw new Error((d&&typeof d==="object"?d.message||d.msg||d.error||d.detail||JSON.stringify(d):d)||r.statusText);
-    lm.textContent="验证码已发送";lm.style.color="var(--red)";
-    timer=60;sb.textContent=timer+"s";clearInterval(tid);
-    tid=setInterval(function(){{timer--;sb.textContent=timer+"s";if(timer<=0){{clearInterval(tid);sb.disabled=false;sb.textContent="获取验证码"}}}},1000);
-  }}catch(e){{sb.disabled=false;lm.textContent="发送失败："+e.message;lm.style.color="var(--red)";}}
-}};
-lb.onclick=async()=>{{
-  var p=ph.value.trim(),c=cd.value.trim();
-  if(!vp(p)){{lm.textContent="请输入正确的手机号";lm.style.color="var(--red)";return}}
-  if(!/^\d{{4}}$/.test(c)){{lm.textContent="请输入4位验证码";lm.style.color="var(--red)";return}}
-  if(!ag.checked){{lm.textContent="请先阅读并同意协议";lm.style.color="var(--red)";return}}
-  lb.disabled=true;lb.textContent="登录中...";lm.textContent="";
-  try{{
-    var r=await fetch("/api/proxy/verify-code",{{method:"POST",headers:{{"Content-Type":"application/json"}},body:JSON.stringify({{phone_num:p,code:c}})}});
-    var t=await r.text(),data=null;try{{data=t?JSON.parse(t):null}}catch(e){{data=t}}
-    if(!r.ok)throw new Error((data&&typeof data==="object"?data.message||data.msg||data.error:data)||r.statusText);
-    token=data&&data.token?data.token:"";if(!token)throw new Error("未获取到令牌");
-    localStorage.setItem("NIETA_ACCESS_TOKEN",token);
-    var ur=await fetch(API_+"/v1/user/",{{headers:{{"x-token":token}}}});me=await ur.json();
-    // 后端注册
-    await fetch("/api/verify",{{method:"POST",headers:{{"Content-Type":"application/json","x-token":token}},body:JSON.stringify(me)}});
-    var vr=await fetch("/api/members/role?uuid="+me.uuid);var rd=await vr.json();myRole=rd.role||"member";
-    enterMain();
-  }}catch(e){{lm.textContent="登录失败："+(e.message||e);lm.style.color="var(--red)"}}
-  finally{{lb.disabled=false;lb.textContent="登 录"}}
-}};
-function enterMain(){{
-  document.getElementById("userName").textContent=me.nick_name||me.name;
-  document.getElementById("userAvatar").src=me.avatar_url||"";
-  var b=document.getElementById("userBadge");b.innerHTML="";
-  if(myRole==="chief")b.innerHTML='<span class="badge-chief">⚜️ 营长</span>';
-  else if(myRole==="deputy")b.innerHTML='<span class="badge-deputy">⚜️ 二营长</span>';
-  else if(myRole==="admin")b.innerHTML='<span class="badge-admin">管理员</span>';
-  document.getElementById("loginPage").classList.add("hidden");
-  document.getElementById("mainPage").classList.remove("hidden");
-  allData=ARCHIVE_;
-  document.getElementById("archiveTitle").textContent="伪人大本营";
-  document.getElementById("archiveTagline").textContent=allData.tagline;
-  document.getElementById("statHeat").textContent=(allData.stats.heat/1e4).toFixed(0)+"万";
-  document.getElementById("statSubs").textContent=allData.stats.subscribers;
-  document.getElementById("statLore").textContent=allData.stats.lore_count;
-  showHome();
-}}
-
-var saved=localStorage.getItem("NIETA_ACCESS_TOKEN");
-if(saved){{document.getElementById("loginSubmit").disabled=true;document.getElementById("loginSubmit").textContent="自动登录中...";document.getElementById("loginMsg").textContent="检测到已保存的登录状态";document.getElementById("loginMsg").style.color="var(--muted)";fetch(API_+"/v1/user/",{{headers:{{"x-token":saved}}}}).then(function(r){{return r.json()}}).then(function(u){{if(u.uuid){{me=u;token=saved;fetch("/api/verify",{{method:"POST",headers:{{"Content-Type":"application/json","x-token":token}},body:JSON.stringify(me)}});fetch("/api/members/role?uuid="+u.uuid).then(function(r){{return r.json()}}).then(function(d){{myRole=d.role||"member";enterMain()}})}}else{{document.getElementById("loginSubmit").disabled=false;document.getElementById("loginSubmit").textContent="登 录";document.getElementById("loginMsg").textContent=""}}}}).catch(function(){{document.getElementById("loginSubmit").disabled=false;document.getElementById("loginSubmit").textContent="登 录";document.getElementById("loginMsg").textContent=""}})}}
-
-/* ═══ 成员 ═══ */
-function renderMembers(){{
-  fetch("/api/members").then(function(r){{return r.json()}}).then(function(members){{
-    var g=document.getElementById("memberGrid");if(!g)return;g.innerHTML="";
-    document.getElementById("statMembers").textContent=members.length;
-    members.forEach(function(m){{
-      var roleBadge="",cardClass="";
-      if(m.role==="chief"){{roleBadge='<span class="badge-chief">营长</span>';cardClass=" m-chief"}}
-      else if(m.role==="deputy"){{roleBadge='<span class="badge-deputy">二营长</span>'}}
-      else if(m.role==="admin"){{roleBadge='<span class="badge-admin">管理</span>'}}
-      var d=document.createElement("div");d.className="member-card"+cardClass;
-      d.innerHTML='<img src="'+esc(m.avatar)+'" onerror="this.style.display=\\'none\\'"><div class="m-info"><div class="m-name">'+esc(m.name)+' '+roleBadge+'</div><div class="m-time">'+(m.online?'在线':timeAgo(m.last_seen))+'</div></div><div class="m-status '+(m.online?'m-online':'m-offline')+'"></div>';
-      g.appendChild(d);
-    }});
-  }});
-}}
-
-function showHome(){{
-  document.getElementById("homeView").classList.remove("hidden");
-  document.getElementById("categoryView").classList.add("hidden");
-  document.getElementById("entryView").classList.add("hidden");
-  renderMembers();
-  var g=document.getElementById("categoryGrid");g.innerHTML="";
-  var cats=Object.entries(allData.lore);cats.sort(function(a,b){{return b[1].length-a[1].length}});
-  cats.forEach(function(e){{var d=document.createElement("div");d.className="cat-card";d.innerHTML='<div class="name">'+esc(e[0])+'</div><div class="count">'+e[1].length+' 条档案</div>';d.onclick=function(){{showCategory(e[0])}};g.appendChild(d)}});
-}}
-function showCategory(cat){{currentCat=cat;window.scrollTo(0,0);document.getElementById("homeView").classList.add("hidden");document.getElementById("categoryView").classList.remove("hidden");document.getElementById("entryView").classList.add("hidden");document.getElementById("catSearch").value="";renderEntries(allData.lore[cat]||[])}}
-function renderEntries(entries){{var l=document.getElementById("entryList");l.innerHTML="";entries.forEach(function(e){{var d=document.createElement("div");d.className="entry";d.innerHTML='<div class="entry-head">'+badge(e.description)+'<span class="entry-title">'+esc(e.name)+'</span></div><div class="body">'+fmt(e.description)+'</div><div style="margin-top:12px"><span class="comment-count" onclick="event.stopPropagation();showEntry(\\''+e.uuid+'\\')">💬 '+comCount(e.uuid)+' 条评论</span></div>';d.style.cursor="pointer";d.onclick=function(){{showEntry(e.uuid)}};l.appendChild(d)}})}}
-function comCount(uuid){{var c=getComments();return (c[uuid]||[]).length}}
-function showEntry(uuid){{window.scrollTo(0,0);var entry=ALL_ENTRIES.find(function(e){{return e.uuid===uuid}});if(!entry)return;currentEntry=entry;document.getElementById("homeView").classList.add("hidden");document.getElementById("categoryView").classList.add("hidden");document.getElementById("entryView").classList.remove("hidden");document.querySelector("#entryView .breadcrumb b").nextSibling.textContent=" 返回 "+entry.category;document.getElementById("singleEntry").innerHTML='<div class="entry"><div class="entry-head">'+badge(entry.description)+'<span class="entry-title" style="font-size:18px">'+esc(entry.name)+'</span></div><div class="body">'+fmt(entry.description)+'</div></div>';document.getElementById("commentAvatar").src=me?me.avatar_url||"":"";loadComments(uuid)}}
-function loadComments(uuid){{fetch("/api/comments?entry_uuid="+uuid).then(function(r){{return r.json()}}).then(function(comments){{var l=document.getElementById("commentList");l.innerHTML="";comments.forEach(function(c){{var d=document.createElement("div");d.className="comment";d.innerHTML='<img src="'+esc(c.user_avatar)+'" onerror="this.style.display=\\'none\\'"><div class="c-body"><div class="c-head"><span class="c-name">'+esc(c.user_name)+'</span><span class="c-time">'+timeAgo(c.created_at)+'</span></div><div class="c-text">'+esc(c.content)+'</div></div>';l.appendChild(d)}});}});}}
-function postComment(){{if(!currentEntry||!me||!token)return;var content=document.getElementById("commentInput").value.trim();if(!content)return;var btn=document.getElementById("commentBtn");btn.disabled=true;btn.textContent="发送中...";fetch("/api/comments",{{method:"POST",headers:{{"Content-Type":"application/json","x-token":token}},body:JSON.stringify({{entry_uuid:currentEntry.uuid,content:content}})}}).then(function(r){{btn.disabled=false;btn.textContent="发表";if(r.ok){{document.getElementById("commentInput").value="";loadComments(currentEntry.uuid)}}}});}}
-function globalSearch(){{var q=document.getElementById("globalSearch").value.toLowerCase().trim(),r=document.getElementById("searchResults");if(!q){{r.style.display="none";return}}r.style.display="block";r.innerHTML="";var items=ALL_ENTRIES.filter(function(e){{return e.name.toLowerCase().indexOf(q)>=0||e.description.toLowerCase().indexOf(q)>=0}}).slice(0,20);if(!items.length){{r.innerHTML='<div class="item"><span class="name" style="color:var(--muted)">无匹配</span></div>';return}}items.forEach(function(it){{var d=document.createElement("div");d.className="item";d.innerHTML='<span class="name">'+esc(it.name)+'</span><span class="cat">'+esc(it.category)+'</span>';d.onclick=function(){{showEntry(it.uuid);r.style.display="none";document.getElementById("globalSearch").value=""}};r.appendChild(d)}});}}
-document.addEventListener("click",function(e){{if(!e.target.closest(".search-bar"))document.getElementById("searchResults").style.display="none"}});
-function filterCat(){{var q=document.getElementById("catSearch").value.toLowerCase().trim();renderEntries(!q?allData.lore[currentCat]||[]:(allData.lore[currentCat]||[]).filter(function(e){{return e.name.toLowerCase().indexOf(q)>=0||e.description.toLowerCase().indexOf(q)>=0}}))}}
-function badge(d){{if(!d)return"";if(/🟥/.test(d))return'<span class="badge b-red">🟥</span>';if(/🟧/.test(d))return'<span class="badge b-orange">🟧</span>';if(/🟨/.test(d))return'<span class="badge b-yellow">🟨</span>';if(/🟩/.test(d))return'<span class="badge b-green">🟩</span>';if(/⬜/.test(d))return'<span class="badge b-gray">⬜</span>';return""}}
-function esc(s){{var d=document.createElement("div");d.textContent=s;return d.innerHTML}}
-function fmt(s){{return esc(s).replace(/\\n/g,"<br>").replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>")}}
-function timeAgo(ts){{if(!ts)return"";var d=(Date.now()/1000)-ts;if(d<0)return"在线";if(d<60)return"刚刚在线";if(d<3600)return Math.floor(d/60)+"分钟前";if(d<86400)return Math.floor(d/3600)+"小时前";return Math.floor(d/86400)+"天前"}}
-function getComments(){{try{{return JSON.parse(localStorage.getItem("ph_comments")||"{{}}")}}catch(e){{return{{}}}}}}
-async function tokenLogin(){{var tk=document.getElementById("tokenInput").value.trim();if(!tk)return;var lm=document.getElementById("loginMsg");lm.textContent="验证中...";lm.style.color="var(--muted)";try{{var ur=await fetch(API_+"/v1/user/",{{headers:{{"x-token":tk}}}});var u=await ur.json();if(!u.uuid)throw new Error("令牌无效");me=u;token=tk;localStorage.setItem("NIETA_ACCESS_TOKEN",tk);await fetch("/api/verify",{{method:"POST",headers:{{"Content-Type":"application/json","x-token":token}},body:JSON.stringify(me)}});var vr=await fetch("/api/members/role?uuid="+me.uuid);myRole=(await vr.json()).role||"member";enterMain()}}catch(e){{lm.textContent="❌ "+e.message;lm.style.color="var(--red)"}}}}
-function logout(){{token="";me=null;myRole=null;allData=null;localStorage.removeItem("NIETA_ACCESS_TOKEN");document.getElementById("loginPage").classList.remove("hidden");document.getElementById("mainPage").classList.add("hidden")}}
-</script>
-</body>
-</html>"""
-
-def parse_loose_json(raw):
-    if not raw:
-        return None
-    try:
-        return json.loads(raw)
-    except Exception:
-        pass
-    cleaned = re.sub(r"```json\s*|```\s*", "", str(raw)).strip()
-    try:
-        return json.loads(cleaned)
-    except Exception:
-        pass
-    m = re.search(r"\{[\s\S]*\}", str(raw))
-    if m:
-        try:
-            return json.loads(m.group(0))
-        except Exception:
-            return None
-    return None
-
-
-def extract_uuid(text):
-    text = str(text or "").strip()
-    m = re.search(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", text, re.I)
-    if m:
-        return m.group(0)
-
-    # 支持用户粘贴 t.nieta.art 短链或一整段分享文案。
-    short_match = re.search(r"https://t\.nieta\.art/[a-zA-Z0-9]+", text)
-    if short_match:
-        short_url = short_match.group(0)
-        try:
-            rr = requests.get(f"{NETA_API_BASE_URL}/v1/util/original-url", params={"short_url": short_url}, timeout=12)
-            if rr.ok:
-                data = rr.json()
-                long_url = data if isinstance(data, str) else data.get("url") or data.get("original_url") or data.get("data") or ""
-                if long_url:
-                    got = extract_uuid(long_url)
-                    if got:
-                        return got
-        except Exception:
-            pass
-
-    url_match = re.search(r"https?://\S+", text)
-    candidate = url_match.group(0).rstrip("，。,.、)）]】\"'") if url_match else text
-    parsed = urlparse(candidate)
-    q = parse_qs(parsed.query)
-    for key in ("uuid", "tcp_uuid", "parent_uuid", "id"):
-        value = (q.get(key) or [""])[0]
-        if re.match(r"^[0-9a-f-]{32,36}$", value, re.I):
-            return value
-
-    if parsed.scheme and parsed.netloc and parsed.netloc.endswith(("nieta.art", "talesofai.cn")):
-        try:
-            r = requests.get(candidate, allow_redirects=False, timeout=10)
-            loc = r.headers.get("location") or r.headers.get("Location") or ""
-            if loc:
-                return extract_uuid(loc)
-        except Exception:
-            pass
-    return None
-
-
-def keyword_from_link(text):
-    text = str(text or "").strip()
-    # 分享文案里通常是「角色名」
-    quoted = re.findall(r"[「《『](.+?)[」》』]", text)
-    if quoted:
-        return quoted[-1].strip()
-    url_match = re.search(r"https?://\S+", text)
-    if url_match:
-        text = text.replace(url_match.group(0), " ").strip()
-    parsed = urlparse(text)
-    if parsed.scheme and parsed.netloc:
-        parts = [x for x in parsed.path.split("/") if x]
-        return (parts[-1] if parts else text).replace("-", "_").replace("_", " ").strip()
-    return text
-
-
-def normalize_neta_profile(tcp):
-    tcp = tcp or {}
-    bio = tcp.get("oc_bio") or {}
-    cfg = tcp.get("config") or {}
-    return {
-        "type": "elementum" if tcp.get("type") == "elementum" else "character",
-        "uuid": tcp.get("uuid"),
-        "name": tcp.get("name") or bio.get("name") or "",
-        "gender": tcp.get("gender") or bio.get("gender") or "",
-        "age": bio.get("age") or "",
-        "occupation": bio.get("occupation") or "",
-        "interests": bio.get("interests") or "",
-        "persona": bio.get("persona") or "",
-        "description": bio.get("description") or "",
-        "avatar_img": cfg.get("avatar_img") or "",
-        "header_img": cfg.get("header_img") or "",
-        "hashtags": tcp.get("hashtags") or [],
-        "accessibility": tcp.get("accessibility") or "",
-        "status": tcp.get("status") or ""
-    }
-
-
-def fetch_neta_character_profile(user_token, raw_input):
-    if not user_token:
-        raise ValueError("请先登录")
-    if not raw_input:
-        raise ValueError("请粘贴角色链接 / UUID / 角色名")
-    headers = {"Authorization": f"Bearer {user_token}", "x-token": user_token}
-    uuid = extract_uuid(raw_input)
-    if not uuid:
-        params = {
-            "keywords": keyword_from_link(raw_input),
-            "page_index": 0,
-            "page_size": 1,
-            "parent_type": "oc",
-            "sort_scheme": "best",
-        }
-        r = requests.get(f"{NETA_API_BASE_URL}/v2/travel/parent-search", params=params, headers=headers, timeout=20)
-        try:
-            data = r.json()
-        except Exception:
-            data = {}
-        if not r.ok:
-            raise RuntimeError(data.get("message") or data.get("error") or f"搜索角色失败 ({r.status_code})")
-        uuid = ((data.get("list") or [{}])[0] or {}).get("uuid")
-        if not uuid:
-            raise RuntimeError("没有找到对应角色，请确认链接/名称是否正确或角色是否可访问")
-    r = requests.get(f"{NETA_API_BASE_URL}/v2/travel/parent/{uuid}/profile", headers=headers, timeout=20)
-    try:
-        data = r.json()
-    except Exception:
-        data = {}
-    if not r.ok:
-        raise RuntimeError(data.get("message") or data.get("error") or f"读取角色详情失败 ({r.status_code})")
-    return normalize_neta_profile(data)
-
-
-def call_llm(messages, max_tokens=4096, temperature=0.35, model=None):
-    if not LLM_API_KEY:
-        raise RuntimeError("后端未配置 LLM_API_KEY")
-    r = requests.post(LLM_URL, headers={"Content-Type": "application/json", "Authorization": f"Bearer {LLM_API_KEY}"}, json={
-        "model": model or LLM_MODEL,
-        "messages": messages,
-        "max_tokens": max_tokens,
-        "temperature": temperature,
-    }, timeout=60)
-    try:
-        data = r.json()
-    except Exception:
-        data = {}
-    if not r.ok:
-        err = data.get("error")
-        if isinstance(err, dict): err = err.get("message")
-        raise RuntimeError(err or data.get("message") or f"LLM 请求失败 ({r.status_code})")
-    return (((data.get("choices") or [{}])[0].get("message") or {}).get("content") or data.get("reply") or "")
-
-
-def get_user_by_token(token):
-    if not token:
-        raise ValueError("未登录")
-    r = requests.get(f"{API}/v1/user/", headers={"x-token": token}, timeout=10)
-    r.raise_for_status()
-    user = r.json()
-    if not user.get("uuid"):
-        raise ValueError("令牌无效")
-    return user
-
-
-def card_summary(row):
-    try:
-        card = json.loads(row["card_json"] or "{}")
-    except Exception:
-        card = {}
-    derived = card.get("derived") or {}
-    return {
-        "id": row["id"],
-        "source_uuid": row["source_uuid"],
-        "source_name": row["source_name"],
-        "avatar_img": row["avatar_img"],
-        "hp_current": row["hp_current"],
-        "hp_max": row["hp_max"],
-        "status": row["status"],
-        "created_at": row["created_at"],
-        "updated_at": row["updated_at"],
-        "investigator": card.get("investigator") or {},
-        "derived": derived,
-        "attribute_dimensions": card.get("attribute_dimensions") or {},
-    }
-
-
-def generate_coc_card(profile):
-    system = "你是专业的克苏鲁的呼唤 CoC 7版守秘人与调查员车卡设计师。只输出 JSON，不要输出思考过程、Markdown 或解释。"
-    user = f'''根据下方 Neta 角色资料，生成一张适合 CoC 7版跑团使用的调查员车卡。
-
-要求：
-1. 使用无思考、直接生成模式。
-2. 保留角色图片信息：avatar_img/header_img。
-3. 数值符合 CoC 7版常见范围：属性一般 15-90，技能 0-90，SAN/HP/MP/DB/Build 合理。
-4. 不要逐字照搬简介，要把角色转译为跑团可用人物。
-5. 若资料不足，合理补全但不要过度夸张。
-6. 输出必须是可解析 JSON。
-7. 增加 attribute_dimensions，以多维属性形式归纳：physical/mental/social/occult，每维包含 label、score、traits。
-
-返回 JSON 结构：
-{{
-  "source_character": {{"uuid":"", "name":"", "avatar_img":"", "header_img":""}},
-  "investigator": {{"name":"", "age":"", "gender":"", "occupation":"", "residence":"", "birthplace":"", "era":""}},
-  "portrait": {{"avatar_img":"", "header_img":"", "visual_summary":""}},
-  "attributes": {{"STR":0,"CON":0,"SIZ":0,"DEX":0,"APP":0,"INT":0,"POW":0,"EDU":0,"LUCK":0}},
-  "attribute_dimensions": {{"physical":{{"label":"身体","score":0,"traits":[""]}},"mental":{{"label":"精神","score":0,"traits":[""]}},"social":{{"label":"社交","score":0,"traits":[""]}},"occult":{{"label":"神秘","score":0,"traits":[""]}}}},
-  "derived": {{"SAN":0,"HP":0,"MP":0,"MOV":0,"damage_bonus":"","build":0}},
-  "skills": [{{"name":"", "value":0, "reason":""}}],
-  "backstory": {{"personal_description":"", "ideology_beliefs":"", "significant_people":"", "meaningful_locations":"", "treasured_possessions":"", "traits":"", "injuries_scars":"", "phobias_manias":"", "arcane_tomes_spells_artifacts":"", "encounters_with_strange_entities":""}},
-  "equipment": [""],
-  "cash_assets": "",
-  "roleplay_notes": "",
-  "keeper_notes": ""
-}}
-
-Neta 角色资料：
-{json.dumps(profile, ensure_ascii=False, indent=2)}
-
-输出语言：zh-CN'''
-    raw = call_llm([{"role": "system", "content": system}, {"role": "user", "content": user}], 4096, 0.25, LLM_FAST_MODEL)
-    card = parse_loose_json(raw)
-    if not card:
-        raise RuntimeError("LLM 返回内容不是有效 JSON")
-    return card
+# ═══════════ 前端由 dist/ 构建产物提供；不再保留旧版内联页面 fallback ═══════════
 
 # ═══════════ 后端 API ═══════════
 class Server(BaseHTTPRequestHandler):
@@ -843,12 +404,18 @@ class Server(BaseHTTPRequestHandler):
 
     def do_GET(self):
         p = urlparse(self.path)
+        if p.path.startswith("/api/"):
+            token = clean_text(self.headers.get("x-token", ""), 4096)
+            rate_key = token_user_key(token)
+            max_count = RATE_LIMIT_MAX_AUTH if rate_key != "anon" else RATE_LIMIT_MAX_ANON
+            if rate_limited_key(rate_key, max_count):
+                self._json({"error": "请求过于频繁，请稍后再试"}, 429); return
         if not p.path.startswith("/api/"):
             if os.path.isdir(DIST_DIR) and os.path.isfile(os.path.join(DIST_DIR, "index.html")):
                 self._serve_file(p.path)
             else:
-                self.send_response(200); self.send_header("Content-Type", "text/html; charset=utf-8"); self._security_headers(); self.end_headers()
-                self.wfile.write(PAGE.encode())
+                self.send_response(503); self.send_header("Content-Type", "text/plain; charset=utf-8"); self._security_headers(); self.end_headers()
+                self.wfile.write("Frontend build missing. Run npm run build in pages/vue-app.".encode())
         elif p.path == "/api/members":
             db = get_db()
             now = int(time.time())
@@ -942,6 +509,27 @@ class Server(BaseHTTPRequestHandler):
             rows = db.execute("SELECT * FROM identity_cards WHERE user_uuid=? AND status='active' ORDER BY updated_at DESC LIMIT 20", [user.get("uuid")]).fetchall()
             db.close()
             self._json([card_summary(r) for r in rows])
+        elif p.path == "/api/member/identity-cards":
+            uuid = clean_text(parse_qs(p.query).get("uuid", [""])[0], 80)
+            if not uuid:
+                self._json([], 200); return
+            db = get_db()
+            rows = db.execute("SELECT * FROM identity_cards WHERE user_uuid=? AND status='active' ORDER BY updated_at DESC LIMIT 3", [uuid]).fetchall()
+            db.close()
+            self._json([card_summary(r) for r in rows])
+        elif p.path == "/api/member/identity-card":
+            try:
+                card_id = int(parse_qs(p.query).get("id", [0])[0] or 0)
+            except Exception:
+                self._json({"error": "参数错误"}, 400); return
+            db = get_db()
+            row = db.execute("SELECT * FROM identity_cards WHERE id=? AND status='active'", [card_id]).fetchone()
+            db.close()
+            if not row:
+                self._json({"error": "车卡不存在"}, 404); return
+            try: card = json.loads(row["card_json"] or "{}")
+            except Exception: card = {}
+            self._json({"summary": card_summary(row), "card": card})
         elif p.path.startswith("/api/identity-cards/"):
             token = self.headers.get("x-token", "")
             try:
@@ -967,10 +555,22 @@ class Server(BaseHTTPRequestHandler):
             self.send_error(404)
 
     def do_POST(self):
-        length = int(self.headers.get("Content-Length", 0))
-        body = json.loads(self.rfile.read(length)) if length > 0 else {}
-        token = self.headers.get("x-token", "")
+        length = int(self.headers.get("Content-Length", 0) or 0)
+        if length > MAX_BODY_BYTES:
+            self._json({"error": "请求体过大"}, 413); return
+        raw_body = self.rfile.read(length) if length > 0 else b"{}"
+        try:
+            body = json.loads(raw_body.decode("utf-8")) if raw_body else {}
+            if not isinstance(body, dict):
+                body = {}
+        except Exception:
+            self._json({"error": "JSON 格式错误"}, 400); return
+        token = clean_text(self.headers.get("x-token", ""), 4096)
         p = urlparse(self.path)
+        rate_key = token_user_key(token)
+        max_count = RATE_LIMIT_MAX_AUTH if rate_key != "anon" else RATE_LIMIT_MAX_ANON
+        if rate_limited_key(rate_key, max_count):
+            self._json({"error": "请求过于频繁，请稍后再试"}, 429); return
 
         # 代理验证码请求（绕过浏览器 Origin/CORS 限制）
         if p.path == "/api/proxy/request-code":
@@ -1034,7 +634,7 @@ class Server(BaseHTTPRequestHandler):
             try:
                 r = requests.get(f"{API}/v1/user/", headers={"x-token": token}, timeout=10); r.raise_for_status(); user = r.json()
             except: self._json({"error": "令牌无效"}, 401); return
-            eu = body.get("entry_uuid", ""); content = body.get("content", "").strip()
+            eu = clean_text(body.get("entry_uuid", ""), 80); content = clean_text(body.get("content", ""), 2000)
             if not eu or not content: self._json({"error": "缺少参数"}, 400); return
             if len(content) > 2000: self._json({"error": "评论过长"}, 400); return
             db = get_db()
@@ -1049,11 +649,12 @@ class Server(BaseHTTPRequestHandler):
                 r = requests.get(f"{API}/v1/user/", headers={"x-token": token}, timeout=10); r.raise_for_status(); user = r.json()
             except Exception:
                 self._json({"error": "令牌无效"}, 401); return
-            channel = str(body.get("channel", "")).strip()[:80]
-            content = str(body.get("content", "")).strip()
+            channel = clean_text(body.get("channel", ""), 80)
+            content = clean_text(body.get("content", ""), 2000)
             images = body.get("images", [])
             if not isinstance(images, list): images = []
-            images = [str(x) for x in images if str(x).startswith(("http://", "https://"))][:9]
+            images = [safe_public_url(x) for x in images][:9]
+            images = [x for x in images if x]
             if not channel or (not content and not images): self._json({"error": "缺少内容"}, 400); return
             if len(content) > 2000: self._json({"error": "发言过长"}, 400); return
             db = get_db()
@@ -1088,9 +689,9 @@ class Server(BaseHTTPRequestHandler):
             role = role_row["role"] if role_row else "member"
             if role not in ("chief", "deputy", "admin"):
                 db.close(); self._json({"error": "权限不足"}, 403); return
-            name = str(body.get("name", "")).strip()[:30]
-            desc = str(body.get("desc", "")).strip()[:120] or "自定义地区分支。"
-            code = str(body.get("code", "")).strip()[:8] or "NEW"
+            name = clean_text(body.get("name", ""), 30)
+            desc = clean_text(body.get("desc", ""), 120) or "自定义地区分支。"
+            code = clean_text(body.get("code", ""), 8) or "NEW"
             if not name: db.close(); self._json({"error": "缺少分支名称"}, 400); return
             try:
                 db.execute("INSERT INTO forum_channels(code,name,description,created_by) VALUES(?,?,?,?)", [code, name, desc, user.get("uuid", "")])
@@ -1108,7 +709,7 @@ class Server(BaseHTTPRequestHandler):
             db = get_db(); role_row = db.execute("SELECT role FROM members WHERE uuid=?", [user.get("uuid", "")]).fetchone(); role = role_row["role"] if role_row else "member"
             if role not in ("chief", "deputy", "admin"):
                 db.close(); self._json({"error": "权限不足"}, 403); return
-            name = str(body.get("name", "")).strip()[:30]
+            name = clean_text(body.get("name", ""), 30)
             if not name: db.close(); self._json({"error": "缺少分支名称"}, 400); return
             db.execute("DELETE FROM forum_channels WHERE name=?", [name]); db.commit(); db.close(); self._json({"ok": True})
         elif p.path == "/api/wiki/submissions":
@@ -1118,11 +719,12 @@ class Server(BaseHTTPRequestHandler):
             except Exception:
                 self._json({"error": "令牌无效"}, 401); return
             target = str(body.get("target") or body.get("category") or "").strip()[:80]
-            submit_type = str(body.get("type", "新增词条")).strip()[:30]
-            content = str(body.get("content", "")).strip()
+            submit_type = clean_text(body.get("type", "新增词条"), 30)
+            content = clean_text(body.get("content", ""), 5000)
             images = body.get("images", [])
             if not isinstance(images, list): images = []
-            images = [str(x) for x in images if str(x).startswith(("http://", "https://"))][:9]
+            images = [safe_public_url(x) for x in images][:9]
+            images = [x for x in images if x]
             payload = {
                 "group": str(body.get("group", "世界信息")).strip()[:30],
                 "category": target,
@@ -1171,9 +773,9 @@ class Server(BaseHTTPRequestHandler):
             db = get_db(); role_row = db.execute("SELECT role FROM members WHERE uuid=?", [user.get("uuid", "")]).fetchone(); role = role_row["role"] if role_row else "member"
             if role not in ("chief", "deputy", "admin"):
                 db.close(); self._json({"error": "权限不足"}, 403); return
-            title = str(body.get("title", "")).strip()[:40]
-            status = str(body.get("status", "进行中")).strip()[:12] or "进行中"
-            desc = str(body.get("desc", "")).strip()[:300] or "暂无说明。"
+            title = clean_text(body.get("title", ""), 40)
+            status = clean_text(body.get("status", "进行中"), 12) or "进行中"
+            desc = clean_text(body.get("desc", ""), 300) or "暂无说明。"
             if not title: db.close(); self._json({"error": "缺少活动标题"}, 400); return
             db.execute("INSERT INTO activities(title,status,description,created_by) VALUES(?,?,?,?)", [title, status, desc, user.get("uuid", "")])
             db.commit(); row = db.execute("SELECT id,title,status,description,created_at FROM activities WHERE id=last_insert_rowid()").fetchone(); db.close()
@@ -1196,7 +798,7 @@ class Server(BaseHTTPRequestHandler):
             except Exception:
                 self._json({"error": "令牌无效"}, 401); return
             target_uuid = str(body.get("uuid", "")).strip()
-            title = str(body.get("title", "")).strip()[:30]
+            title = clean_text(body.get("title", ""), 30)
             if not target_uuid: self._json({"error": "缺少成员 uuid"}, 400); return
             db = get_db()
             role_row = db.execute("SELECT role FROM members WHERE uuid=?", [user.get("uuid", "")]).fetchone()
@@ -1227,7 +829,7 @@ class Server(BaseHTTPRequestHandler):
                 r = requests.get(f"{API}/v1/user/", headers={"x-token": token}, timeout=10); r.raise_for_status(); user = r.json()
             except Exception:
                 self._json({"error": "令牌无效"}, 401); return
-            signature = str(body.get("signature", "")).strip()[:50]
+            signature = clean_text(body.get("signature", ""), 50)
             uuid = user.get("uuid", "")
             name = user.get("nick_name") or user.get("name", "")
             avatar = user.get("avatar_url", "")
@@ -1248,9 +850,16 @@ class Server(BaseHTTPRequestHandler):
             user_token = token or str(body.get("token", ""))
             link = body.get("link") or body.get("uuid") or body.get("name") or ""
             try:
+                user = get_user_by_token(user_token)
+                db = get_db()
+                active_count = db.execute("SELECT COUNT(*) FROM identity_cards WHERE user_uuid=? AND status='active'", [user.get("uuid")]).fetchone()[0]
+                db.close()
+                if active_count >= 3:
+                    self._json({"success": False, "error": "每人最多保存三张身份卡，请先删除旧卡"}, 400); return
                 profile = body.get("profile") if isinstance(body.get("profile"), dict) else fetch_neta_character_profile(user_token, link)
                 card = generate_coc_card(profile)
-                self._json({"success": True, "profile": profile, "card": card})
+                saved = save_identity_card_for_user(user, card, profile)
+                self._json({"success": True, "profile": profile, "card": card, "saved": saved})
             except Exception as e:
                 self._json({"success": False, "error": str(e)}, 500)
         elif p.path == "/api/identity-cards":
@@ -1260,21 +869,8 @@ class Server(BaseHTTPRequestHandler):
                 profile = body.get("profile") if isinstance(body.get("profile"), dict) else {}
                 if not card:
                     self._json({"error": "缺少车卡数据"}, 400); return
-                db = get_db()
-                active_count = db.execute("SELECT COUNT(*) FROM identity_cards WHERE user_uuid=? AND status='active'", [user.get("uuid")]).fetchone()[0]
-                if active_count >= 3:
-                    db.close(); self._json({"error": "每人最多保存三张身份卡，请先删除旧卡"}, 400); return
-                source = card.get("source_character") or {}
-                investigator = card.get("investigator") or {}
-                portrait = card.get("portrait") or {}
-                derived = card.get("derived") or {}
-                hp = int(derived.get("HP") or 0)
-                avatar = portrait.get("avatar_img") or source.get("avatar_img") or profile.get("avatar_img") or ""
-                db.execute("""INSERT INTO identity_cards(user_uuid,user_name,source_uuid,source_name,avatar_img,card_json,profile_json,hp_current,hp_max,status,updated_at)
-                           VALUES(?,?,?,?,?,?,?,?,?,'active',strftime('%s','now'))""", [user.get("uuid"), user.get("nick_name") or user.get("name", ""), source.get("uuid") or profile.get("uuid"), investigator.get("name") or source.get("name") or profile.get("name"), avatar, json.dumps(card, ensure_ascii=False), json.dumps(profile, ensure_ascii=False), hp, hp])
-                row = db.execute("SELECT * FROM identity_cards WHERE id=last_insert_rowid()").fetchone()
-                db.commit(); db.close()
-                self._json({"ok": True, "card": card_summary(row)})
+                saved = save_identity_card_for_user(user, card, profile)
+                self._json({"ok": True, "card": saved})
             except Exception as e:
                 self._json({"error": str(e)}, 500)
         elif p.path == "/api/identity-cards/delete":
@@ -1305,8 +901,8 @@ class Server(BaseHTTPRequestHandler):
                 r = requests.get(f"{API}/v1/user/", headers={"x-token": token}, timeout=10); r.raise_for_status(); user = r.json()
             except Exception:
                 self._json({"error": "令牌无效"}, 401); return
-            to_uuid = str(body.get("to_uuid", "")).strip()
-            content = str(body.get("content", "")).strip()
+            to_uuid = clean_text(body.get("to_uuid", ""), 80)
+            content = clean_text(body.get("content", ""), 2000)
             if not to_uuid or not content: self._json({"error": "缺少内容"}, 400); return
             if len(content) > 2000: self._json({"error": "私聊过长"}, 400); return
             db = get_db()
