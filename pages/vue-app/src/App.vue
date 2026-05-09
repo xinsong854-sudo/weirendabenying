@@ -2,7 +2,7 @@
   <section v-if="!session.me" class="login-scene login-1999">
     <div class="login-ornament left">1999</div>
     <div class="login-ornament right">FILE</div>
-    <div class="login-disclaimer">免责声明：涉及密钥均存用户本地，不会留存，请放心使用</div>
+    <div class="login-disclaimer"><span>隐私说明：手机号与验证码仅用于捏Ta官方登录；本站不保存手机号、验证码、Token 或 IP。</span><span aria-hidden="true">隐私说明：手机号与验证码仅用于捏Ta官方登录；本站不保存手机号、验证码、Token 或 IP。</span></div>
     <div class="login-stage-copy">
       <span>REVERSE ARCHIVE / 1999</span>
       <h1>伪人大本营</h1>
@@ -12,9 +12,13 @@
     <div class="login-card labyrinth-window login-card-refined">
       <div class="window-title">IDENTITY RITUAL</div>
       <div class="login-file-tab"><span>ACCESS FILE</span><b>404</b></div>
-      <h1>身份核验</h1>
-      <p class="tagline">本网站仅限假人登录</p>
-      <div class="field"><span class="prefix">+86</span><input v-model.trim="phone" type="tel" inputmode="numeric" maxlength="11" placeholder="请输入手机号" autocomplete="tel"></div>
+      <h1>捏Ta账号登录</h1>
+      <p class="tagline">使用捏Ta官方验证码登录，仅用于确认成员身份</p>
+      <details class="login-why">
+        <summary>为什么需要登录？</summary>
+        <p>本站使用捏Ta账号体系识别成员身份。手机号与验证码只会用于请求捏Ta官方登录接口；本站不保存手机号、验证码、Token 或 IP。</p>
+      </details>
+      <div class="field"><span class="prefix">+86</span><input v-model.trim="phone" type="tel" inputmode="numeric" maxlength="11" placeholder="输入捏Ta绑定手机号" autocomplete="tel"></div>
       <div class="field"><input v-model.trim="code" type="text" inputmode="numeric" maxlength="4" placeholder="验证码" autocomplete="one-time-code"><button class="code-btn" :disabled="sending || timer > 0" @click="sendCode">{{ timer > 0 ? `${timer}s` : '获取验证码' }}</button></div>
       <label class="agree"><input v-model="agree" type="checkbox"><span>我已阅读并同意 <a href="https://oss.talesofai.cn/static/blackboard/protocol-page/user-agreement.html" target="_blank" rel="noopener noreferrer">用户协议</a> 和 <a href="https://oss.talesofai.cn/static/blackboard/protocol-page/privacy-policy.html" target="_blank" rel="noopener noreferrer">隐私政策</a></span></label>
       <button class="submit" :disabled="logging" @click="login">{{ logging ? '登录中...' : '踏入世间' }}</button>
