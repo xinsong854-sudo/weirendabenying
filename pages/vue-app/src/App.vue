@@ -20,25 +20,6 @@
   </section>
 
   <section v-else class="labyrinth-app">
-    <header class="stage-top">
-      <button class="brand-ticket" @click="showHome">伪人大本营</button>
-      <nav class="stage-nav" aria-label="主导航">
-        <button :class="{ active: view === 'home' }" @click="showHome">结界入口</button>
-        <button :class="{ active: ['archive','category','entry'].includes(view) }" @click="openArchive">档案馆</button>
-        <button @click="showMsg('讨论区即将开放', 'muted')">讨论幕布</button>
-        <button @click="openSettings">设置</button>
-      </nav>
-      <div class="identity-tag">
-        <div class="mini-avatar framed-avatar" :class="avatarFrameClass">
-          <img class="avatar-base" :src="safeUrl(session.me.avatar_url)" alt="avatar" loading="lazy" referrerpolicy="no-referrer">
-          <img v-if="currentAvatarFrame?.type === 'frame'" class="avatar-frame" :src="currentAvatarFrame.url" alt="">
-          <span v-if="currentAvatarFrame?.type === 'roach'" class="roach-orbit" aria-hidden="true"><img :src="currentAvatarFrame.url" alt=""></span>
-        </div>
-        <span>{{ session.me.nick_name || session.me.name }}</span>
-        <button @click="logout">退出</button>
-      </div>
-    </header>
-
     <main class="stage-main">
       <Transition name="page-shift" mode="out-in">
       <section v-if="view === 'home'" key="home" class="game-home">
@@ -49,24 +30,29 @@
             <span v-if="currentAvatarFrame?.type === 'roach'" class="roach-orbit" aria-hidden="true"><img :src="currentAvatarFrame.url" alt=""></span>
           </div>
           <span class="profile-name">{{ session.me.nick_name || session.me.name }}</span>
-          <h2>一席界面</h2>
-          <p>深夜的玻璃教堂里，论坛入口、档案索引和成员活动被收纳在同一座异空间大厅。</p>
-          <h2>梦梦局</h2>
-          <p>从这里进入档案馆、悬挂新讨论，或打开后续预留的功能入口。</p>
+          <h2>身份记录</h2>
+          <p>当前访问者已接入营地档案系统。所有入口按记录、讨论与功能实验分类收束。</p>
+          <h2>访问说明</h2>
+          <p>从这里进入档案馆、查看分类索引，或打开设置调整头像框等个人显示项。</p>
           <div class="profile-gems"><i></i><i></i><i></i></div>
         </aside>
 
         <section class="main-gate">
-          <h1>伪人大本营</h1>
+          <h1 class="sigil-title" data-text="伪人大本营">伪人大本营</h1>
           <p>{{ archive.tagline }}</p>
+          <div class="access-permit" aria-label="访问许可">
+            <span>ACCESS PERMIT</span>
+            <b>{{ accessCode }}</b>
+            <small>STATUS / VERIFIED · CLEARANCE / INTERNAL</small>
+          </div>
           <div class="gate-actions">
-            <button class="start-btn" @click="openArchive">进入档案馆</button>
+            <button class="start-btn" @click="showMsg('讨论区即将开放', 'muted')">进入讨论区</button>
             <button class="sub-btn" @click="showMsg('发帖功能预留中', 'muted')">发布讨论</button>
           </div>
         </section>
 
         <aside class="route-panel">
-          <div class="route-head">迁回</div>
+          <div class="route-head">功能索引</div>
           <button v-for="board in boards" :key="board.title" class="route-card" @click="board.action">
             <span>{{ board.icon }}</span>
             <b>{{ board.title }}</b>
@@ -74,17 +60,12 @@
           </button>
         </aside>
 
-        <div class="quick-orbs" aria-label="快捷入口">
-          <button @click="openArchive">✦</button>
-          <button @click="showMsg('成员中心即将开放', 'muted')">◈</button>
-          <button @click="showMsg('工具箱即将开放', 'muted')">☰</button>
-        </div>
 
         <footer class="bottom-dock">
-          <button @click="openArchive">档案馆</button>
           <button @click="showMsg('讨论区即将开放', 'muted')">讨论</button>
           <button @click="showMsg('任务板即将开放', 'muted')">任务</button>
-          <button @click="openSettings">设置</button>
+          <button @click="openSettings">身份</button>
+          <button @click="openArchive">Wiki</button>
         </footer>
       </section>
 
@@ -92,30 +73,32 @@
         <div class="page-actions"><button class="back-note primary" @click="showHome">← 返回主页</button></div>
         <header class="archive-marquee">
           <div>
-            <span class="ritual-label">ARCHIVE CABINET / PAPER INDEX</span>
-            <h1>档案馆</h1>
-            <p>词条集中收纳于此，像贴在结界墙面的索引牌。</p>
+            <span class="ritual-label">WIKI INDEX / INTERNAL LEXICON</span>
+            <h1>Wiki</h1>
+            <p>世界观词条集中收纳于此，像贴在结界墙面的索引牌。</p>
           </div>
           <img src="/cutouts/snakeoil-bottle.svg" alt="" aria-hidden="true">
         </header>
-        <div class="search-bar"><span class="sicon">⌕</span><input v-model.trim="globalQuery" type="search" placeholder="搜索档案馆词条..." autocomplete="off"><div v-if="globalQuery" class="search-results"><button v-for="item in globalResults" :key="item.uuid" class="item" @click="openEntry(item.uuid, true)"><span class="name">{{ item.name }}</span><span class="cat">{{ item.category }}</span></button><div v-if="globalResults.length === 0" class="item muted">无匹配</div></div></div>
+        <div class="search-bar"><span class="sicon">⌕</span><input v-model.trim="globalQuery" type="search" placeholder="搜索 Wiki 词条..." autocomplete="off"><div v-if="globalQuery" class="search-results"><button v-for="item in globalResults" :key="item.uuid" class="item" @click="openEntry(item.uuid, true)"><span class="name">{{ item.name }}</span><span class="cat">{{ item.category }}</span></button><div v-if="globalResults.length === 0" class="item muted">无匹配</div></div></div>
         <div class="specimen-grid">
           <button v-for="cat in categories" :key="cat.name" class="specimen-card" @click="openCategory(cat.name)">
             <span class="specimen-no">{{ cat.count }}</span>
+            <span class="specimen-type">CONTAINMENT RECORD</span>
             <b>{{ cat.name }}</b>
             <small>{{ cat.preview }}</small>
+            <i>OPEN FILE →</i>
           </button>
         </div>
       </section>
 
       <section v-else-if="view === 'category'" key="category" class="category-theater">
-        <div class="page-actions"><button class="back-note primary" @click="showHome">← 返回主页</button><button class="back-note" @click="openArchive">返回档案馆</button></div>
+        <div class="page-actions"><button class="back-note primary" @click="showHome">← 返回主页</button><button class="back-note" @click="openArchive">返回 Wiki</button></div>
         <div class="search-bar"><span class="sicon">⌕</span><input v-model.trim="catQuery" type="search" placeholder="在当前分类中搜索..." autocomplete="off"></div>
         <article v-for="e in categoryEntries" :key="e.uuid" class="entry-note" role="button" tabindex="0" @click="openEntry(e.uuid)" @keydown.enter="openEntry(e.uuid)">
           <span v-if="badgeMark(e.description)" class="badge" :class="badgeClass(e.description)">{{ badgeMark(e.description) }}</span>
           <h2>{{ e.name }}</h2>
           <p>{{ e.description }}</p>
-          <footer>💬 {{ commentCounts[e.uuid] || 0 }} 条评论</footer>
+          <footer>COMMENT LOG / {{ commentCounts[e.uuid] || 0 }}</footer>
         </article>
       </section>
 
@@ -139,17 +122,29 @@
     </main>
 
     <div v-if="settingsOpen" class="settings-mask" @click.self="settingsOpen = false">
-      <section class="settings-panel" role="dialog" aria-modal="true" aria-label="设置">
+      <section class="settings-panel" role="dialog" aria-modal="true" aria-label="身份中心">
         <header>
           <div>
-            <span>SETTINGS</span>
-            <h2>设置</h2>
+            <span>IDENTITY CENTER</span>
+            <h2>身份中心</h2>
           </div>
           <button class="settings-close" @click="settingsOpen = false">×</button>
         </header>
+        <div class="identity-summary">
+          <div class="summary-avatar framed-avatar" :class="avatarFrameClass">
+            <img class="avatar-base" :src="safeUrl(session.me.avatar_url)" alt="">
+            <img v-if="currentAvatarFrame?.type === 'frame'" class="avatar-frame" :src="currentAvatarFrame.url" alt="">
+            <span v-if="currentAvatarFrame?.type === 'roach'" class="roach-orbit" aria-hidden="true"><img :src="currentAvatarFrame.url" alt=""></span>
+          </div>
+          <div>
+            <b>{{ session.me.nick_name || session.me.name }}</b>
+            <small>{{ session.me.uuid }}</small>
+          </div>
+          <button class="logout-danger" @click="logout">退出登录</button>
+        </div>
         <div class="setting-block">
-          <h3>头像框</h3>
-          <p>选择一个头像框，会保存在本机，下次打开仍然生效。</p>
+          <h3>头像框权限</h3>
+          <p>选择当前身份记录的外显装饰。权限仅保存在本机，不会改动账号资料。</p>
           <div class="frame-grid">
             <button v-for="frame in avatarFrames" :key="frame.id" class="frame-option" :class="{ active: avatarFrame === frame.id }" @click="setAvatarFrame(frame.id)">
               <span class="frame-preview framed-avatar" :class="frame.type === 'roach' ? 'has-roach-frame' : ''">
@@ -197,7 +192,7 @@ const session = reactive({ me: null, role: 'member', token: '' })
 const avatarFrames = [
   { id: 'none', name: '无头像框', url: '', type: 'none' },
   { id: 'roach', name: '乱爬蟑螂', url: 'https://oss.talesofai.cn/sts/49c915e649254f55a7ea399ad3b6efd1/53710f82-1ad8-4863-98ee-4d7bed45f215.png', type: 'roach' },
-  { id: 'moonrise', name: '月升', url: 'https://oss.talesofai.cn/sts/49c915e649254f55a7ea399ad3b6efd1/65785b12-302c-4953-bf6b-8efb37adbdae.png', type: 'frame' }
+  { id: 'moonrise', name: '月升', url: 'https://oss.talesofai.cn/sts/49c915e649254f55a7ea399ad3b6efd1/5e22d7db-3abd-4861-864e-725538d3794b.png', type: 'frame' }
 ]
 
 const allEntries = Object.entries(archive.lore).flatMap(([category, entries]) => entries.map(e => ({ ...e, category })))
@@ -209,13 +204,14 @@ const categories = computed(() => Object.entries(archive.lore).map(([name, list]
 const memberPreview = computed(() => [...members.value].sort((a, b) => Number(b.online) - Number(a.online)).slice(0, 12))
 const onlineCount = computed(() => members.value.filter(m => m.online).length)
 const boards = computed(() => [
-  { icon: '📌', title: '公告与规则', desc: '置顶公告、营地规则、更新记录', count: 3, label: '置顶', action: () => showMsg('公告板预留中', 'muted') },
-  { icon: '💬', title: '日常讨论', desc: '成员交流、脑洞、提问与闲聊', count: members.value.length, label: '成员', action: () => showMsg('讨论区即将开放', 'muted') },
-  { icon: '📚', title: '档案馆', desc: '词条索引、分类浏览、档案评论', count: archive.stats.lore_count, label: '词条', action: () => openArchive() },
-  { icon: '🧪', title: '功能实验室', desc: '后续功能、投稿、活动、管理工具入口', count: 4, label: '模块', action: () => showMsg('功能实验室即将开放', 'muted') }
+  { icon: '01', title: '公告与规则', desc: '置顶公告、营地规则、更新记录', count: 3, label: '置顶', action: () => showMsg('公告板预留中', 'muted') },
+  { icon: '02', title: '日常讨论', desc: '成员交流、脑洞、提问与闲聊', count: members.value.length, label: '成员', action: () => showMsg('讨论区即将开放', 'muted') },
+  { icon: '03', title: 'Wiki', desc: '世界观词条、分类索引、评论记录', count: archive.stats.lore_count, label: '词条', action: () => openArchive() },
+  { icon: '04', title: '功能实验室', desc: '后续功能、投稿、活动、管理工具入口', count: 4, label: '模块', action: () => showMsg('功能实验室即将开放', 'muted') }
 ])
 const globalResults = computed(() => filterEntries(allEntries, globalQuery.value).slice(0, 20))
 const categoryEntries = computed(() => filterEntries(archive.lore[currentCat.value] || [], catQuery.value))
+const accessCode = computed(() => `ANM-${String(session.me?.uuid || '000000').slice(0, 4).toUpperCase()}-${archive.stats.lore_count}`)
 const currentAvatarFrame = computed(() => avatarFrames.find(f => f.id === avatarFrame.value && f.url) || null)
 const avatarFrameClass = computed(() => currentAvatarFrame.value?.type === 'roach' ? 'has-roach-frame' : '')
 
