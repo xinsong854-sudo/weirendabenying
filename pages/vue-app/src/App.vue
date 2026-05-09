@@ -8,9 +8,9 @@
       <p>一份从旧时代回收的成员卷宗。请完成身份仪式，进入营地通讯与 Wiki 档案。</p>
       <div class="stage-rule"><i></i><b>THE PSEUDO HUMAN DOSSIER</b><i></i></div>
     </div>
-    <div class="login-card labyrinth-window">
-      <div class="window-title">IDENTITY RITUAL · NEW FRONTEND</div>
-      <div class="emblem">✦</div>
+    <div class="login-card labyrinth-window login-card-refined">
+      <div class="window-title">IDENTITY RITUAL</div>
+      <div class="login-file-tab"><span>ACCESS FILE</span><b>1999-R</b></div>
       <h1>身份核验</h1>
       <p class="tagline">卷宗编号：1999-R / 伪人内部通行证</p>
       <div class="field"><span class="prefix">+86</span><input v-model.trim="phone" type="tel" inputmode="numeric" maxlength="11" placeholder="请输入手机号" autocomplete="tel"></div>
@@ -56,7 +56,7 @@
                 </div>
               </aside>
               <section v-if="selectedMember" class="friend-detail-pane">
-                  <header class="friend-detail-head"><button class="detail-avatar" @click.stop.prevent="openMemberModal(selectedMember)"><span class="framed-avatar" :class="avatarFrameClassFor(selectedMember)"><img class="avatar-base" v-if="safeUrl(selectedMember.avatar)" :src="safeUrl(selectedMember.avatar)" alt="" referrerpolicy="no-referrer"><b v-else>{{ initials(selectedMember.name) }}</b><img v-if="avatarFrameFor(selectedMember)?.type === 'frame'" class="avatar-frame" :src="avatarFrameFor(selectedMember).url" alt=""><span v-if="avatarFrameFor(selectedMember)?.type === 'roach'" class="roach-orbit" aria-hidden="true"><img :src="avatarFrameFor(selectedMember).url" alt=""></span></span></button><div><h2>{{ selectedMember.name }} <span v-if="['chief','deputy','admin'].includes(selectedMember.role)" class="verify-v">V</span></h2><p v-if="memberTitle(selectedMember)">{{ memberTitle(selectedMember) }}</p><small>{{ selectedMember.online ? '在线' : timeAgo(selectedMember.last_seen) }}</small><blockquote v-if="selectedMember.signature">{{ selectedMember.signature }}</blockquote></div><div class="detail-actions"><button class="title-auth-btn" @click="openPrivatePane(selectedMember)">私聊</button><button v-if="isAdmin" class="title-auth-btn" @click="authorizeTitle(selectedMember)">授权称号</button></div></header>
+                  <header class="friend-detail-head"><button class="detail-avatar" @click.stop.prevent="openMemberModal(selectedMember)"><span class="framed-avatar" :class="avatarFrameClassFor(selectedMember)"><img class="avatar-base" v-if="safeUrl(selectedMember.avatar)" :src="safeUrl(selectedMember.avatar)" alt="" referrerpolicy="no-referrer"><b v-else>{{ initials(selectedMember.name) }}</b><img v-if="avatarFrameFor(selectedMember)?.type === 'frame'" class="avatar-frame" :src="avatarFrameFor(selectedMember).url" alt=""><span v-if="avatarFrameFor(selectedMember)?.type === 'roach'" class="roach-orbit" aria-hidden="true"><img :src="avatarFrameFor(selectedMember).url" alt=""></span></span></button><div><h2>{{ selectedMember.name }} <span v-if="profileBadge(selectedMember.role)" class="profile-role-badge">{{ profileBadge(selectedMember.role) }}</span><span v-if="['chief','deputy','admin'].includes(selectedMember.role)" class="verify-v">V</span></h2><p v-if="memberTitle(selectedMember)" class="pop-title-badge">{{ memberTitle(selectedMember) }}</p><small>{{ selectedMember.online ? '在线' : timeAgo(selectedMember.last_seen) }}</small><blockquote v-if="selectedMember.signature" class="pop-signature">{{ selectedMember.signature }}</blockquote></div><div class="detail-actions"><button class="title-auth-btn" @click="openPrivatePane(selectedMember)">私聊</button><button v-if="isAdmin" class="title-auth-btn" @click="authorizeTitle(selectedMember)">授权称号</button></div></header>
               </section>
               <section v-if="selectedMember && selectedMemberTool === '私聊'" class="private-side-pane private-drawer">
                 <header><b>私聊 · {{ selectedMember.name }}</b><button @click="selectedMemberTool = '资料'">收起</button></header>
@@ -242,20 +242,19 @@
             <button v-if="isAdmin" :class="{ active: activeProfilePanel === 'review' }" @click="activeProfilePanel = 'review'">待审核</button>
           </div>
           <div v-if="activeProfilePanel === 'overview'" class="setting-block signature-block profile-dossier-block">
-            <div class="signature-stack">
-              <section class="signature-editor-card">
-                <h3>个人签名</h3>
-                <p>编辑你的资料卡签名，保存后会同步到后端。</p>
-                <textarea v-model.trim="signatureText" maxlength="120" rows="4" placeholder="写下你的个人签名..."></textarea>
-                <div class="signature-actions"><small>{{ signatureText.length }}/120</small><button class="back-note primary" :disabled="savingSignature" @click="saveSignature">{{ savingSignature ? '保存中...' : '保存签名' }}</button></div>
-              </section>
-              <section class="signature-preview-card">
-                <span class="ritual-label">SIGNATURE PREVIEW</span>
-                <h3>签名展示</h3>
-                <p class="signature-quote">{{ signatureText || '暂无签名。' }}</p>
-                <small>{{ session.me.nick_name || session.me.name }} · {{ session.me.uuid }}</small>
-              </section>
-            </div>
+            <button class="profile-home-card premium-signature signature-single-card" @click="signatureEditing = true">
+              <span>PERSONAL HOMEPAGE</span>
+              <h3>{{ session.me.nick_name || session.me.name }}</h3>
+              <div class="profile-tags"><b v-if="roleLabel(session.role)">{{ roleLabel(session.role) }}</b><i v-if="memberTitle(currentUserProfile)">{{ memberTitle(currentUserProfile) }}</i></div>
+              <p>{{ signatureText || '点击留下签名。' }}</p>
+              <small>{{ session.me.uuid }}</small>
+            </button>
+            <section v-if="signatureEditing" class="signature-editor-card detached-editor">
+              <h3>修改签名</h3>
+              <p>保存后会同步到后端，并显示在个人主页和资料卡。</p>
+              <textarea v-model.trim="signatureText" maxlength="50" rows="3" placeholder="写下你的个人签名，50字以内..."></textarea>
+              <div class="signature-actions"><small>{{ signatureText.length }}/50</small><div><button class="back-note" @click="signatureEditing = false">取消</button><button class="back-note primary" :disabled="savingSignature" @click="saveSignature">{{ savingSignature ? '保存中...' : '保存签名' }}</button></div></div>
+            </section>
           </div>
           <div v-else-if="activeProfilePanel === 'frames'" class="setting-block">
             <h3>头像框权限</h3>
@@ -277,12 +276,17 @@
             <button class="back-note" disabled>即将开放</button>
           </div>
           <div v-else-if="isAdmin && activeProfilePanel === 'review'" class="setting-block review-block">
-            <h3>待审核 Wiki 内容</h3>
-            <p>成员提交的新增词条与修订会出现在这里，管理员审核通过后进入 Wiki。</p>
-            <div v-for="item in pendingWiki" :key="item.id" class="review-item">
-              <b>{{ item.target }}</b><span>{{ item.type }}</span><small>{{ item.author }} · {{ timeAgo(item.time) }}</small><p>{{ item.content }}</p>
+            <h3>Wiki 审核台</h3>
+            <p>成员提交的新增词条与修订会出现在这里。审核通过后会直接写入 Wiki。</p>
+            <div class="review-tabs">
+              <button v-for="tab in wikiReviewTabs" :key="tab.value || 'all'" :class="{ active: wikiReviewStatus === tab.value }" @click="switchWikiReview(tab.value)">{{ tab.label }}</button>
+            </div>
+            <div v-if="!pendingWiki.length" class="wiki-empty-tip">当前筛选下暂无审核记录。</div>
+            <div v-for="item in pendingWiki" :key="item.id" class="review-item" :class="`status-${item.status}`">
+              <b>{{ item.entry_name || item.target }}</b><span>{{ item.type }}</span><small>{{ item.author }} · {{ timeAgo(item.time) }} · {{ item.target }}</small><p>{{ item.content }}</p>
               <div v-if="item.images?.length" class="review-images"><img v-for="img in item.images" :key="img" :src="img" alt=""></div>
-              <div class="review-actions"><button class="back-note primary" @click="reviewWikiSubmission(item, 'approved')">通过并写入 Wiki</button><button class="back-note" @click="reviewWikiSubmission(item, 'rejected')">驳回</button></div>
+              <div v-if="item.status !== 'pending'" class="review-result"><b>{{ item.status === 'approved' ? '已通过' : '已驳回' }}</b><small>{{ item.reviewed_by || '管理员' }} · {{ timeAgo(item.reviewed_at) }}</small><p v-if="item.review_note">{{ item.review_note }}</p></div>
+              <div v-if="item.status === 'pending'" class="review-actions"><button class="back-note primary" @click="reviewWikiSubmission(item, 'approved')">通过并写入 Wiki</button><button class="back-note" @click="reviewWikiSubmission(item, 'rejected')">驳回</button></div>
             </div>
           </div>
         </section>
@@ -295,11 +299,26 @@
         <button class="profile-pop-close" aria-label="关闭" @click="closeMemberModal"></button>
         <div class="profile-pop-top"><span>USER PROFILE</span><i>{{ selectedMemberModal.online ? 'ONLINE' : 'OFFLINE' }}</i></div>
         <div class="profile-pop-avatar framed-avatar" :class="avatarFrameClassFor(selectedMemberModal)"><img v-if="safeUrl(selectedMemberModal.avatar)" class="avatar-base" :src="safeUrl(selectedMemberModal.avatar)" alt="" referrerpolicy="no-referrer"><b v-else>{{ initials(selectedMemberModal.name) }}</b><img v-if="avatarFrameFor(selectedMemberModal)?.type === 'frame'" class="avatar-frame" :src="avatarFrameFor(selectedMemberModal).url" alt=""><span v-if="avatarFrameFor(selectedMemberModal)?.type === 'roach'" class="roach-orbit" aria-hidden="true"><img :src="avatarFrameFor(selectedMemberModal).url" alt=""></span></div>
-        <h2>{{ selectedMemberModal.name }} <span v-if="['chief','deputy','admin'].includes(selectedMemberModal.role)" class="verify-v">V</span></h2>
+        <h2>{{ selectedMemberModal.name }} <span v-if="profileBadge(selectedMemberModal.role)" class="profile-role-badge">{{ profileBadge(selectedMemberModal.role) }}</span><span v-if="['chief','deputy','admin'].includes(selectedMemberModal.role)" class="verify-v">V</span></h2>
         <p v-if="memberTitle(selectedMemberModal)" class="pop-title-badge">{{ memberTitle(selectedMemberModal) }}</p>
-        <blockquote v-if="selectedMemberModal.signature" class="pop-signature">{{ selectedMemberModal.signature }}</blockquote>
+        <blockquote class="pop-signature"><b>签名</b><span>{{ selectedMemberModal.signature || '这个人还没有留下签名。' }}</span></blockquote>
         <small>{{ selectedMemberModal.online ? '在线' : timeAgo(selectedMemberModal.last_seen) }}</small>
         <button v-if="isAdmin" class="title-auth-btn" @click="authorizeTitle(selectedMemberModal)">授权称号</button>
+      </section>
+    </div>
+
+    <div v-if="formDialog.open" class="form-dialog-mask" @click.self="cancelFormDialog">
+      <section class="form-dialog-card">
+        <header><span class="ritual-label">OPERATION PANEL</span><h2>{{ formDialog.title }}</h2><p v-if="formDialog.desc">{{ formDialog.desc }}</p></header>
+        <div class="form-dialog-fields">
+          <label v-for="field in formDialog.fields" :key="field.name">
+            <span>{{ field.label }}</span>
+            <textarea v-if="field.type === 'textarea'" v-model.trim="formDialog.values[field.name]" :rows="field.rows || 4" :placeholder="field.placeholder || ''"></textarea>
+            <select v-else-if="field.type === 'select'" v-model="formDialog.values[field.name]"><option v-for="opt in field.options || []" :key="opt.value ?? opt" :value="opt.value ?? opt">{{ opt.label ?? opt }}</option></select>
+            <input v-else v-model.trim="formDialog.values[field.name]" :placeholder="field.placeholder || ''" :maxlength="field.maxlength || 120">
+          </label>
+        </div>
+        <footer><button class="back-note" @click="cancelFormDialog">{{ formDialog.cancelText }}</button><button class="back-note primary" @click="submitFormDialog">{{ formDialog.confirmText }}</button></footer>
       </section>
     </div>
 
@@ -336,6 +355,7 @@ const serverResults = ref([])
 const searchLoading = ref(false)
 const searchSeq = ref(0)
 const signatureText = ref('')
+const signatureEditing = ref(false)
 const savingSignature = ref(false)
 const catQuery = ref('')
 const members = ref([])
@@ -368,6 +388,7 @@ const wikiSubmitCategory = ref('')
 const wikiSubmitEntryName = ref('')
 const wikiSubmitContent = ref('')
 const activeProfilePanel = ref('overview')
+const wikiReviewStatus = ref('pending')
 const forumUploadInput = ref(null)
 const wikiUploadInput = ref(null)
 const uploadedForumImages = ref([])
@@ -375,6 +396,7 @@ const uploadedWikiImages = ref([])
 const savedFrame = localStorage.getItem('NIETA_AVATAR_FRAME')
 const avatarFrame = ref(['none', 'roach', 'moonrise'].includes(savedFrame) ? savedFrame : 'roach')
 const session = reactive({ me: null, role: 'member', token: '' })
+const formDialog = reactive({ open: false, title: '', desc: '', fields: [], values: {}, confirmText: '确认', cancelText: '取消', resolve: null })
 const avatarFrames = [
   { id: 'none', name: '无头像框', url: '', type: 'none' },
   { id: 'roach', name: '乱爬蟑螂', url: 'https://oss.talesofai.cn/sts/49c915e649254f55a7ea399ad3b6efd1/53710f82-1ad8-4863-98ee-4d7bed45f215.png', type: 'roach' },
@@ -446,6 +468,16 @@ const pastActivities = [
   { title: '真偷只有一个', status: '已颁奖', desc: '往期推理/互动活动，结果已归档。' }
 ]
 const pendingWiki = ref([])
+const wikiReviewTabs = [
+  { value: 'pending', label: '待审核' },
+  { value: 'approved', label: '已通过' },
+  { value: 'rejected', label: '已驳回' },
+  { value: '', label: '全部' }
+]
+const wikiReviewCounts = computed(() => wikiReviewTabs.reduce((acc, tab) => {
+  acc[tab.value] = tab.value ? pendingWiki.value.filter(x => x.status === tab.value).length : pendingWiki.value.length
+  return acc
+}, {}))
 const selectedForumDescription = computed(() => {
   const branch = [...forumBranches, ...customForumBranches.value].find(x => x.name === selectedForum.value)
   const col = forumColumns.find(x => x.name === selectedForum.value)
@@ -463,6 +495,7 @@ const filteredMembers = computed(() => {
   const q = memberQuery.value.toLowerCase()
   return sortedMembers.value.filter(m => !q || `${m.name} ${memberTitle(m)}`.toLowerCase().includes(q))
 })
+const currentUserProfile = computed(() => members.value.find(m => m.uuid === session.me?.uuid) || { role: session.role, title: '', signature: signatureText.value })
 const currentAvatarFrame = computed(() => avatarFrames.find(f => f.id === avatarFrame.value && f.url) || null)
 const avatarFrameClass = computed(() => currentAvatarFrame.value ? (currentAvatarFrame.value.type === 'roach' ? 'has-roach-frame avatar-frame-roach' : `avatar-frame-${currentAvatarFrame.value.id}`) : '')
 function avatarFrameFor(member) {
@@ -472,23 +505,41 @@ function avatarFrameFor(member) {
 }
 function avatarFrameClassFor(member) { const f = avatarFrameFor(member); return f ? (f.type === 'roach' ? 'has-roach-frame avatar-frame-roach' : `avatar-frame-${f.id}`) : '' }
 
+function openFormDialog(options) {
+  formDialog.title = options.title || '操作'
+  formDialog.desc = options.desc || ''
+  formDialog.fields = options.fields || []
+  formDialog.values = {}
+  for (const field of formDialog.fields) formDialog.values[field.name] = field.value ?? ''
+  formDialog.confirmText = options.confirmText || '确认'
+  formDialog.cancelText = options.cancelText || '取消'
+  formDialog.open = true
+  return new Promise(resolve => { formDialog.resolve = resolve })
+}
+function cancelFormDialog() { formDialog.open = false; formDialog.resolve?.(null); formDialog.resolve = null }
+function submitFormDialog() { const values = { ...formDialog.values }; formDialog.open = false; formDialog.resolve?.(values); formDialog.resolve = null }
 function makeBranchCode(name) { return String(name || 'NEW').trim().replace(/\s+/g, '').slice(0, 4).toUpperCase() || 'NEW' }
 async function loadForumMeta() {
   const [channels, acts, wikiRows] = await Promise.all([
     api('/api/forum/channels').catch(() => []),
     api('/api/activities').catch(() => []),
-    api('/api/wiki/submissions').catch(() => [])
+    api(`/api/wiki/submissions?status=${encodeURIComponent(wikiReviewStatus.value)}`).catch(() => [])
   ])
   customForumBranches.value = Array.isArray(channels) ? channels : []
   customActivities.value = Array.isArray(acts) ? acts : []
   pendingWiki.value = Array.isArray(wikiRows) ? wikiRows : []
 }
 async function createForumBranch() {
-  const name = window.prompt('新分支名称：')?.trim()
+  const values = await openFormDialog({ title: '开新地区分支', desc: '创建一个新的地区频道入口。', confirmText: '创建分支', fields: [
+    { name: 'name', label: '分支名称', placeholder: '例如：雾港' },
+    { name: 'desc', label: '分支说明', type: 'textarea', rows: 3, placeholder: '这个地区分支用于讨论什么？' }
+  ] })
+  if (!values) return
+  const name = values.name?.trim()
   if (!name) return
   const exists = [...forumBranches, ...forumColumns, ...customForumBranches.value].some(x => x.name === name)
   if (exists) { showMsg('这个分支/频道已经存在'); return }
-  const desc = window.prompt('分支说明（可留空）：', `${name}地区分支讨论区。`)?.trim() || `${name}地区分支讨论区。`
+  const desc = values.desc?.trim() || `${name}地区分支讨论区。`
   try {
     await api('/api/forum/channels', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ code: makeBranchCode(name), name, desc }) })
     await loadForumMeta()
@@ -506,11 +557,17 @@ async function deleteForumBranch(item) {
   } catch (e) { showMsg(`删除失败：${e.message}`) }
 }
 async function createActivity() {
-  const title = window.prompt('活动标题：')?.trim()
+  const values = await openFormDialog({ title: '新增活动', desc: '发布一个活动入口，成员会在活动颁布中看到。', confirmText: '新增活动', fields: [
+    { name: 'title', label: '活动标题', placeholder: '活动名称' },
+    { name: 'status', label: '活动状态', type: 'select', value: '进行中', options: ['进行中', '招募中', '已结束', '归档'] },
+    { name: 'desc', label: '活动说明', type: 'textarea', rows: 4, placeholder: '写下活动规则、时间、奖励或投稿方式。' }
+  ] })
+  if (!values) return
+  const title = values.title?.trim()
   if (!title) return
   if (currentActivities.value.some(x => x.title === title)) { showMsg('这个活动已经存在'); return }
-  const desc = window.prompt('活动说明：', '写下活动规则、时间、奖励或投稿方式。')?.trim() || '暂无说明。'
-  const status = window.prompt('活动状态：', '进行中')?.trim() || '进行中'
+  const desc = values.desc?.trim() || '暂无说明。'
+  const status = values.status?.trim() || '进行中'
   try {
     await api('/api/activities', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ title, status, desc }) })
     await loadForumMeta(); showMsg('活动已新增', 'ok')
@@ -555,20 +612,26 @@ async function loadWikiArchive() {
 }
 async function reviewWikiSubmission(item, action) {
   if (!item?.id) return
-  if (action === 'approved' && !window.confirm(`通过并写入 Wiki：${item.target}？`)) return
-  if (action === 'rejected' && !window.confirm(`驳回这条 Wiki 提交？`)) return
+  const values = await openFormDialog({ title: action === 'approved' ? '通过 Wiki 提交' : '驳回 Wiki 提交', desc: `${item.entry_name || item.target} · ${item.target}`, confirmText: action === 'approved' ? '通过并写入' : '确认驳回', fields: [
+    { name: 'note', label: action === 'approved' ? '通过备注' : '驳回原因', type: 'textarea', rows: 3, placeholder: action === 'approved' ? '可留空' : '建议写明需要修改的地方' }
+  ] })
+  if (!values) return
   try {
-    await api('/api/wiki/review', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ id: item.id, action }) })
+    await api('/api/wiki/review', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ id: item.id, action, note: values.note || '' }) })
     await Promise.all([loadWikiArchive(), loadForumMeta()])
     showMsg(action === 'approved' ? '已通过并写入 Wiki' : '已驳回', 'ok')
   } catch (e) { showMsg(`审核失败：${e.message}`) }
 }
+function switchWikiReview(status) { wikiReviewStatus.value = status; loadForumMeta() }
+function closeFormDialog() { if (formDialog.open) cancelFormDialog() }
 function filterEntries(list, q) {
   const needle = String(q || '').toLowerCase()
   if (!needle) return list
   return list.filter(e => `${e.name}\n${e.description}`.toLowerCase().includes(needle))
 }
 function vp(p) { return /^1[3456789]\d{9}$/.test(p) }
+function roleLabel(role) { return ({ chief: '营长', deputy: '二营长', admin: '管理员' })[role] || '' }
+function profileBadge(role) { return roleLabel(role) }
 function memberTitle(m) { return (m?.title || '').trim() }
 function initials(name = '') { return String(name || '?').trim().slice(0, 1).toUpperCase() || '?' }
 function showMsg(text, type = 'error') { message.value = text; messageType.value = type; clearTimeout(showMsg._t); showMsg._t = setTimeout(() => { if (message.value === text) message.value = '' }, type === 'error' ? 3200 : 1500) }
@@ -579,12 +642,16 @@ async function saveSignature() {
     signatureText.value = res?.signature || ''
     if (session.me) session.me.signature = signatureText.value
     members.value = members.value.map(m => m.uuid === session.me?.uuid ? { ...m, signature: signatureText.value } : m)
+    signatureEditing.value = false
     showMsg('签名已保存', 'ok')
   } catch (e) { showMsg(`保存失败：${e.message}`) } finally { savingSignature.value = false }
 }
 async function authorizeTitle(member) {
-  const title = window.prompt(`给 ${member.name} 授权称号：`, member.title || '')
-  if (title === null) return
+  const values = await openFormDialog({ title: `授权称号 · ${member.name}`, desc: '管理员可直接授予或清除称号。', confirmText: '保存称号', fields: [
+    { name: 'title', label: '称号', value: member.title || '', placeholder: '输入称号，留空则清除' }
+  ] })
+  if (!values) return
+  const title = values.title ?? ''
   try {
     await api('/api/members/title', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ uuid: member.uuid, title }) })
     await loadMembers()

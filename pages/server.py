@@ -86,8 +86,20 @@ def init_db():
         user_uuid TEXT,
         user_name TEXT,
         status TEXT DEFAULT 'pending',
+        reviewed_by TEXT DEFAULT '',
+        reviewed_at INTEGER,
+        review_note TEXT DEFAULT '',
         created_at INTEGER DEFAULT (strftime('%s','now'))
     )""")
+    for sql in (
+        "ALTER TABLE wiki_submissions ADD COLUMN reviewed_by TEXT DEFAULT ''",
+        "ALTER TABLE wiki_submissions ADD COLUMN reviewed_at INTEGER",
+        "ALTER TABLE wiki_submissions ADD COLUMN review_note TEXT DEFAULT ''",
+    ):
+        try:
+            db.execute(sql)
+        except sqlite3.OperationalError:
+            pass
     db.execute("""CREATE TABLE IF NOT EXISTS private_messages(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         from_uuid TEXT NOT NULL,
@@ -616,7 +628,11 @@ class Server(BaseHTTPRequestHandler):
             self._json([{"id": r["id"], "title": r["title"], "status": r["status"] or "进行中", "desc": r["description"] or "暂无说明。", "custom": True, "created_at": r["created_at"]} for r in rows])
         elif p.path == "/api/wiki/submissions":
             db = get_db()
-            rows = db.execute("SELECT id,target,submit_type,content,images_json,user_uuid,user_name,status,created_at FROM wiki_submissions ORDER BY created_at DESC LIMIT 100").fetchall()
+            status = parse_qs(p.query).get("status", [""])[0].strip()
+            if status in ("pending", "approved", "rejected"):
+                rows = db.execute("SELECT id,target,submit_type,content,images_json,user_uuid,user_name,status,reviewed_by,reviewed_at,review_note,created_at FROM wiki_submissions WHERE status=? ORDER BY created_at DESC LIMIT 100", [status]).fetchall()
+            else:
+                rows = db.execute("SELECT id,target,submit_type,content,images_json,user_uuid,user_name,status,reviewed_by,reviewed_at,review_note,created_at FROM wiki_submissions ORDER BY created_at DESC LIMIT 100").fetchall()
             db.close()
             out = []
             for r in rows:
@@ -624,7 +640,7 @@ class Server(BaseHTTPRequestHandler):
                 images = payload.get("images") if isinstance(payload.get("images"), list) else []
                 title = payload.get("entry_name") or r["target"]
                 text = payload.get("body") or payload.get("content") or r["content"]
-                out.append({"id": r["id"], "target": r["target"], "entry_name": title, "type": r["submit_type"], "content": text, "images": images, "author": r["user_name"] or "成员投稿", "status": r["status"], "time": r["created_at"]})
+                out.append({"id": r["id"], "target": r["target"], "entry_name": title, "type": r["submit_type"], "content": text, "images": images, "author": r["user_name"] or "成员投稿", "status": r["status"], "reviewed_by": r["reviewed_by"] or "", "reviewed_at": r["reviewed_at"], "review_note": r["review_note"] or "", "time": r["created_at"]})
             self._json(out)
         elif p.path == "/api/wiki/archive":
             self._json(ARCHIVE)
@@ -845,9 +861,9 @@ class Server(BaseHTTPRequestHandler):
                     apply_wiki_submission(row)
                 except Exception as e:
                     db.close(); self._json({"error": str(e)}, 400); return
-                db.execute("UPDATE wiki_submissions SET status='approved' WHERE id=?", [sid])
+                db.execute("UPDATE wiki_submissions SET status='approved', reviewed_by=?, reviewed_at=?, review_note=? WHERE id=?", [user.get("nick_name") or user.get("name", "管理员"), int(time.time()), str(body.get("note", "")).strip()[:300], sid])
             else:
-                db.execute("UPDATE wiki_submissions SET status='rejected' WHERE id=?", [sid])
+                db.execute("UPDATE wiki_submissions SET status='rejected', reviewed_by=?, reviewed_at=?, review_note=? WHERE id=?", [user.get("nick_name") or user.get("name", "管理员"), int(time.time()), str(body.get("note", "")).strip()[:300], sid])
             db.commit(); db.close(); self._json({"ok": True, "status": "approved" if action == "approved" else "rejected"})
         elif p.path == "/api/activities":
             if not token: self._json({"error": "未登录"}, 401); return
@@ -914,7 +930,7 @@ class Server(BaseHTTPRequestHandler):
                 r = requests.get(f"{API}/v1/user/", headers={"x-token": token}, timeout=10); r.raise_for_status(); user = r.json()
             except Exception:
                 self._json({"error": "令牌无效"}, 401); return
-            signature = str(body.get("signature", "")).strip()[:120]
+            signature = str(body.get("signature", "")).strip()[:50]
             db = get_db()
             db.execute("UPDATE members SET signature=?, online=1, last_seen=? WHERE uuid=?", [signature, int(time.time()), user.get("uuid", "")])
             db.commit(); db.close()
