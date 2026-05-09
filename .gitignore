@@ -1,0 +1,15 @@
+# Secrets
+.env
+*.env
+*.key
+*.pem
+
+# Runtime / caches
+__pycache__/
+*.pyc
+node_modules/
+
+# Local DB journals / backups
+*.db-wal
+*.db-shm
+*.bak

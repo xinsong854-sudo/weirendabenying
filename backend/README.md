@@ -40,7 +40,7 @@ cp .env.example .env
 ```env
 PORT=3000
 LLM_URL=https://litellm.talesofai.cn/v1/chat/completions
-LLM_API_KEY=sk-你的key
+LLM_API_KEY=YOUR_LLM_API_KEY
 LLM_MODEL=qwen3.5-plus-no-think
 NETA_API_BASE_URL=https://api.talesofai.cn
 ```

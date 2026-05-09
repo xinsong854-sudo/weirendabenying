@@ -1,0 +1,17 @@
+# Secrets and local runtime files
+.env
+*.env
+*.key
+*.pem
+
+# Python/runtime cache
+__pycache__/
+*.pyc
+
+# Local DB backups / temporary files
+*.db-wal
+*.db-shm
+*.bak
+
+# Dependencies
+node_modules/
