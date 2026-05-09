@@ -47,17 +47,53 @@
         </div>
       </div>
 
-      <section v-if="view === 'home'">
-        <h3 class="sec-title">大本营成员</h3>
-        <div class="member-grid">
-          <article v-for="m in members" :key="m.uuid" class="member-card" :class="{ 'm-chief': m.role === 'chief' }">
-            <img :src="safeUrl(m.avatar)" alt="" loading="lazy" referrerpolicy="no-referrer">
-            <div class="m-info"><div class="m-name">{{ m.name }} <span v-if="m.role === 'chief'" class="badge-chief">营长</span><span v-else-if="m.role === 'deputy'" class="badge-deputy">二营长</span><span v-else-if="m.role === 'admin'" class="badge-admin">管理</span></div><div class="m-time">{{ m.online ? '在线' : timeAgo(m.last_seen) }}</div></div>
-            <span class="m-status" :class="m.online ? 'm-online' : 'm-offline'"></span>
-          </article>
+      <section v-if="view === 'home'" class="forum-shell">
+        <div class="forum-main">
+          <div class="forum-head">
+            <div>
+              <h3>档案版块</h3>
+              <p>按分类浏览、搜索和讨论伪人大本营档案。</p>
+            </div>
+            <span class="forum-count">{{ archive.stats.lore_count }} 条档案</span>
+          </div>
+          <div class="forum-list">
+            <button v-for="cat in categories" :key="cat.name" class="forum-row" @click="openCategory(cat.name)">
+              <span class="forum-icon">档</span>
+              <span class="forum-info">
+                <span class="forum-title">{{ cat.name }}</span>
+                <span class="forum-desc">{{ cat.preview }}</span>
+              </span>
+              <span class="forum-meta"><b>{{ cat.count }}</b><small>条档案</small></span>
+            </button>
+          </div>
         </div>
-        <h3 class="sec-title">档案分类</h3>
-        <div class="cat-grid"><button v-for="cat in categories" :key="cat.name" class="cat-card" @click="openCategory(cat.name)"><span class="name">{{ cat.name }}</span><span class="count">{{ cat.count }} 条档案</span></button></div>
+
+        <aside class="forum-side">
+          <div class="side-card profile-card">
+            <div class="side-title">当前身份</div>
+            <div class="mini-user"><img :src="safeUrl(session.me.avatar_url)" alt="" loading="lazy" referrerpolicy="no-referrer"><div><b>{{ session.me.nick_name || session.me.name }}</b><span>{{ session.role === 'member' ? '大本营成员' : '管理成员' }}</span></div></div>
+          </div>
+          <details class="side-card members-card">
+            <summary><span>成员</span><b>{{ members.length }}</b></summary>
+            <div class="member-strip">
+              <div v-for="m in memberPreview" :key="m.uuid" class="member-chip" :title="m.name">
+                <img :src="safeUrl(m.avatar)" alt="" loading="lazy" referrerpolicy="no-referrer">
+                <span :class="m.online ? 'dot online' : 'dot'"></span>
+              </div>
+            </div>
+            <div class="member-mini-list">
+              <div v-for="m in memberPreview" :key="`list-${m.uuid}`" class="member-mini">
+                <img :src="safeUrl(m.avatar)" alt="" loading="lazy" referrerpolicy="no-referrer">
+                <span>{{ m.name }}</span>
+                <small>{{ m.online ? '在线' : timeAgo(m.last_seen) }}</small>
+              </div>
+            </div>
+          </details>
+          <div class="side-card stat-card">
+            <div><b>{{ onlineCount }}</b><span>在线</span></div>
+            <div><b>{{ Math.round(archive.stats.heat / 1e4) }}万</b><span>热度</span></div>
+          </div>
+        </aside>
       </section>
 
       <section v-else-if="view === 'category'">
@@ -106,7 +142,13 @@ const commentCounts = ref({})
 const session = reactive({ me: null, role: 'member', token: '' })
 
 const allEntries = Object.entries(archive.lore).flatMap(([category, entries]) => entries.map(e => ({ ...e, category })))
-const categories = computed(() => Object.entries(archive.lore).map(([name, list]) => ({ name, count: list.length })).sort((a, b) => b.count - a.count))
+const categories = computed(() => Object.entries(archive.lore).map(([name, list]) => ({
+  name,
+  count: list.length,
+  preview: (list || []).slice(0, 3).map(e => e.name).join(' · ') || '暂无档案'
+})).sort((a, b) => b.count - a.count))
+const memberPreview = computed(() => [...members.value].sort((a, b) => Number(b.online) - Number(a.online)).slice(0, 12))
+const onlineCount = computed(() => members.value.filter(m => m.online).length)
 const globalResults = computed(() => filterEntries(allEntries, globalQuery.value).slice(0, 20))
 const categoryEntries = computed(() => filterEntries(archive.lore[currentCat.value] || [], catQuery.value))
 
