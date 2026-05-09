@@ -15,10 +15,10 @@ if [ -z "$LLM_API_KEY" ]; then
     echo "❌ 错误：未设置 LLM_API_KEY 环境变量！"
     echo ""
     echo "请在 .env 文件中添加："
-    echo "  LLM_API_KEY=sk-fZrLXE0IEs6EDYCOsLLaQ"
+    echo "  LLM_API_KEY=sk-your-key-here"
     echo ""
     echo "或直接运行："
-    echo "  export LLM_API_KEY=sk-fZrLXE0IEs6EDYCOsLLaQ"
+    echo "  export LLM_API_KEY=sk-your-key-here"
     exit 1
 fi
 

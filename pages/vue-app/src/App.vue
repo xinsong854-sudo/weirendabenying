@@ -2,6 +2,7 @@
   <section v-if="!session.me" class="login-scene login-1999">
     <div class="login-ornament left">1999</div>
     <div class="login-ornament right">FILE</div>
+    <div class="login-disclaimer">免责声明：涉及密钥均存用户本地，不会留存，请放心使用</div>
     <div class="login-stage-copy">
       <span>REVERSE ARCHIVE / 1999</span>
       <h1>伪人大本营</h1>
@@ -229,34 +230,24 @@
               <img v-if="currentAvatarFrame?.type === 'frame'" class="avatar-frame" :src="currentAvatarFrame.url" alt="">
               <span v-if="currentAvatarFrame?.type === 'roach'" class="roach-orbit" aria-hidden="true"><img :src="currentAvatarFrame.url" alt=""></span>
             </div>
-            <div>
+            <div class="identity-summary-main">
               <b>{{ session.me.nick_name || session.me.name }}</b>
-              <small>{{ session.me.uuid }}</small>
+              <div class="profile-tags"><b v-if="roleLabel(session.role)">{{ roleLabel(session.role) }}</b><i v-if="memberTitle(currentUserProfile)">{{ memberTitle(currentUserProfile) }}</i></div>
+              <button v-if="!signatureEditing" class="summary-signature" @click="signatureEditing = true">{{ signatureText || '点击留下签名。' }}</button>
+              <section v-else class="inline-signature-editor">
+                <label>个人签名</label>
+                <textarea v-model.trim="signatureText" maxlength="50" rows="2" placeholder="写下你的个人签名，50字以内..."></textarea>
+                <div class="signature-actions"><small>{{ signatureText.length }}/50</small><div><button class="back-note" @click="signatureEditing = false">取消</button><button class="back-note primary" :disabled="savingSignature" @click="saveSignature">{{ savingSignature ? '保存中...' : '保存' }}</button></div></div>
+              </section>
             </div>
             <button class="logout-danger" @click="logout">退出登录</button>
           </div>
           <div class="profile-tabs">
-            <button :class="{ active: activeProfilePanel === 'overview' }" @click="activeProfilePanel = 'overview'">概览</button>
             <button :class="{ active: activeProfilePanel === 'frames' }" @click="activeProfilePanel = 'frames'">头像框</button>
             <button :class="{ active: activeProfilePanel === 'card' }" @click="activeProfilePanel = 'card'">身份卡</button>
             <button v-if="isAdmin" :class="{ active: activeProfilePanel === 'review' }" @click="activeProfilePanel = 'review'">待审核</button>
           </div>
-          <div v-if="activeProfilePanel === 'overview'" class="setting-block signature-block profile-dossier-block">
-            <button class="profile-home-card premium-signature signature-single-card" @click="signatureEditing = true">
-              <span>PERSONAL HOMEPAGE</span>
-              <h3>{{ session.me.nick_name || session.me.name }}</h3>
-              <div class="profile-tags"><b v-if="roleLabel(session.role)">{{ roleLabel(session.role) }}</b><i v-if="memberTitle(currentUserProfile)">{{ memberTitle(currentUserProfile) }}</i></div>
-              <p>{{ signatureText || '点击留下签名。' }}</p>
-              <small>{{ session.me.uuid }}</small>
-            </button>
-            <section v-if="signatureEditing" class="signature-editor-card detached-editor">
-              <h3>修改签名</h3>
-              <p>保存后会同步到后端，并显示在个人主页和资料卡。</p>
-              <textarea v-model.trim="signatureText" maxlength="50" rows="3" placeholder="写下你的个人签名，50字以内..."></textarea>
-              <div class="signature-actions"><small>{{ signatureText.length }}/50</small><div><button class="back-note" @click="signatureEditing = false">取消</button><button class="back-note primary" :disabled="savingSignature" @click="saveSignature">{{ savingSignature ? '保存中...' : '保存签名' }}</button></div></div>
-            </section>
-          </div>
-          <div v-else-if="activeProfilePanel === 'frames'" class="setting-block">
+          <div v-if="activeProfilePanel === 'frames'" class="setting-block">
             <h3>头像框权限</h3>
             <p>选择当前身份记录的外显装饰。权限仅保存在本机，不会改动账号资料。</p>
             <div class="frame-grid">
@@ -270,10 +261,90 @@
               </button>
             </div><div class="frame-save-row"><button class="back-note primary" @click="saveAvatarFrame">确定使用头像框</button></div>
           </div>
-          <div v-else-if="activeProfilePanel === 'card'" class="setting-block identity-card-block">
-            <h3>身份卡</h3>
-            <p>身份卡功能等会开放。未来可展示阵营、称号、通行许可与个人签名。</p>
-            <button class="back-note" disabled>即将开放</button>
+          <div v-else-if="activeProfilePanel === 'card'" class="setting-block identity-card-block identity-card-open">
+            <div class="identity-card-headline">
+              <div>
+                <span class="ritual-label">IDENTITY CARD</span>
+                <h3>身份卡 · CoC 车卡</h3>
+                <p>粘贴 Neta 角色分享链接 / UUID / 角色名，系统会读取角色公开资料与图片，并生成可跑团使用的 CoC 7版车卡。</p>
+              </div>
+            </div>
+            <div v-if="identityCards.length" class="identity-card-shelf">
+              <button v-for="card in identityCards" :key="card.id" class="saved-card-cover" @click="openIdentityCard(card.id)">
+                <img v-if="safeUrl(card.avatar_img)" :src="safeUrl(card.avatar_img)" alt="">
+                <span v-else>{{ initials(card.source_name || card.investigator?.name) }}</span>
+                <b>{{ card.investigator?.name || card.source_name || '未命名调查员' }}</b>
+                <small>HP {{ card.hp_current }}/{{ card.hp_max }}</small>
+              </button>
+            </div>
+            <div v-if="selectedIdentityCardDetail" class="saved-card-detail">
+              <header><div><span class="ritual-label">SAVED CARD</span><h4>{{ selectedIdentityCardDetail.card?.investigator?.name || selectedIdentityCardDetail.summary?.source_name }}</h4></div><button class="back-note" @click="selectedIdentityCardDetail = null">收起</button></header>
+              <div class="identity-derived compact">
+                <span>HP {{ selectedIdentityCardDetail.summary.hp_current }}/{{ selectedIdentityCardDetail.summary.hp_max }}</span>
+                <button class="hp-chip" @click="updateIdentityCardHp(-1)">-1 HP</button>
+                <button class="hp-chip" @click="updateIdentityCardHp(1)">+1 HP</button>
+                <button class="hp-chip danger" @click="updateIdentityCardHp(-999)">撕卡</button>
+              </div>
+              <div class="dimension-radar-wrap" v-if="selectedIdentityCardDetail.card?.attribute_dimensions">
+                <svg class="dimension-radar" viewBox="0 0 120 120" aria-label="多维属性雷达图">
+                  <polygon class="radar-ring outer" points="60,14 106,60 60,106 14,60" />
+                  <polygon class="radar-ring middle" points="60,30 90,60 60,90 30,60" />
+                  <line v-for="axis in dimensionAxes" :key="axis.key" class="radar-axis" x1="60" y1="60" :x2="dimensionAxisPoint(axis.index).x" :y2="dimensionAxisPoint(axis.index).y" />
+                  <polygon class="radar-poly" :points="dimensionRadarPoints(selectedIdentityCardDetail.card.attribute_dimensions)" />
+                  <circle v-for="axis in dimensionAxes" :key="axis.key + '-dot'" class="radar-dot" :cx="dimensionValuePoint(selectedIdentityCardDetail.card.attribute_dimensions, axis.index, axis.key).x" :cy="dimensionValuePoint(selectedIdentityCardDetail.card.attribute_dimensions, axis.index, axis.key).y" r="2.8" />
+                </svg>
+                <div class="dimension-legend">
+                  <div v-for="axis in dimensionAxes" :key="axis.key"><b>{{ selectedIdentityCardDetail.card.attribute_dimensions[axis.key]?.label || axis.label }}</b><strong>{{ selectedIdentityCardDetail.card.attribute_dimensions[axis.key]?.score || 0 }}</strong><small>{{ (selectedIdentityCardDetail.card.attribute_dimensions[axis.key]?.traits || []).join(' · ') }}</small></div>
+                </div>
+              </div>
+              <button class="back-note danger-soft" @click="deleteIdentityCard(selectedIdentityCardDetail.summary.id)">删除这张卡</button>
+            </div>
+            <div class="identity-card-form">
+              <input v-model.trim="identityCardLink" type="text" placeholder="粘贴 Neta 角色分享链接 / UUID / 角色名" @keydown.enter="generateIdentityCard">
+              <button class="back-note primary" :disabled="identityCardLoading || !identityCardLink || identityCards.length >= 3" @click="generateIdentityCard">{{ identityCardLoading ? '生成中...' : identityCards.length >= 3 ? '已达三张上限' : '生成身份卡' }}</button>
+            </div>
+            <div v-if="identityCardLoading" class="identity-generate-progress">
+              <div class="progress-head"><b>{{ identityCardStage }}</b><span>{{ Math.round(identityCardProgress) }}%</span></div>
+              <div class="progress-track"><i :style="{ width: identityCardProgress + '%' }"></i></div>
+              <p>正在读取角色资料并生成 CoC 车卡，请稍等片刻。</p>
+            </div>
+            <p v-if="identityCards.length >= 3" class="identity-card-error">每人最多保存三张身份卡，请删除旧卡后再生成。</p>
+            <p v-if="identityCardError" class="identity-card-error">{{ identityCardError }}</p>
+            <article v-if="identityCardResult" class="generated-identity-card">
+              <img v-if="identityCardPortrait" class="identity-card-portrait" :src="safeUrl(identityCardPortrait)" alt="角色图片">
+              <div class="identity-card-info">
+                <span>INVESTIGATOR</span>
+                <h4>{{ identityCardResult.investigator?.name || identityCardResult.source_character?.name || identityCardProfile?.name || '未命名调查员' }}</h4>
+                <p>{{ identityCardResult.investigator?.occupation || '未知职业' }} · {{ identityCardResult.investigator?.age || '年龄未知' }} · {{ identityCardResult.investigator?.era || '时代未定' }}</p>
+                <p>{{ identityCardResult.portrait?.visual_summary || identityCardProfile?.description || '暂无外观摘要' }}</p>
+              </div>
+              <div class="identity-attrs">
+                <b v-for="(value, key) in identityCardResult.attributes || {}" :key="key"><span>{{ key }}</span>{{ value }}</b>
+              </div>
+              <div class="identity-derived" v-if="identityCardResult.derived">
+                <span>SAN {{ identityCardResult.derived.SAN }}</span>
+                <span>HP {{ identityCardResult.derived.HP }}</span>
+                <span>MP {{ identityCardResult.derived.MP }}</span>
+                <span>MOV {{ identityCardResult.derived.MOV }}</span>
+                <span>DB {{ identityCardResult.derived.damage_bonus }}</span>
+              </div>
+              <div class="identity-skills" v-if="identityCardResult.skills?.length">
+                <b v-for="skill in identityCardResult.skills.slice(0, 16)" :key="skill.name">{{ skill.name }} {{ skill.value }}</b>
+              </div>
+              <div class="dimension-radar-wrap" v-if="identityCardResult.attribute_dimensions">
+                <svg class="dimension-radar" viewBox="0 0 120 120" aria-label="多维属性雷达图">
+                  <polygon class="radar-ring outer" points="60,14 106,60 60,106 14,60" />
+                  <polygon class="radar-ring middle" points="60,30 90,60 60,90 30,60" />
+                  <line v-for="axis in dimensionAxes" :key="axis.key" class="radar-axis" x1="60" y1="60" :x2="dimensionAxisPoint(axis.index).x" :y2="dimensionAxisPoint(axis.index).y" />
+                  <polygon class="radar-poly" :points="dimensionRadarPoints(identityCardResult.attribute_dimensions)" />
+                  <circle v-for="axis in dimensionAxes" :key="axis.key + '-dot'" class="radar-dot" :cx="dimensionValuePoint(identityCardResult.attribute_dimensions, axis.index, axis.key).x" :cy="dimensionValuePoint(identityCardResult.attribute_dimensions, axis.index, axis.key).y" r="2.8" />
+                </svg>
+                <div class="dimension-legend">
+                  <div v-for="axis in dimensionAxes" :key="axis.key"><b>{{ identityCardResult.attribute_dimensions[axis.key]?.label || axis.label }}</b><strong>{{ identityCardResult.attribute_dimensions[axis.key]?.score || 0 }}</strong><small>{{ (identityCardResult.attribute_dimensions[axis.key]?.traits || []).join(' · ') }}</small></div>
+                </div>
+              </div>
+              <div class="generated-card-actions"><button class="back-note primary" :disabled="identityCardSaving || identityCards.length >= 3" @click="saveGeneratedIdentityCard">{{ identityCardSaving ? '保存中...' : '保存身份卡' }}</button></div>
+            </article>
           </div>
           <div v-else-if="isAdmin && activeProfilePanel === 'review'" class="setting-block review-block">
             <h3>Wiki 审核台</h3>
@@ -332,7 +403,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import archiveSeed from './pseudo-human-data.json'
 
 const API = 'https://api.talesofai.cn'
@@ -387,7 +458,18 @@ const wikiSubmitGroup = ref('世界信息')
 const wikiSubmitCategory = ref('')
 const wikiSubmitEntryName = ref('')
 const wikiSubmitContent = ref('')
-const activeProfilePanel = ref('overview')
+const activeProfilePanel = ref('frames')
+const identityCardLink = ref('')
+const identityCardLoading = ref(false)
+const identityCardError = ref('')
+const identityCardResult = ref(null)
+const identityCardProfile = ref(null)
+const identityCardSaving = ref(false)
+const identityCardProgress = ref(0)
+const identityCardStage = ref('准备生成')
+let identityCardProgressTimer = null
+const identityCards = ref([])
+const selectedIdentityCardDetail = ref(null)
 const wikiReviewStatus = ref('pending')
 const forumUploadInput = ref(null)
 const wikiUploadInput = ref(null)
@@ -474,6 +556,28 @@ const wikiReviewTabs = [
   { value: 'rejected', label: '已驳回' },
   { value: '', label: '全部' }
 ]
+const dimensionAxes = [
+  { key: 'physical', label: '身体', index: 0 },
+  { key: 'mental', label: '精神', index: 1 },
+  { key: 'social', label: '社交', index: 2 },
+  { key: 'occult', label: '神秘', index: 3 }
+]
+function dimensionAxisPoint(index, radius = 46) {
+  const angles = [-90, 0, 90, 180]
+  const rad = angles[index] * Math.PI / 180
+  return { x: 60 + Math.cos(rad) * radius, y: 60 + Math.sin(rad) * radius }
+}
+function dimensionValuePoint(dimensions = {}, index, key) {
+  const raw = Number(dimensions?.[key]?.score || 0)
+  const radius = Math.max(0, Math.min(100, raw)) / 100 * 46
+  return dimensionAxisPoint(index, radius)
+}
+function dimensionRadarPoints(dimensions = {}) {
+  return dimensionAxes.map(axis => {
+    const p = dimensionValuePoint(dimensions, axis.index, axis.key)
+    return `${p.x},${p.y}`
+  }).join(' ')
+}
 const wikiReviewCounts = computed(() => wikiReviewTabs.reduce((acc, tab) => {
   acc[tab.value] = tab.value ? pendingWiki.value.filter(x => x.status === tab.value).length : pendingWiki.value.length
   return acc
@@ -497,6 +601,7 @@ const filteredMembers = computed(() => {
 })
 const currentUserProfile = computed(() => members.value.find(m => m.uuid === session.me?.uuid) || { role: session.role, title: '', signature: signatureText.value })
 const currentAvatarFrame = computed(() => avatarFrames.find(f => f.id === avatarFrame.value && f.url) || null)
+const identityCardPortrait = computed(() => identityCardResult.value?.portrait?.avatar_img || identityCardResult.value?.source_character?.avatar_img || identityCardProfile.value?.avatar_img || identityCardResult.value?.portrait?.header_img || identityCardProfile.value?.header_img || '')
 const avatarFrameClass = computed(() => currentAvatarFrame.value ? (currentAvatarFrame.value.type === 'roach' ? 'has-roach-frame avatar-frame-roach' : `avatar-frame-${currentAvatarFrame.value.id}`) : '')
 function avatarFrameFor(member) {
   const uid = member?.uuid || member?.user_uuid
@@ -670,7 +775,102 @@ function selectMember(member) { selectedMember.value = member; selectedMemberToo
 function openPrivatePane(member) { selectedMember.value = member; selectedMemberTool.value = '私聊'; closeMemberModal() }
 function openMemberModal(member) { selectedMember.value = member; selectedMemberTool.value = '资料'; selectedMemberModal.value = { ...member } }
 function closeMemberModal() { selectedMemberModal.value = null }
-function openProfile() { view.value = 'profile'; currentEntry.value = null; window.scrollTo(0, 0) }
+function openProfile() { view.value = 'profile'; currentEntry.value = null; window.scrollTo(0, 0); loadIdentityCards() }
+function startIdentityProgress() {
+  clearInterval(identityCardProgressTimer)
+  identityCardProgress.value = 5
+  identityCardStage.value = '解析角色链接'
+  const stages = [
+    { at: 18, text: '读取 Neta 角色资料' },
+    { at: 38, text: '整理角色设定' },
+    { at: 58, text: '生成 CoC 属性' },
+    { at: 76, text: '生成技能与背景' },
+    { at: 90, text: '校验车卡数据' }
+  ]
+  identityCardProgressTimer = setInterval(() => {
+    const next = Math.min(92, identityCardProgress.value + Math.random() * 6 + 1)
+    identityCardProgress.value = next
+    const current = stages.slice().reverse().find(s => next >= s.at)
+    if (current) identityCardStage.value = current.text
+  }, 650)
+}
+function finishIdentityProgress(success = true) {
+  clearInterval(identityCardProgressTimer)
+  identityCardProgressTimer = null
+  identityCardProgress.value = success ? 100 : 0
+  identityCardStage.value = success ? '生成完成' : '生成失败'
+}
+function resetIdentityDraft() {
+  identityCardResult.value = null
+  identityCardProfile.value = null
+  identityCardError.value = ''
+}
+async function generateIdentityCard() {
+  if (!session.token) { showMsg('请先登录'); return }
+  if (!identityCardLink.value) { showMsg('请粘贴角色链接 / UUID / 角色名'); return }
+  if (identityCards.value.length >= 3) { showMsg('每人最多保存三张身份卡'); return }
+  identityCardLoading.value = true
+  resetIdentityDraft()
+  startIdentityProgress()
+  try {
+    const data = await api('/api/coc/character-card', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-token': session.token },
+      body: JSON.stringify({ link: identityCardLink.value })
+    })
+    identityCardResult.value = data.card
+    identityCardProfile.value = data.profile
+    finishIdentityProgress(true)
+    showMsg('身份卡已生成', 'ok')
+  } catch (e) {
+    finishIdentityProgress(false)
+    identityCardError.value = e.message
+    showMsg(`生成失败：${e.message}`)
+  } finally {
+    setTimeout(() => { identityCardLoading.value = false }, identityCardResult.value ? 450 : 900)
+  }
+}
+async function loadIdentityCards() {
+  if (!session.token) return
+  identityCards.value = await api('/api/identity-cards', { headers: { 'x-token': session.token } }).catch(() => [])
+}
+async function saveGeneratedIdentityCard() {
+  if (!identityCardResult.value) return
+  identityCardSaving.value = true
+  try {
+    const data = await api('/api/identity-cards', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ card: identityCardResult.value, profile: identityCardProfile.value }) })
+    await loadIdentityCards()
+    identityCardResult.value = null
+    identityCardProfile.value = null
+    identityCardLink.value = ''
+    showMsg('身份卡已保存', 'ok')
+    if (data?.card?.id) await openIdentityCard(data.card.id)
+  } catch (e) { showMsg(`保存失败：${e.message}`) } finally { identityCardSaving.value = false }
+}
+async function openIdentityCard(id) {
+  selectedIdentityCardDetail.value = await api(`/api/identity-cards/${id}`, { headers: { 'x-token': session.token } })
+}
+async function deleteIdentityCard(id) {
+  if (!window.confirm('删除这张身份卡？')) return
+  await api('/api/identity-cards/delete', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ id }) })
+  selectedIdentityCardDetail.value = null
+  await loadIdentityCards()
+  showMsg('身份卡已删除', 'muted')
+}
+async function updateIdentityCardHp(delta) {
+  const detail = selectedIdentityCardDetail.value
+  if (!detail) return
+  const next = Math.max(0, Number(detail.summary.hp_current || 0) + delta)
+  const res = await api('/api/identity-cards/state', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ id: detail.summary.id, hp_current: next }) })
+  if (res.status === 'torn') {
+    selectedIdentityCardDetail.value = null
+    await loadIdentityCards()
+    showMsg('生命值归零，已自动撕卡')
+    return
+  }
+  await openIdentityCard(detail.summary.id)
+  await loadIdentityCards()
+}
 function selectForumGroup(group) { selectedForumGroup.value = group.name; selectedForum.value = group.items?.[0]?.name || selectedForum.value; loadForumPosts() }
 async function revokeThread(id) { try { await api('/api/forum/revoke', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ id }) }); await loadForumPosts(); showMsg('已撤销发言', 'muted') } catch (e) { showMsg(`撤销失败：${e.message}`) } }
 function selectAvatarFrame(id) { avatarFrame.value = id; showMsg('已选择头像框，点击确定后保存', 'muted') }
@@ -678,7 +878,13 @@ async function saveAvatarFrame() { const id = avatarFrame.value; localStorage.se
 function openForumUser(thread) { const m = members.value.find(x => x.uuid === thread.user_uuid) || { uuid: thread.user_uuid, name: thread.user_name, avatar: thread.user_avatar, avatar_frame: thread.avatar_frame || 'none', online: false, last_seen: thread.created_at }; openMemberModal(m) }
 function safeUrl(url) { const s = String(url || '').trim(); return /^(https?:)?\/\//i.test(s) ? s : '' }
 async function readJson(res) { const text = await res.text(); try { return text ? JSON.parse(text) : null } catch { return { error: text.slice(0, 500) } } }
-async function api(path, options) { const res = await fetch(path, options); const data = await readJson(res); if (!res.ok) throw new Error(data?.message || data?.msg || data?.error || data?.detail || res.statusText); return data }
+function cleanApiError(data, fallback = '请求失败') {
+  const raw = data?.message || data?.msg || data?.error || data?.detail || fallback
+  const text = String(raw || fallback)
+  if (/<!doctype html|<html|error response|nothing matches the given uri/i.test(text)) return '接口暂未生效，请刷新后重试；若仍失败请联系管理员。'
+  return text.length > 180 ? text.slice(0, 180) + '…' : text
+}
+async function api(path, options) { const res = await fetch(path, options); const data = await readJson(res); if (!res.ok) throw new Error(cleanApiError(data, res.statusText)); return data }
 function fileExt(file) { return (file?.name?.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '') || 'png' }
 async function uploadImageToGallery(file) {
   if (!session.token) throw new Error('请先登录')
@@ -783,16 +989,17 @@ async function useToken(token) {
   const me = await api(`${API}/v1/user/`, { headers: { 'x-token': token } })
   if (!me?.uuid) throw new Error('令牌无效')
   session.me = me; session.token = token; localStorage.setItem(TOKEN_KEY, token)
-  await fetch('/api/verify', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': token }, body: JSON.stringify(me) }).catch(() => {})
+  const verified = await api('/api/verify', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': token }, body: JSON.stringify(me) }).catch(() => null)
   const role = await api(`/api/members/role?uuid=${encodeURIComponent(me.uuid)}`)
-  session.role = role?.role || 'member'
-  avatarFrame.value = ['none', 'roach', 'moonrise'].includes(role?.avatar_frame) ? role.avatar_frame : 'none'
-  signatureText.value = me?.signature || ''
+  session.role = role?.role || verified?.role || 'member'
+  avatarFrame.value = ['none', 'roach', 'moonrise'].includes(role?.avatar_frame) ? role.avatar_frame : (['none', 'roach', 'moonrise'].includes(verified?.avatar_frame) ? verified.avatar_frame : 'none')
+  signatureText.value = role?.signature ?? verified?.signature ?? ''
   localStorage.setItem('NIETA_AVATAR_FRAME', avatarFrame.value)
   await loadMembers()
   await loadWikiArchive()
   await loadForumMeta()
   await loadForumPosts()
+  await loadIdentityCards()
 }
 async function loadMembers() {
   members.value = await api('/api/members').catch(() => [])
@@ -827,6 +1034,8 @@ function logout() { localStorage.removeItem(TOKEN_KEY); session.me = null; sessi
 function badgeMark(d = '') { return ['🟥', '🟧', '🟨', '🟩', '⬜'].find(x => d.includes(x)) || '' }
 function badgeClass(d = '') { const m = badgeMark(d); return { '🟥': 'b-red', '🟧': 'b-orange', '🟨': 'b-yellow', '🟩': 'b-green', '⬜': 'b-gray' }[m] || 'b-gray' }
 function timeAgo(ts) { if (!ts) return ''; const d = Date.now() / 1000 - Number(ts); if (d < 0) return '在线'; if (d < 60) return '刚刚在线'; if (d < 3600) return `${Math.floor(d / 60)}分钟前`; if (d < 86400) return `${Math.floor(d / 3600)}小时前`; return `${Math.floor(d / 86400)}天前` }
+
+onBeforeUnmount(() => clearInterval(identityCardProgressTimer))
 
 onMounted(async () => {
   await loadWikiArchive()

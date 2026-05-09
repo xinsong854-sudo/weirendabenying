@@ -143,9 +143,9 @@
     </div>
 
     <script>
-        // ===== LLM 配置 =====
-        const LLM_URL = 'https://litellm.talesofai.cn/v1/chat/completions';
-        const LLM_KEY = 'sk-fZrLXE0IEs6EDYJCOsLLaQ';
+        // ===== 后端 API 配置 =====
+        // 同源部署时走相对路径；直接打开本文件或单独静态服务时默认连本机 3002 后端。
+        const API_BASE = location.port === '3002' ? '' : (localStorage.getItem('DTAGS_API_BASE') || 'http://localhost:3002');
         const LLM_MODEL = 'qwen3.5-plus-no-think';
 
         let currentTags = [];
@@ -258,12 +258,9 @@
 
         // ===== LLM 调用 =====
         async function aiCall(systemPrompt, userPrompt, maxTokens = 2048, temperature = 0.3) {
-            const response = await fetch(LLM_URL, {
+            const response = await fetch(API_BASE + '/api/chat', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${LLM_KEY}`
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     model: LLM_MODEL,
                     messages: [
@@ -274,12 +271,11 @@
                     temperature: temperature
                 })
             });
-            if (!response.ok) {
-                const err = await response.text();
-                throw new Error(`LLM 错误: ${response.status} - ${err}`);
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok || data.success === false) {
+                throw new Error(data.error || `LLM 错误: ${response.status}`);
             }
-            const data = await response.json();
-            return data.choices[0].message.content;
+            return data.reply;
         }
 
         // ===== 意图分析 =====

@@ -3,17 +3,43 @@
 伪人大本营 — 捏Ta 登录 + 档案库 + 成员系统
 python3 server.py  →  localhost:3000
 """
-import json, os, time, sqlite3, hashlib, mimetypes
+import json, os, time, sqlite3, hashlib, mimetypes, re
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 import requests
 
 API = "https://api.talesofai.cn"
-PORT = 3000
+PORT = int(os.environ.get("PORT", "3000"))
 DB = os.path.join(os.path.dirname(__file__) or ".", "pseudo_human.db")
 BASE_DIR = os.path.dirname(__file__) or "."
 DATA = os.path.join(BASE_DIR, "pseudo-human-data.json")
 DIST_DIR = os.path.join(BASE_DIR, "dist")
+
+def load_env_file(path):
+    if not os.path.isfile(path):
+        return
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                s = line.strip()
+                if not s or s.startswith("#") or "=" not in s:
+                    continue
+                k, v = s.split("=", 1)
+                k = k.strip(); v = v.strip().strip('"').strip("'")
+                if k and k not in os.environ:
+                    os.environ[k] = v
+    except Exception:
+        pass
+
+load_env_file(os.path.join(BASE_DIR, ".env"))
+load_env_file(os.path.join(os.path.dirname(BASE_DIR), ".env"))
+load_env_file(os.path.join(os.path.dirname(BASE_DIR), "dtags-backend", ".env"))
+
+LLM_URL = os.environ.get("LLM_URL", "https://litellm.talesofai.cn/v1/chat/completions")
+LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
+LLM_MODEL = os.environ.get("LLM_MODEL", "qwen3.5-plus-no-think")
+LLM_FAST_MODEL = os.environ.get("LLM_FAST_MODEL", "qwen3.5-plus-no-think")
+NETA_API_BASE_URL = os.environ.get("NETA_API_BASE_URL", API)
 
 # ═══════════ 数据库 ═══════════
 def get_db():
@@ -109,6 +135,22 @@ def init_db():
         content TEXT NOT NULL,
         created_at INTEGER DEFAULT (strftime('%s','now'))
     )""")
+    db.execute("""CREATE TABLE IF NOT EXISTS identity_cards(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_uuid TEXT NOT NULL,
+        user_name TEXT,
+        source_uuid TEXT,
+        source_name TEXT,
+        avatar_img TEXT,
+        card_json TEXT NOT NULL,
+        profile_json TEXT DEFAULT '{}',
+        hp_current INTEGER DEFAULT 0,
+        hp_max INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'active',
+        created_at INTEGER DEFAULT (strftime('%s','now')),
+        updated_at INTEGER DEFAULT (strftime('%s','now'))
+    )""")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_identity_user_status ON identity_cards(user_uuid,status,updated_at DESC)")
     # Wiki 词条表：用于后端检索，避免数据变大后全部压给前端搜索
     db.execute("""CREATE TABLE IF NOT EXISTS entries(
         uuid TEXT PRIMARY KEY,
@@ -138,7 +180,6 @@ def init_db():
         ("785d16cc3595466481569ca264c6b927","西西","https://oss.talesofai.cn/sts/785d16cc3595466481569ca264c6b927/40dd6cc8-8da2-4268-9eed-0a8688e575ab.jpeg","admin"),
         ("9ffcad2ea18642879d90626753337c34","秋雨微澜","https://oss.talesofai.cn/sts/9ffcad2ea18642879d90626753337c34/aeb73add-c386-443e-8850-eae4f0de69f3.jpeg","admin"),
         ("bd475d65674c434b87f8ea2fc0a2f5aa","海姆姆","https://oss.talesofai.cn/sts/bd475d65674c434b87f8ea2fc0a2f5aa/ac37c4cb-4491-44f5-b3af-f287a8199ca7.jpeg","admin"),
-        ("ec8c80fe3a71450ab3e8964375631f65","AlcheMist","https://oss.talesofai.cn/sts/ec8c80fe3a71450ab3e8964375631f65/917cb630-6300-4bbe-9737-31e74678d52b.jpeg","admin"),
         ("fbbee96a06624b7589549466991cc15a","鄢滙","https://oss.talesofai.cn/sts/fbbee96a06624b7589549466991cc15a/41a8f038-f3fb-4bc7-a494-9f3307a893a0.png","admin"),
     ]
     for uuid, name, avatar, role in admins:
@@ -531,6 +572,234 @@ function logout(){{token="";me=null;myRole=null;allData=null;localStorage.remove
 </body>
 </html>"""
 
+def parse_loose_json(raw):
+    if not raw:
+        return None
+    try:
+        return json.loads(raw)
+    except Exception:
+        pass
+    cleaned = re.sub(r"```json\s*|```\s*", "", str(raw)).strip()
+    try:
+        return json.loads(cleaned)
+    except Exception:
+        pass
+    m = re.search(r"\{[\s\S]*\}", str(raw))
+    if m:
+        try:
+            return json.loads(m.group(0))
+        except Exception:
+            return None
+    return None
+
+
+def extract_uuid(text):
+    text = str(text or "").strip()
+    m = re.search(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", text, re.I)
+    if m:
+        return m.group(0)
+
+    # 支持用户粘贴 t.nieta.art 短链或一整段分享文案。
+    short_match = re.search(r"https://t\.nieta\.art/[a-zA-Z0-9]+", text)
+    if short_match:
+        short_url = short_match.group(0)
+        try:
+            rr = requests.get(f"{NETA_API_BASE_URL}/v1/util/original-url", params={"short_url": short_url}, timeout=12)
+            if rr.ok:
+                data = rr.json()
+                long_url = data if isinstance(data, str) else data.get("url") or data.get("original_url") or data.get("data") or ""
+                if long_url:
+                    got = extract_uuid(long_url)
+                    if got:
+                        return got
+        except Exception:
+            pass
+
+    url_match = re.search(r"https?://\S+", text)
+    candidate = url_match.group(0).rstrip("，。,.、)）]】\"'") if url_match else text
+    parsed = urlparse(candidate)
+    q = parse_qs(parsed.query)
+    for key in ("uuid", "tcp_uuid", "parent_uuid", "id"):
+        value = (q.get(key) or [""])[0]
+        if re.match(r"^[0-9a-f-]{32,36}$", value, re.I):
+            return value
+
+    if parsed.scheme and parsed.netloc and parsed.netloc.endswith(("nieta.art", "talesofai.cn")):
+        try:
+            r = requests.get(candidate, allow_redirects=False, timeout=10)
+            loc = r.headers.get("location") or r.headers.get("Location") or ""
+            if loc:
+                return extract_uuid(loc)
+        except Exception:
+            pass
+    return None
+
+
+def keyword_from_link(text):
+    text = str(text or "").strip()
+    # 分享文案里通常是「角色名」
+    quoted = re.findall(r"[「《『](.+?)[」》』]", text)
+    if quoted:
+        return quoted[-1].strip()
+    url_match = re.search(r"https?://\S+", text)
+    if url_match:
+        text = text.replace(url_match.group(0), " ").strip()
+    parsed = urlparse(text)
+    if parsed.scheme and parsed.netloc:
+        parts = [x for x in parsed.path.split("/") if x]
+        return (parts[-1] if parts else text).replace("-", "_").replace("_", " ").strip()
+    return text
+
+
+def normalize_neta_profile(tcp):
+    tcp = tcp or {}
+    bio = tcp.get("oc_bio") or {}
+    cfg = tcp.get("config") or {}
+    return {
+        "type": "elementum" if tcp.get("type") == "elementum" else "character",
+        "uuid": tcp.get("uuid"),
+        "name": tcp.get("name") or bio.get("name") or "",
+        "gender": tcp.get("gender") or bio.get("gender") or "",
+        "age": bio.get("age") or "",
+        "occupation": bio.get("occupation") or "",
+        "interests": bio.get("interests") or "",
+        "persona": bio.get("persona") or "",
+        "description": bio.get("description") or "",
+        "avatar_img": cfg.get("avatar_img") or "",
+        "header_img": cfg.get("header_img") or "",
+        "hashtags": tcp.get("hashtags") or [],
+        "accessibility": tcp.get("accessibility") or "",
+        "status": tcp.get("status") or ""
+    }
+
+
+def fetch_neta_character_profile(user_token, raw_input):
+    if not user_token:
+        raise ValueError("请先登录")
+    if not raw_input:
+        raise ValueError("请粘贴角色链接 / UUID / 角色名")
+    headers = {"Authorization": f"Bearer {user_token}", "x-token": user_token}
+    uuid = extract_uuid(raw_input)
+    if not uuid:
+        params = {
+            "keywords": keyword_from_link(raw_input),
+            "page_index": 0,
+            "page_size": 1,
+            "parent_type": "oc",
+            "sort_scheme": "best",
+        }
+        r = requests.get(f"{NETA_API_BASE_URL}/v2/travel/parent-search", params=params, headers=headers, timeout=20)
+        try:
+            data = r.json()
+        except Exception:
+            data = {}
+        if not r.ok:
+            raise RuntimeError(data.get("message") or data.get("error") or f"搜索角色失败 ({r.status_code})")
+        uuid = ((data.get("list") or [{}])[0] or {}).get("uuid")
+        if not uuid:
+            raise RuntimeError("没有找到对应角色，请确认链接/名称是否正确或角色是否可访问")
+    r = requests.get(f"{NETA_API_BASE_URL}/v2/travel/parent/{uuid}/profile", headers=headers, timeout=20)
+    try:
+        data = r.json()
+    except Exception:
+        data = {}
+    if not r.ok:
+        raise RuntimeError(data.get("message") or data.get("error") or f"读取角色详情失败 ({r.status_code})")
+    return normalize_neta_profile(data)
+
+
+def call_llm(messages, max_tokens=4096, temperature=0.35, model=None):
+    if not LLM_API_KEY:
+        raise RuntimeError("后端未配置 LLM_API_KEY")
+    r = requests.post(LLM_URL, headers={"Content-Type": "application/json", "Authorization": f"Bearer {LLM_API_KEY}"}, json={
+        "model": model or LLM_MODEL,
+        "messages": messages,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+    }, timeout=60)
+    try:
+        data = r.json()
+    except Exception:
+        data = {}
+    if not r.ok:
+        err = data.get("error")
+        if isinstance(err, dict): err = err.get("message")
+        raise RuntimeError(err or data.get("message") or f"LLM 请求失败 ({r.status_code})")
+    return (((data.get("choices") or [{}])[0].get("message") or {}).get("content") or data.get("reply") or "")
+
+
+def get_user_by_token(token):
+    if not token:
+        raise ValueError("未登录")
+    r = requests.get(f"{API}/v1/user/", headers={"x-token": token}, timeout=10)
+    r.raise_for_status()
+    user = r.json()
+    if not user.get("uuid"):
+        raise ValueError("令牌无效")
+    return user
+
+
+def card_summary(row):
+    try:
+        card = json.loads(row["card_json"] or "{}")
+    except Exception:
+        card = {}
+    derived = card.get("derived") or {}
+    return {
+        "id": row["id"],
+        "source_uuid": row["source_uuid"],
+        "source_name": row["source_name"],
+        "avatar_img": row["avatar_img"],
+        "hp_current": row["hp_current"],
+        "hp_max": row["hp_max"],
+        "status": row["status"],
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+        "investigator": card.get("investigator") or {},
+        "derived": derived,
+        "attribute_dimensions": card.get("attribute_dimensions") or {},
+    }
+
+
+def generate_coc_card(profile):
+    system = "你是专业的克苏鲁的呼唤 CoC 7版守秘人与调查员车卡设计师。只输出 JSON，不要输出思考过程、Markdown 或解释。"
+    user = f'''根据下方 Neta 角色资料，生成一张适合 CoC 7版跑团使用的调查员车卡。
+
+要求：
+1. 使用无思考、直接生成模式。
+2. 保留角色图片信息：avatar_img/header_img。
+3. 数值符合 CoC 7版常见范围：属性一般 15-90，技能 0-90，SAN/HP/MP/DB/Build 合理。
+4. 不要逐字照搬简介，要把角色转译为跑团可用人物。
+5. 若资料不足，合理补全但不要过度夸张。
+6. 输出必须是可解析 JSON。
+7. 增加 attribute_dimensions，以多维属性形式归纳：physical/mental/social/occult，每维包含 label、score、traits。
+
+返回 JSON 结构：
+{{
+  "source_character": {{"uuid":"", "name":"", "avatar_img":"", "header_img":""}},
+  "investigator": {{"name":"", "age":"", "gender":"", "occupation":"", "residence":"", "birthplace":"", "era":""}},
+  "portrait": {{"avatar_img":"", "header_img":"", "visual_summary":""}},
+  "attributes": {{"STR":0,"CON":0,"SIZ":0,"DEX":0,"APP":0,"INT":0,"POW":0,"EDU":0,"LUCK":0}},
+  "attribute_dimensions": {{"physical":{{"label":"身体","score":0,"traits":[""]}},"mental":{{"label":"精神","score":0,"traits":[""]}},"social":{{"label":"社交","score":0,"traits":[""]}},"occult":{{"label":"神秘","score":0,"traits":[""]}}}},
+  "derived": {{"SAN":0,"HP":0,"MP":0,"MOV":0,"damage_bonus":"","build":0}},
+  "skills": [{{"name":"", "value":0, "reason":""}}],
+  "backstory": {{"personal_description":"", "ideology_beliefs":"", "significant_people":"", "meaningful_locations":"", "treasured_possessions":"", "traits":"", "injuries_scars":"", "phobias_manias":"", "arcane_tomes_spells_artifacts":"", "encounters_with_strange_entities":""}},
+  "equipment": [""],
+  "cash_assets": "",
+  "roleplay_notes": "",
+  "keeper_notes": ""
+}}
+
+Neta 角色资料：
+{json.dumps(profile, ensure_ascii=False, indent=2)}
+
+输出语言：zh-CN'''
+    raw = call_llm([{"role": "system", "content": system}, {"role": "user", "content": user}], 4096, 0.25, LLM_FAST_MODEL)
+    card = parse_loose_json(raw)
+    if not card:
+        raise RuntimeError("LLM 返回内容不是有效 JSON")
+    return card
+
 # ═══════════ 后端 API ═══════════
 class Server(BaseHTTPRequestHandler):
     def _security_headers(self):
@@ -592,8 +861,8 @@ class Server(BaseHTTPRequestHandler):
             self._json(members)
         elif p.path == "/api/members/role":
             q = parse_qs(p.query); uuid = q.get("uuid", [""])[0]
-            db = get_db(); r = db.execute("SELECT role,avatar_frame FROM members WHERE uuid=?", [uuid]).fetchone(); db.close()
-            self._json({"role": r["role"] if r else "member", "avatar_frame": r["avatar_frame"] if r else "none"})
+            db = get_db(); r = db.execute("SELECT role,avatar_frame,signature,title FROM members WHERE uuid=?", [uuid]).fetchone(); db.close()
+            self._json({"role": r["role"] if r else "member", "avatar_frame": r["avatar_frame"] if r else "none", "signature": r["signature"] if r else "", "title": r["title"] if r else ""})
         elif p.path == "/api/comments":
             eu = parse_qs(p.query).get("entry_uuid", [None])[0]
             if not eu: self._json([]); return
@@ -663,6 +932,33 @@ class Server(BaseHTTPRequestHandler):
             tm = db.execute("SELECT COUNT(*) FROM members").fetchone()[0]
             db.close()
             self._json({**ARCHIVE["stats"], "total_comments": tc, "total_members": tm})
+        elif p.path == "/api/identity-cards":
+            token = self.headers.get("x-token", "")
+            try:
+                user = get_user_by_token(token)
+            except Exception:
+                self._json({"error": "未登录"}, 401); return
+            db = get_db()
+            rows = db.execute("SELECT * FROM identity_cards WHERE user_uuid=? AND status='active' ORDER BY updated_at DESC LIMIT 20", [user.get("uuid")]).fetchall()
+            db.close()
+            self._json([card_summary(r) for r in rows])
+        elif p.path.startswith("/api/identity-cards/"):
+            token = self.headers.get("x-token", "")
+            try:
+                user = get_user_by_token(token)
+                card_id = int(p.path.rsplit("/", 1)[-1])
+            except Exception:
+                self._json({"error": "未登录或参数错误"}, 401); return
+            db = get_db()
+            row = db.execute("SELECT * FROM identity_cards WHERE id=? AND user_uuid=?", [card_id, user.get("uuid")]).fetchone()
+            db.close()
+            if not row:
+                self._json({"error": "车卡不存在"}, 404); return
+            try: card = json.loads(row["card_json"] or "{}")
+            except Exception: card = {}
+            try: profile = json.loads(row["profile_json"] or "{}")
+            except Exception: profile = {}
+            self._json({"summary": card_summary(row), "card": card, "profile": profile})
         elif p.path == "/api/health":
             self._json({"ok": True, "service": "pseudo-human", "port": PORT})
         elif p.path == "/api/proxy/request-code" or p.path == "/api/proxy/verify-code":
@@ -729,8 +1025,9 @@ class Server(BaseHTTPRequestHandler):
             # 注册为普通成员（如果还不存在）
             db.execute("INSERT OR IGNORE INTO members(uuid,name,avatar,role) VALUES(?,?,?,'member')", (uuid, name, avatar))
             db.execute("UPDATE members SET name=?,avatar=?,online=1,last_seen=? WHERE uuid=?", (name, avatar, int(time.time()), uuid))
+            row = db.execute("SELECT signature,avatar_frame,role,title FROM members WHERE uuid=?", [uuid]).fetchone()
             db.commit(); db.close()
-            self._json({"ok": True})
+            self._json({"ok": True, "signature": row["signature"] if row else "", "avatar_frame": row["avatar_frame"] if row else "none", "role": row["role"] if row else "member", "title": row["title"] if row else ""})
 
         elif p.path == "/api/comments":
             if not token: self._json({"error": "未登录"}, 401); return
@@ -931,10 +1228,77 @@ class Server(BaseHTTPRequestHandler):
             except Exception:
                 self._json({"error": "令牌无效"}, 401); return
             signature = str(body.get("signature", "")).strip()[:50]
+            uuid = user.get("uuid", "")
+            name = user.get("nick_name") or user.get("name", "")
+            avatar = user.get("avatar_url", "")
             db = get_db()
-            db.execute("UPDATE members SET signature=?, online=1, last_seen=? WHERE uuid=?", [signature, int(time.time()), user.get("uuid", "")])
+            db.execute("INSERT OR IGNORE INTO members(uuid,name,avatar,role) VALUES(?,?,?,'member')", [uuid, name, avatar])
+            db.execute("UPDATE members SET name=?, avatar=?, signature=?, online=1, last_seen=? WHERE uuid=?", [name, avatar, signature, int(time.time()), uuid])
             db.commit(); db.close()
             self._json({"ok": True, "signature": signature})
+        elif p.path == "/api/neta/character-profile":
+            user_token = token or str(body.get("token", ""))
+            link = body.get("link") or body.get("uuid") or body.get("name") or ""
+            try:
+                profile = fetch_neta_character_profile(user_token, link)
+                self._json({"success": True, "profile": profile})
+            except Exception as e:
+                self._json({"success": False, "error": str(e)}, 500)
+        elif p.path == "/api/coc/character-card":
+            user_token = token or str(body.get("token", ""))
+            link = body.get("link") or body.get("uuid") or body.get("name") or ""
+            try:
+                profile = body.get("profile") if isinstance(body.get("profile"), dict) else fetch_neta_character_profile(user_token, link)
+                card = generate_coc_card(profile)
+                self._json({"success": True, "profile": profile, "card": card})
+            except Exception as e:
+                self._json({"success": False, "error": str(e)}, 500)
+        elif p.path == "/api/identity-cards":
+            try:
+                user = get_user_by_token(token)
+                card = body.get("card") if isinstance(body.get("card"), dict) else None
+                profile = body.get("profile") if isinstance(body.get("profile"), dict) else {}
+                if not card:
+                    self._json({"error": "缺少车卡数据"}, 400); return
+                db = get_db()
+                active_count = db.execute("SELECT COUNT(*) FROM identity_cards WHERE user_uuid=? AND status='active'", [user.get("uuid")]).fetchone()[0]
+                if active_count >= 3:
+                    db.close(); self._json({"error": "每人最多保存三张身份卡，请先删除旧卡"}, 400); return
+                source = card.get("source_character") or {}
+                investigator = card.get("investigator") or {}
+                portrait = card.get("portrait") or {}
+                derived = card.get("derived") or {}
+                hp = int(derived.get("HP") or 0)
+                avatar = portrait.get("avatar_img") or source.get("avatar_img") or profile.get("avatar_img") or ""
+                db.execute("""INSERT INTO identity_cards(user_uuid,user_name,source_uuid,source_name,avatar_img,card_json,profile_json,hp_current,hp_max,status,updated_at)
+                           VALUES(?,?,?,?,?,?,?,?,?,'active',strftime('%s','now'))""", [user.get("uuid"), user.get("nick_name") or user.get("name", ""), source.get("uuid") or profile.get("uuid"), investigator.get("name") or source.get("name") or profile.get("name"), avatar, json.dumps(card, ensure_ascii=False), json.dumps(profile, ensure_ascii=False), hp, hp])
+                row = db.execute("SELECT * FROM identity_cards WHERE id=last_insert_rowid()").fetchone()
+                db.commit(); db.close()
+                self._json({"ok": True, "card": card_summary(row)})
+            except Exception as e:
+                self._json({"error": str(e)}, 500)
+        elif p.path == "/api/identity-cards/delete":
+            try:
+                user = get_user_by_token(token)
+                card_id = int(body.get("id", 0) or 0)
+                db = get_db()
+                db.execute("UPDATE identity_cards SET status='deleted', updated_at=strftime('%s','now') WHERE id=? AND user_uuid=?", [card_id, user.get("uuid")])
+                db.commit(); db.close()
+                self._json({"ok": True})
+            except Exception as e:
+                self._json({"error": str(e)}, 500)
+        elif p.path == "/api/identity-cards/state":
+            try:
+                user = get_user_by_token(token)
+                card_id = int(body.get("id", 0) or 0)
+                hp_current = int(body.get("hp_current", 0))
+                status = "torn" if hp_current <= 0 else "active"
+                db = get_db()
+                db.execute("UPDATE identity_cards SET hp_current=?, status=?, updated_at=strftime('%s','now') WHERE id=? AND user_uuid=?", [max(0, hp_current), status, card_id, user.get("uuid")])
+                db.commit(); db.close()
+                self._json({"ok": True, "status": status, "hp_current": max(0, hp_current)})
+            except Exception as e:
+                self._json({"error": str(e)}, 500)
         elif p.path == "/api/private/messages":
             if not token: self._json({"error": "未登录"}, 401); return
             try:

@@ -9,7 +9,7 @@ const app = express();
 const PORT = process.env.PORT || 3002;
 const LLM_URL = process.env.LLM_URL || 'https://litellm.talesofai.cn/v1/chat/completions';
 const LLM_KEY = process.env.LLM_API_KEY || '';
-const MODEL = 'qwen3.5-plus-no-think';
+const MODEL = process.env.LLM_MODEL || 'qwen3.5-plus-no-think';
 
 const D_CACHE = path.join(__dirname, 'd_cache');
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -86,6 +86,7 @@ async function charBreakdown(name) {
 }
 
 async function callLLM(msgs, maxT, temp) {
+    if (!LLM_KEY) throw new Error('后端未配置 LLM_API_KEY');
     const r = await axios.post(LLM_URL, {
         model: MODEL, messages: msgs, max_tokens: maxT || 512, temperature: temp ?? 0.2
     }, { 
@@ -93,6 +94,23 @@ async function callLLM(msgs, maxT, temp) {
         timeout: 25000 
     });
     return (r.data?.choices?.[0]?.message?.content) || '';
+}
+
+async function callLLMRaw({ messages, model, max_tokens, temperature }) {
+    if (!LLM_KEY) throw new Error('后端未配置 LLM_API_KEY');
+    const r = await axios.post(LLM_URL, {
+        model: model || MODEL,
+        messages,
+        max_tokens: max_tokens || 1024,
+        temperature: temperature ?? 0.3
+    }, {
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + LLM_KEY },
+        timeout: 30000
+    });
+    return {
+        data: r.data,
+        reply: (r.data?.choices?.[0]?.message?.content) || ''
+    };
 }
 
 function parseJSON(raw) {
@@ -107,6 +125,27 @@ function parseJSON(raw) {
 }
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
+
+app.get('/api/config', (req, res) => {
+    res.json({
+        llm_enabled: Boolean(LLM_KEY),
+        llm_model: MODEL,
+        llm_url: LLM_URL
+    });
+});
+
+app.post('/api/chat', async (req, res) => {
+    const { messages, model, max_tokens, temperature } = req.body || {};
+    if (!Array.isArray(messages) || messages.length === 0) {
+        return res.status(400).json({ error: '请提供 messages 数组' });
+    }
+    try {
+        const { reply } = await callLLMRaw({ messages, model, max_tokens, temperature });
+        res.json({ success: true, reply, model: model || MODEL });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
 
 app.post('/api/match', async (req, res) => {
     const q = req.body?.query;

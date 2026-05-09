@@ -230,44 +230,36 @@
             <ul class="note-list" id="noteList"></ul>
         </div>
 
+        <!-- 身份卡 / CoC 车卡 -->
+        <div class="section-box">
+            <h2>🪪 身份卡 · CoC 车卡生成</h2>
+            <div class="input-row">
+                <input type="password" id="netaTokenInput" placeholder="粘贴你的 Neta Token（仅本次请求使用）">
+            </div>
+            <div class="input-row">
+                <input type="text" id="characterLinkInput" placeholder="粘贴 Neta 角色分享链接 / UUID / 角色名" onkeypress="if(event.key==='Enter')generateCocCard()">
+                <button class="btn btn-primary" onclick="generateCocCard()">生成角色卡</button>
+            </div>
+            <div id="cocCardResult" style="display:none;margin-top:14px;"></div>
+        </div>
+
         <!-- AI 区域 -->
         <div class="section-box">
             <h2>🤖 AI 助手</h2>
 
-            <!-- Token 状态栏 -->
+            <!-- LLM 状态栏 -->
             <div class="token-bar">
                 <div class="token-status-dot gray" id="tokenDot"></div>
                 <div class="token-info">
-                    <div class="label">Token 状态</div>
-                    <div class="value gray" id="tokenStatusText">未配置</div>
+                    <div class="label">LLM 状态</div>
+                    <div class="value gray" id="tokenStatusText">正在检查后端配置...</div>
                 </div>
-                <button class="btn btn-sm btn-ghost" onclick="toggleCreds()">️ 设置凭证</button>
-                <button class="btn btn-sm btn-ghost" onclick="tryRefreshToken()">🔄 刷新 Token</button>
-            </div>
-
-            <!-- 凭证设置面板 -->
-            <div class="creds-panel" id="credsPanel">
-                <label>Access Token（临时，约1小时过期）</label>
-                <div class="input-row">
-                    <input type="password" id="tokenInput" placeholder="eyJh..." oninput="onTokenChange()">
-                    <button class="btn btn-sm btn-primary" onclick="applyToken()">应用</button>
-                </div>
-                <label style="margin-top:10px;">Client ID（你的 App ID）</label>
-                <div class="input-row">
-                    <input type="text" id="clientIdInput" placeholder="6wuabtk5h1d8i7zv8vz9w">
-                </div>
-                <label>Client Secret（永久密钥，用于自动刷新）</label>
-                <div class="input-row">
-                    <input type="password" id="clientSecretInput" placeholder="输入你的 Client Secret">
-                    <button class="btn btn-sm btn-warn" onclick="saveCreds()">保存</button>
-                </div>
-                <div class="hint">💡 填入 Client Secret 后，Token 将在过期前自动刷新，无需手动操作。</div>
             </div>
 
             <!-- 聊天窗口 -->
             <div id="chatHistory">
                 <div style="color:rgba(42,36,32,.48);text-align:center;margin-top:100px;letter-spacing:.08em;">
-                    配置好 Token 后开始聊天 ✨
+                    后端 LLM 检查中 ✨
                 </div>
             </div>
             <div class="input-row">
@@ -347,205 +339,107 @@
         }
         (async()=>{try{const r=await fetch(API+'/notes');notes=(await r.json()).notes||[];}catch(e){notes=[];}renderNotes();})();
 
-        // ===== Token 管理 =====
-        let currentToken = '';
-        let tokenExpireTime = null;
-        let refreshTimer = null;
-        let countdownTimer = null;
+        // ===== 后端 LLM 状态 =====
         let serverLLMEnabled = false;
 
         async function loadLLMConfig() {
+            const dot = document.getElementById('tokenDot');
+            const txt = document.getElementById('tokenStatusText');
             try {
                 const r = await fetch(API + '/config');
                 const cfg = await r.json();
                 serverLLMEnabled = !!cfg.llm_enabled;
-                if (serverLLMEnabled && !currentToken) {
-                    const dot = document.getElementById('tokenDot');
-                    const txt = document.getElementById('tokenStatusText');
+                if (serverLLMEnabled) {
                     dot.className = 'token-status-dot green';
                     txt.className = 'value green';
                     txt.textContent = `后端 LLM 已接入 (${cfg.llm_model || '默认模型'})`;
                     document.getElementById('chatHistory').innerHTML = '<div style="color:rgba(42,36,32,.55);text-align:center;margin-top:100px;letter-spacing:.08em;">后端 LLM 已接入，可以直接聊天 ✨</div>';
-                }
-            } catch(e) {}
-        }
-
-        // 解析 JWT 过期时间
-        function parseTokenExpiry(token) {
-            try {
-                const parts = token.split('.');
-                if (parts.length >= 2) {
-                    const payload = JSON.parse(atob(parts[1].replace(/-/g,'+').replace(/_/g,'/')));
-                    if (payload.exp) return new Date(payload.exp * 1000);
-                }
-            } catch(e) {}
-            return null;
-        }
-
-        function updateTokenUI() {
-            const dot = document.getElementById('tokenDot');
-            const txt = document.getElementById('tokenStatusText');
-            if (!currentToken) {
-                if (serverLLMEnabled) {
-                    dot.className = 'token-status-dot green';
-                    txt.className = 'value green';
-                    txt.textContent = '后端 LLM 已接入';
-                    return;
-                }
-                dot.className = 'token-status-dot gray';
-                txt.className = 'value gray';
-                txt.textContent = '未配置';
-                return;
-            }
-            const now = Date.now();
-            if (tokenExpireTime) {
-                const remain = tokenExpireTime - now;
-                if (remain <= 0) {
+                } else {
                     dot.className = 'token-status-dot red';
                     txt.className = 'value red';
-                    txt.textContent = '已过期';
-                } else if (remain < 5 * 60 * 1000) {
-                    dot.className = 'token-status-dot red';
-                    txt.className = 'value red';
-                    txt.textContent = `即将过期 (${Math.floor(remain/1000)}s)`;
-                } else if (remain < 15 * 60 * 1000) {
-                    dot.className = 'token-status-dot yellow';
-                    txt.className = 'value yellow';
-                    txt.textContent = `剩余 ${Math.floor(remain/60000)} 分钟`;
-                } else {
-                    dot.className = 'token-status-dot green';
-                    txt.className = 'value green';
-                    txt.textContent = `有效 ${Math.floor(remain/60000)} 分钟`;
-                }
-            } else {
-                dot.className = 'token-status-dot green';
-                txt.className = 'value green';
-                txt.textContent = '已配置 (未知过期时间)';
-            }
-        }
-
-        function onTokenChange() {
-            // 实时解析
-            const v = document.getElementById('tokenInput').value.trim();
-            if (v) {
-                tokenExpireTime = parseTokenExpiry(v);
-            }
-        }
-
-        function applyToken() {
-            const v = document.getElementById('tokenInput').value.trim();
-            if (!v) return;
-            currentToken = v;
-            tokenExpireTime = parseTokenExpiry(v);
-            localStorage.setItem('neta_token', v);
-            updateTokenUI();
-            scheduleAutoRefresh();
-            document.getElementById('chatHistory').innerHTML = '<div style="color:rgba(42,36,32,.55);text-align:center;margin-top:100px;letter-spacing:.08em;">Token 已生效，开始聊天吧！</div>'; 
-            conversation = [];
-            toggleCreds(false);
-        }
-
-        // 自动刷新
-        function scheduleAutoRefresh() {
-            if (refreshTimer) clearInterval(refreshTimer);
-            if (countdownTimer) clearInterval(countdownTimer);
-            if (!tokenExpireTime) return;
-
-            const now = Date.now();
-            const remain = tokenExpireTime - now;
-            if (remain <= 0) { autoRefreshToken(); return; }
-
-            // 提前 3 分钟刷新
-            const refreshIn = Math.max(0, remain - 3 * 60 * 1000);
-            refreshTimer = setTimeout(autoRefreshToken, refreshIn);
-
-            // 倒计时 UI
-            countdownTimer = setInterval(updateTokenUI, 1000);
-        }
-
-        async function autoRefreshToken() {
-            const clientId = document.getElementById('clientIdInput').value.trim();
-            const clientSecret = document.getElementById('clientSecretInput').value.trim();
-            if (!clientId || !clientSecret) {
-                updateTokenUI();
-                return;
-            }
-            try {
-                const r = await fetch(API + '/refresh-token', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ client_id: clientId, client_secret: clientSecret })
-                });
-                const data = await r.json();
-                if (data.access_token) {
-                    currentToken = data.access_token;
-                    tokenExpireTime = data.expires_in ? new Date(Date.now() + data.expires_in * 1000) : parseTokenExpiry(data.access_token);
-                    localStorage.setItem('neta_token', currentToken);
-                    updateTokenUI();
-                    scheduleAutoRefresh();
-                    appendSystemMsg('🔄 Token 已自动刷新');
-                } else {
-                    appendSystemMsg('⚠️ 刷新失败: ' + (data.error || '未知错误'));
+                    txt.textContent = '后端未配置 LLM_API_KEY';
+                    document.getElementById('chatHistory').innerHTML = '<div style="color:rgba(125,38,55,.65);text-align:center;margin-top:100px;letter-spacing:.08em;">请先在后端 .env 配置 LLM_API_KEY</div>';
                 }
             } catch(e) {
-                appendSystemMsg('⚠️ Token 自动刷新失败: ' + e.message);
+                dot.className = 'token-status-dot red';
+                txt.className = 'value red';
+                txt.textContent = '后端连接失败';
             }
         }
+        loadLLMConfig();
 
-        function tryRefreshToken() {
-            autoRefreshToken();
+        // ===== 身份卡 / CoC 车卡 =====
+        function escapeHtml(text) {
+            return String(text ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
         }
 
-        function appendSystemMsg(text) {
-            const chatHistory = document.getElementById('chatHistory');
-            const div = document.createElement('div');
-            div.style.cssText = 'text-align:center;margin-bottom:10px;';
-            div.innerHTML = `<span style="background:rgba(255,252,243,.58);border:1px solid rgba(80,58,34,.16);padding:6px 14px;border-radius:20px;font-size:0.85rem;color:rgba(42,36,32,.62);">${text}</span>`;
-            chatHistory.appendChild(div);
-            chatHistory.scrollTop = chatHistory.scrollHeight;
+        function renderCocCard(card, profile) {
+            const box = document.getElementById('cocCardResult');
+            const portrait = card?.portrait || {};
+            const src = card?.source_character || {};
+            const avatar = portrait.avatar_img || src.avatar_img || profile?.avatar_img || '';
+            const header = portrait.header_img || src.header_img || profile?.header_img || '';
+            const attrs = card?.attributes || {};
+            const derived = card?.derived || {};
+            const investigator = card?.investigator || {};
+            const skills = Array.isArray(card?.skills) ? card.skills : [];
+            const backstory = card?.backstory || {};
+
+            box.style.display = 'block';
+            box.innerHTML = `
+                <div style="background:rgba(255,252,243,.55);border:1px solid rgba(80,58,34,.18);border-radius:12px;padding:16px;">
+                    ${header ? `<img src="${escapeHtml(header)}" alt="header" style="width:100%;max-height:180px;object-fit:cover;border-radius:10px;margin-bottom:12px;">` : ''}
+                    <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;">
+                        ${avatar ? `<img src="${escapeHtml(avatar)}" alt="avatar" style="width:120px;height:120px;object-fit:cover;border-radius:12px;border:1px solid rgba(80,58,34,.2);">` : ''}
+                        <div style="flex:1;min-width:220px;">
+                            <h3 style="color:var(--teal-dark);margin-bottom:8px;">${escapeHtml(investigator.name || src.name || profile?.name || '未命名调查员')}</h3>
+                            <p style="color:var(--ink-soft);line-height:1.7;">${escapeHtml(investigator.occupation || '')} · ${escapeHtml(investigator.age || '')} · ${escapeHtml(investigator.era || '')}</p>
+                            <p style="color:var(--ink-soft);line-height:1.7;">${escapeHtml(portrait.visual_summary || '')}</p>
+                        </div>
+                    </div>
+                    <h4 style="margin:14px 0 8px;color:var(--wine);">属性</h4>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(80px,1fr));gap:8px;">
+                        ${Object.entries(attrs).map(([k,v]) => `<div style="background:rgba(255,255,255,.35);padding:8px;border-radius:8px;text-align:center;"><b>${escapeHtml(k)}</b><br>${escapeHtml(v)}</div>`).join('')}
+                    </div>
+                    <h4 style="margin:14px 0 8px;color:var(--wine);">衍生值</h4>
+                    <p style="line-height:1.8;color:var(--ink-soft);">SAN ${escapeHtml(derived.SAN)} / HP ${escapeHtml(derived.HP)} / MP ${escapeHtml(derived.MP)} / MOV ${escapeHtml(derived.MOV)} / DB ${escapeHtml(derived.damage_bonus)} / Build ${escapeHtml(derived.build)}</p>
+                    <h4 style="margin:14px 0 8px;color:var(--wine);">主要技能</h4>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                        ${skills.slice(0, 18).map(s => `<span style="background:rgba(31,95,98,.1);border:1px solid rgba(31,95,98,.18);padding:6px 10px;border-radius:999px;color:var(--teal-dark);">${escapeHtml(s.name)} ${escapeHtml(s.value)}</span>`).join('')}
+                    </div>
+                    <h4 style="margin:14px 0 8px;color:var(--wine);">背景</h4>
+                    <p style="white-space:pre-wrap;line-height:1.75;color:var(--ink-soft);">${escapeHtml(backstory.personal_description || '')}</p>
+                    <details style="margin-top:12px;">
+                        <summary style="cursor:pointer;color:var(--teal-dark);font-weight:700;">查看完整 JSON</summary>
+                        <pre style="margin-top:10px;white-space:pre-wrap;background:rgba(29,38,44,.08);padding:12px;border-radius:10px;overflow:auto;max-height:420px;">${escapeHtml(JSON.stringify(card, null, 2))}</pre>
+                    </details>
+                </div>
+            `;
         }
 
-        function toggleCreds(force) {
-            const p = document.getElementById('credsPanel');
-            const isOpen = typeof force === 'boolean' ? !force : !p.classList.contains('open');
-            p.classList.toggle('open', isOpen);
-            // 恢复之前保存的凭证
-            if (isOpen) {
-                const savedClientId = localStorage.getItem('neta_client_id') || '';
-                const savedSecret = localStorage.getItem('neta_client_secret') || '';
-                const savedToken = localStorage.getItem('neta_token') || '';
-                if (savedClientId) document.getElementById('clientIdInput').value = savedClientId;
-                if (savedSecret) document.getElementById('clientSecretInput').value = savedSecret;
-                if (savedToken) document.getElementById('tokenInput').value = savedToken;
+        async function generateCocCard() {
+            const token = document.getElementById('netaTokenInput').value.trim();
+            const link = document.getElementById('characterLinkInput').value.trim();
+            const box = document.getElementById('cocCardResult');
+            if (!token) { alert('请先粘贴你的 Neta Token'); return; }
+            if (!link) { alert('请粘贴角色分享链接 / UUID / 角色名'); return; }
+
+            box.style.display = 'block';
+            box.innerHTML = '<div style="text-align:center;color:rgba(42,36,32,.58);padding:18px;">正在读取角色资料并生成 CoC 车卡...</div>';
+
+            try {
+                const r = await fetch(API + '/coc/character-card', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token, link })
+                });
+                const data = await r.json();
+                if (!r.ok || !data.success) throw new Error(data.error || '生成失败');
+                renderCocCard(data.card, data.profile);
+            } catch(e) {
+                box.innerHTML = `<div style="color:var(--wine);background:rgba(125,38,55,.08);border:1px solid rgba(125,38,55,.18);padding:14px;border-radius:10px;">生成失败：${escapeHtml(e.message)}</div>`;
             }
         }
-
-        function saveCreds() {
-            const clientId = document.getElementById('clientIdInput').value.trim();
-            const secret = document.getElementById('clientSecretInput').value.trim();
-            if (clientId) localStorage.setItem('neta_client_id', clientId);
-            if (secret) localStorage.setItem('neta_client_secret', secret);
-            appendSystemMsg('✅ 凭证已保存到本地');
-            // 如果有 secret，尝试自动刷新
-            if (clientId && secret) autoRefreshToken();
-        }
-
-        // 页面加载时恢复 token
-        (function(){
-            const saved = localStorage.getItem('neta_token');
-            if (saved) {
-                currentToken = saved;
-                document.getElementById('tokenInput').value = saved;
-                tokenExpireTime = parseTokenExpiry(saved);
-                updateTokenUI();
-                scheduleAutoRefresh();
-            }
-            const savedClientId = localStorage.getItem('neta_client_id') || '';
-            const savedSecret = localStorage.getItem('neta_client_secret') || '';
-            if (savedClientId) document.getElementById('clientIdInput').value = savedClientId;
-            if (savedSecret) document.getElementById('clientSecretInput').value = savedSecret;
-            loadLLMConfig();
-        })();
 
         // ===== AI 聊天 =====
         const chatHistory = document.getElementById('chatHistory');
@@ -567,8 +461,8 @@
             const text = input.value.trim();
             if (!text) return;
 
-            if (!currentToken && !serverLLMEnabled) {
-                appendSystemMsg('⚠️ 请先配置 Token');
+            if (!serverLLMEnabled) {
+                appendMessage('ai', '后端 LLM 未启用：请先在后端 .env 配置 LLM_API_KEY 并重启服务。');
                 return;
             }
 
@@ -587,7 +481,7 @@
                 const r = await fetch(API + '/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ token: currentToken, messages: conversation, mode: serverLLMEnabled ? 'llm' : 'neta' })
+                    body: JSON.stringify({ messages: conversation, mode: 'llm' })
                 });
                 document.getElementById('chatLoading')?.remove();
                 if (!r.ok) { const err = await r.json(); appendMessage('ai', '错误: ' + (err.error || r.statusText)); return; }

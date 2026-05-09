@@ -8,7 +8,7 @@ description: Danbooru 标签匹配网站的 LLM API 配置
 ## 端点信息
 
 - **URL**: `https://litellm.talesofai.cn/v1/chat/completions`
-- **Key**: `sk-fZrLXE0IEs6EDYJCOsLLaQ`
+- **Key**: 通过后端 `.env` 的 `LLM_API_KEY` 配置，不在前端或文档中硬编码
 - **模型**: `qwen3.5-plus-no-think`
 - **思考模型**: `qwen3.5-plus`
 
@@ -16,7 +16,7 @@ description: Danbooru 标签匹配网站的 LLM API 配置
 
 ```javascript
 const LLM_URL = 'https://litellm.talesofai.cn/v1/chat/completions';
-const LLM_KEY = 'sk-fZrLXE0IEs6EDYJCOsLLaQ';
+const LLM_KEY = process.env.LLM_API_KEY;
 const LLM_MODEL = 'qwen3.5-plus-no-think';
 ```
 
