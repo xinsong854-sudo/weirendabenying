@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="viewport-fit=cover,width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,user-scalable=no" />
+  <title>捏Ta</title>
+  <link rel="shortcut icon" type="image/png" href="https://oss.talesofai.cn/static/talesofai-h5/favicon.ico" />
+  <style>
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", "Microsoft YaHei", sans-serif;
+      background: #fff;
+      color: #222;
+      overflow: hidden;
+    }
+    .page {
+      position: relative;
+      min-height: 100vh;
+      padding: max(34px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom));
+      display: flex;
+      flex-direction: column;
+      background:
+        radial-gradient(circle at 12% 8%, rgba(168,188,255,.55) 0, rgba(168,188,255,0) 28%),
+        radial-gradient(circle at 92% 7%, rgba(253,178,243,.58) 0, rgba(253,178,243,0) 30%),
+        linear-gradient(180deg, #fff 0%, #fff 58%, #fbf8ff 100%);
+    }
+    .brand {
+      padding-top: 22px;
+      text-align: center;
+    }
+    .brand-icon {
+      width: 72px;
+      height: 72px;
+      border-radius: 22px;
+      display: block;
+      margin: 0 auto 14px;
+      box-shadow: 0 14px 34px rgba(111, 89, 255, .18);
+    }
+    .brand-name {
+      margin: 0;
+      font-size: 26px;
+      line-height: 34px;
+      font-weight: 800;
+      letter-spacing: .2px;
+      color: #222;
+    }
+    .login-panel {
+      width: 100%;
+      max-width: 420px;
+      margin: 54px auto 0;
+    }
+    .field {
+      position: relative;
+      height: 54px;
+      display: flex;
+      align-items: center;
+      border-bottom: 1px solid #ededf3;
+      background: transparent;
+    }
+    .prefix {
+      flex: none;
+      margin-right: 12px;
+      color: #222;
+      font-size: 17px;
+      font-weight: 600;
+    }
+    input {
+      min-width: 0;
+      flex: 1;
+      height: 52px;
+      border: 0;
+      outline: 0;
+      padding: 0;
+      background: transparent;
+      color: #222;
+      font-size: 17px;
+      font-weight: 500;
+    }
+    input::placeholder { color: #b7b7c4; font-weight: 400; }
+    .code-btn {
+      flex: none;
+      min-width: 92px;
+      height: 34px;
+      margin-left: 10px;
+      border: 0;
+      border-radius: 18px;
+      background: #f1efff;
+      color: #392ee1;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .code-btn:disabled { opacity: .55; cursor: not-allowed; }
+    .agreement {
+      display: flex;
+      gap: 6px;
+      align-items: flex-start;
+      margin-top: 18px;
+      color: #8a8998;
+      font-size: 12px;
+      line-height: 20px;
+      user-select: none;
+    }
+    .agreement input {
+      flex: 0 0 13px;
+      width: 13px;
+      height: 13px;
+      min-width: 13px;
+      margin: 3px 0 0;
+      accent-color: #392ee1;
+    }
+    .agreement a {
+      color: #392ee1;
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .login-btn {
+      width: 100%;
+      height: 52px;
+      margin-top: 26px;
+      border: 0;
+      border-radius: 26px;
+      color: #fff;
+      font-size: 17px;
+      font-weight: 800;
+      cursor: pointer;
+      background: linear-gradient(90deg, #a8bcff 0%, #f6d3fc 48%, #fdb2f3 100%);
+      box-shadow: 0 14px 30px rgba(246, 170, 238, .28);
+    }
+    .login-btn:disabled { opacity: .65; cursor: not-allowed; }
+    .message {
+      display: none;
+      width: 100%;
+      max-width: 420px;
+      margin: 18px auto 0;
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: #f7f7fb;
+      color: #5d5d6a;
+      font-size: 12px;
+      line-height: 19px;
+      word-break: break-all;
+    }
+    .ok { background: #f2fff7; color: #23734c; }
+    .err { background: #fff2f5; color: #a12d49; }
+    .loading { background: #f7f7fb; color: #5d5d6a; }
+    .bottom-safe {
+      margin-top: auto;
+      padding-top: 24px;
+      text-align: center;
+      color: #b5b4c2;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="brand">
+      <img class="brand-icon" src="https://oss.talesofai.cn/static/talesofai-h5/favicon.ico" alt="捏Ta" />
+      <h1 class="brand-name">捏Ta</h1>
+    </header>
+
+    <section class="login-panel">
+      <div class="field">
+        <span class="prefix">+86</span>
+        <input id="phone" type="tel" inputmode="numeric" maxlength="11" placeholder="请输入手机号" autocomplete="tel" />
+      </div>
+
+      <div class="field">
+        <input id="code" type="text" inputmode="numeric" maxlength="4" placeholder="请输入验证码" autocomplete="one-time-code" />
+        <button id="sendBtn" class="code-btn" type="button">获取验证码</button>
+      </div>
+
+      <label class="agreement">
+        <input id="agree" type="checkbox" />
+        <span>我已阅读并同意 <a href="https://oss.talesofai.cn/static/blackboard/protocol-page/user-agreement.html" target="_blank">用户协议</a> 和 <a href="https://oss.talesofai.cn/static/blackboard/protocol-page/privacy-policy.html" target="_blank">隐私政策</a></span>
+      </label>
+
+      <button id="loginBtn" class="login-btn" type="button">登录</button>
+    </section>
+
+    <div id="message" class="message"></div>
+    <div class="bottom-safe">未注册手机号验证后将自动登录</div>
+  </main>
+
+  <script src="https://oss.talesofai.cn/fe_assets/libs/gt4.js"></script>
+  <script>
+    // 配合 3000 后端代理使用：/api/proxy/* 会转发到 https://api.talesofai.cn
+    // 直接打开本文件时默认请求本机 3000；通过后端页面访问时使用同源。
+    const API_BASE = window.location.protocol === "file:" ? "http://localhost:3000" : "";
+    const phoneInput = document.getElementById("phone");
+    const codeInput = document.getElementById("code");
+    const sendBtn = document.getElementById("sendBtn");
+    const loginBtn = document.getElementById("loginBtn");
+    const agree = document.getElementById("agree");
+    const message = document.getElementById("message");
+
+    let timer = 0;
+    let timerId = null;
+
+    function show(text, type = "") {
+      message.style.display = text ? "block" : "none";
+      message.textContent = text || "";
+      message.className = "message" + (type ? " " + type : "");
+      if (type === "err") console.warn(text);
+    }
+
+    function initCaptcha() {
+      return new Promise((resolve, reject) => {
+        if (!window.initGeetest4) {
+          reject(new Error("验证码组件加载失败，请刷新后重试"));
+          return;
+        }
+
+        let settled = false;
+        const timeoutId = setTimeout(() => {
+          if (!settled) {
+            settled = true;
+            reject(new Error("验证码加载超时，请检查网络"));
+          }
+        }, 8000);
+
+        window.initGeetest4({
+          captchaId: "e000881b946cad6dcc39aa1eb40c80b0",
+          product: "popup",
+          protocol: "https://",
+          hideSuccess: true,
+          mask: { outside: false }
+        }, (captcha) => {
+          clearTimeout(timeoutId);
+          if (settled) return;
+
+          captcha.onSuccess(() => {
+            const validate = captcha.getValidate();
+            captcha.destroy();
+            settled = true;
+            resolve(validate);
+          });
+          captcha.onError(() => {
+            captcha.destroy();
+            settled = true;
+            reject(new Error("验证出错，请重试"));
+          });
+          captcha.onClose(() => {
+            captcha.destroy();
+            settled = true;
+            reject(new Error("验证已取消"));
+          });
+          captcha.onNextReady(() => captcha.showCaptcha());
+        });
+      });
+    }
+
+    function validPhone(phone) {
+      return /^1[3456789]\d{9}$/.test(phone);
+    }
+
+    async function requestJson(path, body) {
+      const res = await fetch(API_BASE + path, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body)
+      });
+
+      const text = await res.text();
+      let data = null;
+      try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+
+      if (!res.ok) {
+        const msg = data && typeof data === "object" ? (data.message || data.msg || data.error || JSON.stringify(data)) : (data || res.statusText);
+        throw new Error(msg);
+      }
+      return data;
+    }
+
+    function startCountdown() {
+      timer = 60;
+      sendBtn.disabled = true;
+      sendBtn.textContent = timer + "s";
+      clearInterval(timerId);
+      timerId = setInterval(() => {
+        timer -= 1;
+        sendBtn.textContent = timer + "s";
+        if (timer <= 0) {
+          clearInterval(timerId);
+          sendBtn.disabled = false;
+          sendBtn.textContent = "获取验证码";
+        }
+      }, 1000);
+    }
+
+    sendBtn.addEventListener("click", async () => {
+      const phone = phoneInput.value.trim();
+      if (!validPhone(phone)) {
+        show("请输入正确的手机号", "err");
+        return;
+      }
+
+      try {
+        show("请完成人机验证", "loading");
+        sendBtn.disabled = true;
+        const captchaValidate = await initCaptcha();
+        show("发送中...", "loading");
+        await requestJson("/api/proxy/request-code", { phone_num: phone, captcha_validate: captchaValidate });
+        show("验证码已发送", "ok");
+        startCountdown();
+      } catch (err) {
+        sendBtn.disabled = false;
+        show("验证码发送失败：" + (err.message || err), "err");
+      }
+    });
+
+    loginBtn.addEventListener("click", async () => {
+      const phone = phoneInput.value.trim();
+      const code = codeInput.value.trim();
+
+      if (!validPhone(phone)) {
+        show("请输入正确的手机号", "err");
+        return;
+      }
+      if (!/^\d{4}$/.test(code)) {
+        show("请输入 4 位验证码", "err");
+        return;
+      }
+      if (!agree.checked) {
+        show("请先阅读并同意用户协议和隐私政策", "err");
+        return;
+      }
+
+      try {
+        loginBtn.disabled = true;
+        show("登录中...", "loading");
+        const data = await requestJson("/api/proxy/verify-code", { phone_num: phone, code });
+
+        localStorage.setItem("NIETA_REAL_LOGIN_RESPONSE", JSON.stringify(data));
+        if (data && data.token) localStorage.setItem("NIETA_ACCESS_TOKEN", data.token);
+        if (data && data.refresh_token) localStorage.setItem("NIETA_REFRESH_TOKEN", data.refresh_token);
+
+        console.log("捏Ta登录成功返回：", data);
+        console.log("NIETA_ACCESS_TOKEN:", data && data.token ? data.token : "无");
+        console.log("NIETA_REFRESH_TOKEN:", data && data.refresh_token ? data.refresh_token : "无");
+
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage({
+            type: "PAGE_PHONE_LOGIN_SUCCESS",
+            payload: {
+              token: data && data.token ? data.token : "",
+              refresh_token: data && data.refresh_token ? data.refresh_token : "",
+              data: data
+            }
+          }, "*");
+        }
+
+        message.style.display = "none";
+        message.innerHTML = "";
+      } catch (err) {
+        show("登录失败：" + (err.message || err), "err");
+      } finally {
+        loginBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

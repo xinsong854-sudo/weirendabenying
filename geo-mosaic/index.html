@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>图片几何马赛克工具</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #1a1a2e;
+    color: #eee;
+    min-height: 100vh;
+  }
+  .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+  h1 { text-align: center; margin: 20px 0; font-size: 1.8em; background: linear-gradient(135deg, #667eea, #764ba2); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 15px; align-items: center;
+    background: #16213e; padding: 20px; border-radius: 12px; margin-bottom: 20px;
+  }
+  .control-group { display: flex; flex-direction: column; gap: 5px; }
+  .control-group label { font-size: 0.85em; color: #aaa; }
+  input[type="range"] { width: 150px; }
+  .value-display { font-size: 0.85em; color: #667eea; }
+  button {
+    padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer;
+    font-size: 1em; transition: all 0.3s;
+  }
+  .btn-primary { background: linear-gradient(135deg, #667eea, #764ba2); color: white; }
+  .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(102,126,234,0.4); }
+  .btn-secondary { background: #0f3460; color: #eee; }
+  .btn-secondary:hover { background: #1a4a7a; }
+  input[type="file"] { display: none; }
+  .upload-area {
+    border: 2px dashed #667eea; border-radius: 12px; padding: 40px;
+    text-align: center; cursor: pointer; transition: all 0.3s; margin-bottom: 20px;
+  }
+  .upload-area:hover { background: rgba(102,126,234,0.1); }
+  .canvas-container { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; }
+  .canvas-wrapper { text-align: center; }
+  .canvas-wrapper h3 { margin-bottom: 10px; color: #aaa; }
+  canvas { max-width: 100%; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
+  .progress { width: 100%; height: 4px; background: #333; border-radius: 2px; margin: 10px 0; }
+  .progress-bar { height: 100%; background: linear-gradient(90deg, #667eea, #764ba2); transition: width 0.3s; border-radius: 2px; }
+  .checkbox-group { display: flex; align-items: center; gap: 8px; }
+  .checkbox-group input { width: auto; }
+  #status { text-align: center; margin: 10px 0; color: #aaa; min-height: 20px; }
+  select {
+    background: #0f3460; color: #eee; border: 1px solid #333; border-radius: 6px; padding: 8px 12px;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🔷 图片几何马赛克工具</h1>
+  
+  <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()">
+    <p>📷 点击上传图片，或拖拽图片到此处</p>
+    <p style="font-size: 0.85em; color: #666; margin-top: 8px;">支持 JPG、PNG、WebP</p>
+  </div>
+  <input type="file" id="fileInput" accept="image/*">
+
+  <div class="controls">
+    <div class="control-group">
+      <label>模式</label>
+      <select id="mode">
+        <option value="delaunay">Delaunay 三角形</option>
+        <option value="voronoi">Voronoi 多边形</option>
+        <option value="hexagon">六边形网格</option>
+        <option value="circle">圆形点阵</option>
+      </select>
+    </div>
+    <div class="control-group">
+      <label>点数量</label>
+      <input type="range" id="numPoints" min="500" max="20000" step="500" value="5000">
+      <span class="value-display" id="numPointsValue">5000</span>
+    </div>
+    <div class="control-group">
+      <label>网格基础间距</label>
+      <input type="range" id="gridSize" min="5" max="50" step="1" value="15">
+      <span class="value-display" id="gridSizeValue">15</span>
+    </div>
+    <div class="checkbox-group">
+      <input type="checkbox" id="showStroke" checked>
+      <label for="showStroke">显示边框</label>
+    </div>
+    <div class="control-group">
+      <label>边框宽度</label>
+      <input type="range" id="strokeWidth" min="0.5" max="3" step="0.5" value="0.8">
+      <span class="value-display" id="strokeWidthValue">0.8</span>
+    </div>
+    <button class="btn-primary" id="convertBtn" disabled>🚀 开始转换</button>
+    <button class="btn-secondary" id="downloadBtn" disabled>💾 下载结果</button>
+  </div>
+
+  <div id="status"></div>
+  <div class="progress" id="progressContainer" style="display:none;">
+    <div class="progress-bar" id="progressBar"></div>
+  </div>
+
+  <div class="canvas-container">
+    <div class="canvas-wrapper">
+      <h3>原始图片</h3>
+      <canvas id="sourceCanvas"></canvas>
+    </div>
+    <div class="canvas-wrapper">
+      <h3>几何马赛克</h3>
+      <canvas id="resultCanvas"></canvas>
+    </div>
+  </div>
+</div>
+
+<script>
+// Delaunay 三角剖分 (Bowyer-Watson)
+class Delaunay {
+  constructor(points) {
+    this.points = points;
+    this.triangles = this.bowyerWatson(points);
+  }
+
+  bowyerWatson(points) {
+    if (points.length < 3) return [];
+    
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const [x, y] of points) {
+      minX = Math.min(minX, x); minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
+    }
+    const dx = maxX - minX, dy = maxY - minY;
+    const delta = Math.max(dx, dy) * 20;
+    const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+    
+    const superTri = [[cx - delta, cy - delta], [cx + delta, cy - delta], [cx, cy + delta]];
+    let triangles = [superTri];
+    
+    for (let i = 0; i < points.length; i++) {
+      const p = points[i];
+      const badTriangles = [];
+      
+      for (const tri of triangles) {
+        if (this.inCircumcircle(p, tri[0], tri[1], tri[2])) {
+          badTriangles.push(tri);
+        }
+      }
+      
+      const polygon = [];
+      for (const tri of badTriangles) {
+        for (let j = 0; j < 3; j++) {
+          const edge = [tri[j], tri[(j + 1) % 3]];
+          let shared = false;
+          for (const other of badTriangles) {
+            if (other === tri) continue;
+            for (let k = 0; k < 3; k++) {
+              if (this.edgesEqual(edge, [other[k], other[(k + 1) % 3]])) {
+                shared = true; break;
+              }
+            }
+            if (shared) break;
+          }
+          if (!shared) polygon.push(edge);
+        }
+      }
+      
+      triangles = triangles.filter(t => !badTriangles.includes(t));
+      
+      for (const edge of polygon) {
+        triangles.push([edge[0], edge[1], p]);
+      }
+      
+      if (i % 200 === 0 && window.updateProgress) {
+        window.updateProgress(0.3 + (i / points.length) * 0.4);
+      }
+    }
+    
+    return triangles.filter(tri => {
+      for (const vertex of tri) {
+        if (vertex[0] < minX - delta * 0.5 || vertex[0] > maxX + delta * 0.5 ||
+            vertex[1] < minY - delta * 0.5 || vertex[1] > maxY + delta * 0.5) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }
+
+  inCircumcircle(p, a, b, c) {
+    const ax = a[0] - p[0], ay = a[1] - p[1];
+    const bx = b[0] - p[0], by = b[1] - p[1];
+    const cx = c[0] - p[0], cy = c[1] - p[1];
+    const det = (ax * ax + ay * ay) * (bx * cy - cx * by) -
+                (bx * bx + by * by) * (ax * cy - cx * ay) +
+                (cx * cx + cy * cy) * (ax * by - bx * ay);
+    const orient = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+    return orient >= 0 ? det <= 0 : det >= 0;
+  }
+
+  edgesEqual(e1, e2) {
+    return (this.pe(e1[0], e2[0]) && this.pe(e1[1], e2[1])) ||
+           (this.pe(e1[0], e2[1]) && this.pe(e1[1], e2[0]));
+  }
+
+  pe(a, b) { return Math.abs(a[0] - b[0]) < 0.001 && Math.abs(a[1] - b[1]) < 0.001; }
+}
+
+// 自适应采样：基于网格 + 颜色变化密度，不做内容分析
+function extractPoints(imageData, numPoints, gridBaseSize) {
+  const { width, height, data } = imageData;
+  
+  // 基础网格点（保证全图覆盖，不做内容判断）
+  const points = [];
+  for (let y = 0; y < height; y += gridBaseSize) {
+    for (let x = 0; x < width; x += gridBaseSize) {
+      points.push([x, y]);
+    }
+  }
+  
+  // 根据像素变化密度增加采样（纯像素统计，不分析内容）
+  const targetExtra = numPoints - points.length;
+  if (targetExtra > 0) {
+    // 计算局部方差
+    const blurR = gridBaseSize;
+    const varMap = new Float32Array(width * height);
+    
+    // 简易方差计算
+    for (let y = blurR; y < height - blurR; y += blurR) {
+      for (let x = blurR; x < width - blurR; x += blurR) {
+        let sum = 0, sumSq = 0, count = 0;
+        for (let dy = -blurR; dy <= blurR; dy += blurR) {
+          for (let dx = -blurR; dx <= blurR; dx += blurR) {
+            const idx = (y + dy) * width + (x + dx);
+            const gray = data[idx * 4] * 0.299 + data[idx * 4 + 1] * 0.587 + data[idx * 4 + 2] * 0.114;
+            sum += gray; sumSq += gray * gray; count++;
+          }
+        }
+        const mean = sum / count;
+        const variance = sumSq / count - mean * mean;
+        varMap[y * width + x] = variance;
+      }
+    }
+    
+    // 按方差加权采样
+    const allVars = [];
+    for (let y = blurR; y < height - blurR; y += blurR) {
+      for (let x = blurR; x < width - blurR; x += blurR) {
+        if (varMap[y * width + x] > 0) {
+          allVars.push({ x, y, v: varMap[y * width + x] });
+        }
+      }
+    }
+    
+    allVars.sort((a, b) => b.v - a.v);
+    const numExtra = Math.min(targetExtra, allVars.length);
+    
+    for (let i = 0; i < numExtra; i++) {
+      const item = allVars[i];
+      const jitter = gridBaseSize * 0.3;
+      points.push([
+        item.x + (Math.random() - 0.5) * jitter * 2,
+        item.y + (Math.random() - 0.5) * jitter * 2
+      ]);
+    }
+  }
+  
+  // 四角保证
+  points.push([0, 0], [width - 1, 0], [0, height - 1], [width - 1, height - 1]);
+  
+  return points;
+}
+
+// 三角形内判断
+function pointInTriangle(px, py, x1, y1, x2, y2, x3, y3) {
+  const d1 = (px - x2) * (y1 - y2) - (x1 - x2) * (py - y2);
+  const d2 = (px - x3) * (y2 - y3) - (x2 - x3) * (py - y3);
+  const d3 = (px - x1) * (y3 - y1) - (x3 - x1) * (py - y1);
+  const hasNeg = (d1 < 0) || (d2 < 0) || (d3 < 0);
+  const hasPos = (d1 > 0) || (d2 > 0) || (d3 > 0);
+  return !(hasNeg && hasPos);
+}
+
+// 精确颜色填充：取几何区域内所有像素的平均颜色
+function renderMosaic(imageData, triangles, points, showStroke, strokeWidth) {
+  const { width, height, data } = imageData;
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  const output = ctx.createImageData(width, height);
+  
+  // 为每个像素分配三角形
+  const triAssign = new Int32Array(width * height).fill(-1);
+  
+  // 扫描线填充分配三角形 ID
+  for (let t = 0; t < triangles.length; t++) {
+    const tri = triangles[t];
+    const minY = Math.max(0, Math.floor(Math.min(tri[0][1], tri[1][1], tri[2][1])));
+    const maxY = Math.min(height - 1, Math.ceil(Math.max(tri[0][1], tri[1][1], tri[2][1])));
+    
+    for (let y = minY; y <= maxY; y++) {
+      const intersections = [];
+      const edges = [[tri[0], tri[1]], [tri[1], tri[2]], [tri[2], tri[0]]];
+      
+      for (const [a, b] of edges) {
+        if ((a[1] <= y && b[1] > y) || (b[1] <= y && a[1] > y)) {
+          const t_val = (y - a[1]) / (b[1] - a[1]);
+          intersections.push(a[0] + t_val * (b[0] - a[0]));
+        }
+      }
+      
+      if (intersections.length >= 2) {
+        intersections.sort((a, b) => a - b);
+        const xStart = Math.max(0, Math.ceil(intersections[0]));
+        const xEnd = Math.min(width - 1, Math.floor(intersections[1]));
+        for (let x = xStart; x <= xEnd; x++) {
+          triAssign[y * width + x] = t;
+        }
+      }
+    }
+  }
+  
+  // 计算每个三角形的平均颜色
+  const triColors = new Float32Array(triangles.length * 4);
+  const triCounts = new Uint32Array(triangles.length);
+  
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = y * width + x;
+      const t = triAssign[idx];
+      if (t >= 0) {
+        const ci = t * 4;
+        const pi = idx * 4;
+        triColors[ci] += data[pi];
+        triColors[ci + 1] += data[pi + 1];
+        triColors[ci + 2] += data[pi + 2];
+        triColors[ci + 3] += 255;
+        triCounts[t]++;
+      }
+    }
+  }
+  
+  // 归一化颜色
+  for (let t = 0; t < triangles.length; t++) {
+    if (triCounts[t] > 0) {
+      const ci = t * 4;
+      triColors[ci] /= triCounts[t];
+      triColors[ci + 1] /= triCounts[t];
+      triColors[ci + 2] /= triCounts[t];
+      triColors[ci + 3] = 255;
+    }
+  }
+  
+  // 渲染
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = (y * width + x) * 4;
+      const t = triAssign[idx];
+      if (t >= 0) {
+        const ci = t * 4;
+        output.data[idx] = Math.round(triColors[ci]);
+        output.data[idx + 1] = Math.round(triColors[ci + 1]);
+        output.data[idx + 2] = Math.round(triColors[ci + 2]);
+        output.data[idx + 3] = 255;
+      }
+    }
+  }
+  
+  ctx.putImageData(output, 0, 0);
+  
+  // 绘制边框
+  if (showStroke) {
+    ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+    ctx.lineWidth = strokeWidth;
+    for (const tri of triangles) {
+      ctx.beginPath();
+      ctx.moveTo(tri[0][0], tri[0][1]);
+      ctx.lineTo(tri[1][0], tri[1][1]);
+      ctx.lineTo(tri[2][0], tri[2][1]);
+      ctx.closePath();
+      ctx.stroke();
+    }
+  }
+  
+  return canvas;
+}
+
+// 六边形马赛克
+function renderHexagon(imageData, hexSize, showStroke, strokeWidth) {
+  const { width, height, data } = imageData;
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  
+  const sqrt3 = Math.sqrt(3);
+  const rowH = hexSize * sqrt3 * 1.5;
+  const colW = hexSize * 2;
+  
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, width, height);
+  
+  for (let row = -1; row < height / rowH + 2; row++) {
+    for (let col = -1; col < width / colW + 2; col++) {
+      const cx = col * colW + (row % 2) * (colW / 2);
+      const cy = row * rowH;
+      
+      const angles = Array.from({length: 7}, (_, i) => i * Math.PI / 3 + Math.PI / 6);
+      const pts = angles.map(a => [cx + hexSize * Math.cos(a), cy + hexSize * Math.sin(a)]);
+      
+      // 取六边形内平均颜色
+      let rSum = 0, gSum = 0, bSum = 0, count = 0;
+      const minX = Math.max(0, Math.floor(cx - hexSize));
+      const maxX = Math.min(width - 1, Math.ceil(cx + hexSize));
+      const minY = Math.max(0, Math.floor(cy - hexSize));
+      const maxY = Math.min(height - 1, Math.ceil(cy + hexSize));
+      
+      for (let y = minY; y <= maxY; y++) {
+        for (let x = minX; x <= maxX; x++) {
+          if (pointInPolygon(x, y, pts)) {
+            const pi = (y * width + x) * 4;
+            rSum += data[pi]; gSum += data[pi + 1]; bSum += data[pi + 2]; count++;
+          }
+        }
+      }
+      
+      if (count > 0) {
+        ctx.fillStyle = `rgb(${Math.round(rSum/count)},${Math.round(gSum/count)},${Math.round(bSum/count)})`;
+      } else {
+        const cyI = Math.min(height - 1, Math.max(0, Math.round(cy)));
+        const cxI = Math.min(width - 1, Math.max(0, Math.round(cx)));
+        const pi = (cyI * width + cxI) * 4;
+        ctx.fillStyle = `rgb(${data[pi]},${data[pi+1]},${data[pi+2]})`;
+      }
+      
+      ctx.beginPath();
+      ctx.moveTo(pts[0][0], pts[0][1]);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+      ctx.closePath();
+      ctx.fill();
+      
+      if (showStroke) {
+        ctx.strokeStyle = `rgba(0,0,0,0.2)`;
+        ctx.lineWidth = strokeWidth;
+        ctx.stroke();
+      }
+    }
+  }
+  
+  return canvas;
+}
+
+// 多边形内判断
+function pointInPolygon(x, y, pts) {
+  let inside = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const xi = pts[i][0], yi = pts[i][1];
+    const xj = pts[j][0], yj = pts[j][1];
+    if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+// 圆形点阵
+function renderCircle(imageData, radius, showStroke, strokeWidth) {
+  const { width, height, data } = imageData;
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, width, height);
+  
+  const step = radius * 2 + 2;
+  
+  for (let y = radius; y < height - radius; y += step) {
+    for (let x = radius; x < width - radius; x += step) {
+      let rSum = 0, gSum = 0, bSum = 0, count = 0;
+      
+      for (let dy = -radius; dy <= radius; dy++) {
+        for (let dx = -radius; dx <= radius; dx++) {
+          if (dx * dx + dy * dy <= radius * radius) {
+            const px = x + dx, py = y + dy;
+            if (px >= 0 && px < width && py >= 0 && py < height) {
+              const pi = (py * width + px) * 4;
+              rSum += data[pi]; gSum += data[pi + 1]; bSum += data[pi + 2]; count++;
+            }
+          }
+        }
+      }
+      
+      if (count > 0) {
+        ctx.fillStyle = `rgb(${Math.round(rSum/count)},${Math.round(gSum/count)},${Math.round(bSum/count)})`;
+      } else {
+        const pi = (y * width + x) * 4;
+        ctx.fillStyle = `rgb(${data[pi]},${data[pi+1]},${data[pi+2]})`;
+      }
+      
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fill();
+      
+      if (showStroke) {
+        ctx.strokeStyle = `rgba(0,0,0,0.15)`;
+        ctx.lineWidth = strokeWidth;
+        ctx.stroke();
+      }
+    }
+  }
+  
+  return canvas;
+}
+
+// UI 事件
+const fileInput = document.getElementById('fileInput');
+const uploadArea = document.getElementById('uploadArea');
+const convertBtn = document.getElementById('convertBtn');
+const downloadBtn = document.getElementById('downloadBtn');
+const sourceCanvas = document.getElementById('sourceCanvas');
+const resultCanvas = document.getElementById('resultCanvas');
+const status = document.getElementById('status');
+let sourceImage = null;
+
+uploadArea.addEventListener('dragover', e => { e.preventDefault(); uploadArea.style.borderColor = '#764ba2'; });
+uploadArea.addEventListener('dragleave', () => { uploadArea.style.borderColor = '#667eea'; });
+uploadArea.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadArea.style.borderColor = '#667eea';
+  if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+});
+
+fileInput.addEventListener('change', e => { if (e.target.files[0]) handleFile(e.target.files[0]); });
+
+['numPoints', 'gridSize', 'strokeWidth'].forEach(id => {
+  const el = document.getElementById(id);
+  const display = document.getElementById(id + 'Value');
+  el.addEventListener('input', () => display.textContent = el.value);
+});
+
+function handleFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      sourceImage = img;
+      const maxDim = 800;
+      let w = img.width, h = img.height;
+      if (w > maxDim || h > maxDim) {
+        const ratio = Math.min(maxDim / w, maxDim / h);
+        w = Math.round(w * ratio);
+        h = Math.round(h * ratio);
+      }
+      sourceCanvas.width = w; sourceCanvas.height = h;
+      resultCanvas.width = w; resultCanvas.height = h;
+      const ctx = sourceCanvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      uploadArea.innerHTML = `<p>✅ 已加载: ${file.name} (${img.width}×${img.height})</p>`;
+      convertBtn.disabled = false;
+      status.textContent = '点击「开始转换」生成几何马赛克';
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function updateProgress(p) {
+  const bar = document.getElementById('progressBar');
+  if (bar) bar.style.width = (p * 100) + '%';
+}
+window.updateProgress = updateProgress;
+
+convertBtn.addEventListener('click', async () => {
+  if (!sourceImage) return;
+  
+  const mode = document.getElementById('mode').value;
+  const numPoints = parseInt(document.getElementById('numPoints').value);
+  const gridSize = parseInt(document.getElementById('gridSize').value);
+  const showStroke = document.getElementById('showStroke').checked;
+  const strokeWidth = parseFloat(document.getElementById('strokeWidth').value);
+  
+  convertBtn.disabled = true;
+  downloadBtn.disabled = true;
+  status.textContent = '⏳ 处理中...';
+  document.getElementById('progressContainer').style.display = 'block';
+  updateProgress(0);
+  
+  await new Promise(r => setTimeout(r, 100));
+  
+  try {
+    const ctx = sourceCanvas.getContext('2d');
+    const imageData = ctx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
+    const w = sourceCanvas.width, h = sourceCanvas.height;
+    
+    let resultCanvas_el;
+    
+    if (mode === 'delaunay') {
+      status.textContent = '⏳ 采样点...';
+      updateProgress(0.1);
+      await new Promise(r => setTimeout(r, 50));
+      
+      const points = extractPoints(imageData, numPoints, gridSize);
+      status.textContent = `⏳ 三角剖分 (${points.length} 个点)...`;
+      updateProgress(0.3);
+      await new Promise(r => setTimeout(r, 50));
+      
+      const delaunay = new Delaunay(points);
+      const triangles = delaunay.triangles;
+      
+      status.textContent = `⏳ 精确颜色填充 (${triangles.length} 个三角形)...`;
+      updateProgress(0.6);
+      await new Promise(r => setTimeout(r, 50));
+      
+      resultCanvas_el = renderMosaic(imageData, triangles, points, showStroke, strokeWidth);
+    } else if (mode === 'voronoi') {
+      // Voronoi 模式：使用简化的基于网格的方法
+      status.textContent = '⏳ 生成 Voronoi 多边形...';
+      updateProgress(0.2);
+      await new Promise(r => setTimeout(r, 50));
+      
+      const points = extractPoints(imageData, numPoints, gridSize);
+      
+      // 使用 canvas 创建 Voronoi 近似
+      resultCanvas_el = document.createElement('canvas');
+      resultCanvas_el.width = w;
+      resultCanvas_el.height = h;
+      const rctx = resultCanvas_el.getContext('2d');
+      
+      // 为每个像素分配最近的点
+      const imageData_out = rctx.createImageData(w, h);
+      const d = imageData_out.data;
+      const src = imageData.data;
+      
+      // 采样加速：只在需要的地方计算
+      const blockSize = 4;
+      for (let by = 0; by < h; by += blockSize) {
+        for (let bx = 0; bx < w; bx += blockSize) {
+          // 找最近的点
+          let bestDist = Infinity, bestIdx = 0;
+          const mx = bx + blockSize / 2, my = by + blockSize / 2;
+          
+          for (let i = 0; i < points.length; i++) {
+            const dx = mx - points[i][0], dy = my - points[i][1];
+            const dist = dx * dx + dy * dy;
+            if (dist < bestDist) { bestDist = dist; bestIdx = i; }
+          }
+          
+          const ci = bestIdx;
+          let rSum = 0, gSum = 0, bSum = 0, count = 0;
+          
+          for (let dy = 0; dy < blockSize && by + dy < h; dy++) {
+            for (let dx = 0; dx < blockSize && bx + dx < w; dx++) {
+              const px = bx + dx, py = by + dy;
+              // 验证是否真的属于这个点
+              let nearest = bestIdx;
+              let nearestDist = bestDist;
+              for (let i = 0; i < points.length; i++) {
+                const ddx = px - points[i][0], ddy = py - points[i][1];
+                const dist = ddx * ddx + ddy * ddy;
+                if (dist < nearestDist) { nearestDist = dist; nearest = i; }
+              }
+              
+              const pi = (py * w + px) * 4;
+              rSum += src[pi]; gSum += src[pi + 1]; bSum += src[pi + 2]; count++;
+            }
+          }
+          
+          if (count > 0) {
+            const r = Math.round(rSum / count), g = Math.round(gSum / count), b = Math.round(bSum / count);
+            for (let dy = 0; dy < blockSize && by + dy < h; dy++) {
+              for (let dx = 0; dx < blockSize && bx + dx < w; dx++) {
+                const pi = ((by + dy) * w + (bx + dx)) * 4;
+                d[pi] = r; d[pi + 1] = g; d[pi + 2] = b; d[pi + 3] = 255;
+              }
+            }
+          }
+        }
+        
+        if (by % 40 === 0) updateProgress(0.3 + (by / h) * 0.5);
+      }
+      
+      rctx.putImageData(imageData_out, 0, 0);
+      
+      if (showStroke) {
+        rctx.strokeStyle = 'rgba(0,0,0,0.2)';
+        rctx.lineWidth = strokeWidth;
+        // 画简单的网格线作为边框近似
+        for (let i = 0; i < points.length; i++) {
+          for (let j = i + 1; j < points.length; j++) {
+            const dx = points[i][0] - points[j][0];
+            const dy = points[i][1] - points[j][1];
+            if (dx * dx + dy * dy < gridSize * gridSize * 4) {
+              rctx.beginPath();
+              rctx.moveTo(points[i][0], points[i][1]);
+              rctx.lineTo(points[j][0], points[j][1]);
+              rctx.stroke();
+            }
+          }
+        }
+      }
+    } else if (mode === 'hexagon') {
+      status.textContent = '⏳ 六边形马赛克...';
+      updateProgress(0.3);
+      resultCanvas_el = renderHexagon(imageData, gridSize, showStroke, strokeWidth);
+    } else if (mode === 'circle') {
+      status.textContent = '⏳ 圆形点阵...';
+      updateProgress(0.3);
+      resultCanvas_el = renderCircle(imageData, gridSize, showStroke, strokeWidth);
+    }
+    
+    const resultCtx = resultCanvas.getContext('2d');
+    resultCtx.drawImage(resultCanvas_el, 0, 0);
+    
+    updateProgress(1);
+    status.textContent = '✅ 完成！';
+    downloadBtn.disabled = false;
+  } catch (err) {
+    status.textContent = `❌ 错误: ${err.message}`;
+    console.error(err);
+  }
+  
+  convertBtn.disabled = false;
+});
+
+downloadBtn.addEventListener('click', () => {
+  const link = document.createElement('a');
+  link.download = 'geo-mosaic.png';
+  link.href = resultCanvas.toDataURL('image/png');
+  link.click();
+});
+</script>
+</body>
+</html>

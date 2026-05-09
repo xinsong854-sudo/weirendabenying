@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DTags - Danbooru 词库智能匹配</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&family=Source+Code+Pro&display=swap');
+:root {
+  --bg:#faf9f6; --card:#fffdf8; --border:#d4c9b8; --border-l:#e8e0d4;
+  --dark:#2c2418; --mid:#5a4e40; --light:#8a7e70;
+  --accent:#8b4513; --accent-l:#c47a4a; --glow:rgba(139,69,19,.08);
+  --t-general:#4a7ab5; --t-character:#4a8b5a; --t-copyright:#7a4a8b;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family:'Noto Serif SC',Georgia,serif; background:var(--bg); color:var(--dark);
+  min-height:100vh;
+  background-image:url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23d4c9b8' fill-opacity='.1'%3E%3Cpath d='M0 0h40v40H0z'/%3E%3Cpath d='M20 0v40M0 20h40' stroke='%23d4c9b8' stroke-width='.5' fill='none'/%3E%3C/g%3E%3C/svg%3E");
+}
+.container { max-width:900px; margin:0 auto; padding:2rem 1.5rem; }
+header { text-align:center; margin-bottom:2.5rem; padding-bottom:1.5rem; border-bottom:1px solid var(--border); }
+header h1 {
+  font-family:'Noto Serif SC',serif; font-size:2.2rem; font-weight:700; color:var(--dark);
+  margin-bottom:.3rem;
+}
+header h1 .a { color:var(--accent); font-style:italic; }
+header .sub { font-size:.95rem; color:var(--light); font-style:italic; letter-spacing:.1em; }
+.divider { display:flex; align-items:center; justify-content:center; gap:1rem; margin:1.2rem 0; }
+.divider::before,.divider::after { content:''; flex:1; max-width:160px; height:1px; background:linear-gradient(to right,transparent,var(--border-l)); }
+.divider::after { background:linear-gradient(to left,transparent,var(--border-l)); }
+.divider span { color:var(--accent-l); font-size:.85rem; }
+.input-section {
+  background:var(--card); border:1px solid var(--border); border-radius:2px;
+  padding:1.5rem; margin-bottom:2rem; box-shadow:0 2px 8px rgba(44,36,24,.04); position:relative;
+}
+.input-section::before {
+  content:''; position:absolute; top:0; left:0; right:0; height:2px;
+  background:linear-gradient(to right,var(--accent),var(--accent-l),var(--accent)); opacity:.6;
+}
+.input-section label { display:block; margin-bottom:.8rem; font-size:.95rem; color:var(--mid); font-style:italic; }
+.input-wrap { display:flex; gap:.8rem; align-items:flex-start; }
+#userInput {
+  flex:1; padding:.85rem 1rem; font-size:1rem; font-family:'Noto Serif SC',serif;
+  background:#fff; border:1px solid var(--border); border-radius:2px; color:var(--dark); outline:none;
+  transition:border-color .2s,box-shadow .2s; min-height:2.5rem; resize:vertical;
+}
+#userInput:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--glow); }
+#userInput::placeholder { color:var(--light); font-style:italic; }
+#searchBtn {
+  padding:.85rem 1.8rem; font-size:.95rem; font-family:'Noto Serif SC',serif;
+  background:var(--accent); border:1px solid var(--accent); border-radius:2px;
+  color:#fff; cursor:pointer; transition:all .2s; white-space:nowrap; letter-spacing:.05em;
+}
+#searchBtn:hover { background:var(--accent-l); border-color:var(--accent-l); }
+#searchBtn:disabled { opacity:.5; cursor:not-allowed; }
+.examples { display:flex; gap:.4rem; flex-wrap:wrap; align-items:center; margin-top:.8rem; }
+.examples-label { font-size:.8rem; color:var(--light); margin-right:.2rem; font-style:italic; }
+.example-btn {
+  padding:.3rem .7rem; background:transparent; border:1px solid var(--border-l); border-radius:2px;
+  color:var(--mid); cursor:pointer; font-size:.8rem; font-family:'Noto Serif SC',serif; transition:all .2s;
+}
+.example-btn:hover { background:var(--glow); border-color:var(--accent-l); color:var(--accent); }
+.loading { text-align:center; padding:2.5rem; display:none; }
+.loading.active { display:block; }
+.spinner { width:32px; height:32px; border:2px solid var(--border-l); border-top-color:var(--accent); border-radius:50%; animation:spin 1s linear infinite; margin:0 auto .8rem; }
+@keyframes spin { to { transform:rotate(360deg); } }
+.loading-text { color:var(--light); font-style:italic; font-size:.9rem; }
+.results-section { display:none; }
+.results-section.active { display:block; }
+.results-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:1.2rem; padding-bottom:.8rem; border-bottom:1px solid var(--border-l); }
+.results-header h2 { font-size:1.3rem; color:var(--dark); }
+.results-header h2 span { font-weight:400; color:var(--light); font-size:.9rem; }
+.action-btn {
+  padding:.5rem 1rem; background:transparent; border:1px solid var(--border); border-radius:2px;
+  color:var(--mid); cursor:pointer; font-size:.85rem; font-family:'Noto Serif SC',serif; transition:all .2s;
+}
+.action-btn:hover { background:var(--accent); border-color:var(--accent); color:#fff; }
+.tags-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:.8rem; }
+.tag-card {
+  background:var(--card); border:1px solid var(--border-l); border-radius:2px;
+  padding:1rem; transition:all .2s; cursor:pointer; position:relative;
+}
+.tag-card::before {
+  content:''; position:absolute; top:0; left:0; right:0; height:2px;
+  background:var(--t-general); opacity:.6;
+}
+.tag-card:hover { border-color:var(--accent-l); box-shadow:0 2px 8px rgba(44,36,24,.06); transform:translateY(-1px); }
+.tag-card.selected { border-color:var(--accent); background:var(--glow); }
+.tag-name { font-family:'Source Code Pro',monospace; font-size:1rem; font-weight:600; color:var(--dark); margin-bottom:.2rem; }
+.tag-zh { font-size:.85rem; color:var(--light); margin-bottom:.4rem; }
+.tag-reason { font-size:.75rem; color:var(--accent); font-style:italic; }
+.tag-meta { display:flex; justify-content:space-between; align-items:center; margin-top:.4rem; padding-top:.4rem; border-top:1px dotted var(--border-l); }
+.tag-cat { font-size:.65rem; padding:.1rem .4rem; border-radius:2px; text-transform:uppercase; font-weight:600; letter-spacing:.06em; background:rgba(74,122,181,.1); color:var(--t-general); }
+.tag-posts { font-family:'Source Code Pro',monospace; font-size:.75rem; color:var(--light); }
+.explanation-box {
+  background:var(--card); border:1px solid var(--border); border-radius:2px;
+  padding:1.2rem; margin-top:1.5rem; display:none;
+}
+.explanation-box.active { display:block; }
+.explanation-box h3 { font-size:1rem; color:var(--accent); margin-bottom:.5rem; }
+.explanation-box p { color:var(--mid); font-size:.9rem; line-height:1.6; }
+.diagnostics {
+  background:var(--card); border:1px solid var(--border); border-radius:2px;
+  margin-top:1.5rem; overflow:hidden; display:none;
+}
+.diagnostics.active { display:block; }
+.diag-header { display:flex; justify-content:space-between; align-items:center; padding:1rem 1.2rem; cursor:pointer; border-bottom:1px solid var(--border-l); background:var(--bg); }
+.diag-header:hover { background:var(--glow); }
+.diag-header h3 { font-size:1rem; color:var(--accent); }
+.diag-arrow { font-size:.65rem; color:var(--light); transition:transform .2s; }
+.diag-arrow.open { transform:rotate(180deg); }
+.diag-body { padding:0; max-height:0; overflow:hidden; transition:max-height .4s ease; }
+.diag-body.open { max-height:5000px; overflow-y:auto; padding:1.2rem; }
+.pain { display:flex; gap:.6rem; padding:.6rem; background:var(--bg); border-left:2px solid var(--accent-l); border-radius:0 2px 2px 0; margin-bottom:.4rem; font-size:.85rem; color:var(--mid); }
+.pain .pp-label { font-weight:600; color:var(--accent); min-width:4em; flex-shrink:0; }
+.suggest-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:.6rem; }
+.suggest-card {
+  background:var(--bg); border:1px solid var(--border-l); border-radius:2px; padding:.8rem;
+  cursor:pointer; transition:all .2s; position:relative;
+}
+.suggest-card:hover { border-color:var(--accent); background:var(--glow); }
+.suggest-card .sg-name { font-family:'Source Code Pro',monospace; font-size:.9rem; font-weight:600; color:var(--dark); }
+.suggest-card .sg-zh { font-size:.8rem; color:var(--light); }
+.suggest-card .sg-reason { font-size:.75rem; color:var(--accent); font-style:italic; margin-top:.2rem; }
+.combo-item {
+  background:var(--bg); border:1px solid var(--border-l); border-radius:2px;
+  padding:.6rem .8rem; margin-bottom:.4rem; cursor:pointer; transition:all .2s;
+}
+.combo-item:hover { background:var(--glow); border-color:var(--accent-l); }
+.combo-item .ci-tags { font-family:'Source Code Pro',monospace; font-size:.8rem; color:var(--dark); }
+.combo-item .ci-type { display:inline-block; font-size:.65rem; padding:.05rem .3rem; background:var(--accent); color:#fff; border-radius:2px; margin-bottom:.2rem; }
+.combo-item .ci-reason { font-size:.75rem; color:var(--light); font-style:italic; }
+.selected-bar {
+  position:fixed; bottom:0; left:0; right:0; background:var(--card);
+  padding:.8rem 1.5rem; border-top:1px solid var(--border); display:none;
+  align-items:center; justify-content:space-between; z-index:100;
+  box-shadow:0 -2px 8px rgba(44,36,24,.04);
+}
+.selected-bar.active { display:flex; }
+.sel-tags { display:flex; gap:.3rem; flex-wrap:wrap; flex:1; margin-right:1rem; max-height:50px; overflow-y:auto; }
+.sel-tag {
+  font-family:'Source Code Pro',monospace; background:var(--bg); border:1px solid var(--border-l);
+  padding:.2rem .5rem; border-radius:2px; font-size:.75rem; display:flex; align-items:center; gap:.3rem;
+}
+.sel-tag .rm { cursor:pointer; color:var(--accent); font-weight:bold; }
+.sel-count { color:var(--light); margin-right:.8rem; font-style:italic; font-size:.85rem; }
+#copySelBtn {
+  padding:.5rem 1rem; background:var(--accent); border:1px solid var(--accent); border-radius:2px;
+  color:#fff; cursor:pointer; font-family:'Noto Serif SC',serif; font-size:.85rem;
+}
+#copySelBtn:hover { background:var(--accent-l); }
+.toast {
+  position:fixed; bottom:60px; left:50%; transform:translateX(-50%) translateY(100px);
+  background:var(--dark); padding:.6rem 1.2rem; border-radius:2px;
+  color:#fff; font-size:.85rem; opacity:0; transition:all .3s; z-index:101;
+}
+.toast.active { transform:translateX(-50%) translateY(0); opacity:1; }
+footer {
+  text-align:center; margin-top:2.5rem; padding-top:1.5rem; border-top:1px solid var(--border);
+  color:var(--light); font-size:.8rem; font-style:italic;
+}
+footer a { color:var(--accent); text-decoration:none; }
+footer a:hover { text-decoration:underline; }
+.invite {
+  text-align:center; padding:1.2rem 1rem; margin-top:1.2rem;
+  background:var(--card); border:1px solid var(--border); border-radius:2px;
+  color:var(--accent); font-size:.95rem; letter-spacing:.05em;
+  box-shadow:0 2px 8px rgba(44,36,24,.04);
+}
+@media (max-width:600px) {
+  .container { padding:1rem; }
+  header h1 { font-size:1.6rem; }
+  .input-wrap { flex-direction:column; }
+  #searchBtn { width:100%; }
+  .tags-grid { grid-template-columns:1fr; }
+  .selected-bar { flex-direction:column; gap:.4rem; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>DTags <span class="a">Danbooru</span></h1>
+    <p class="sub">词库智能匹配系统</p>
+    <div class="divider"><span>✦</span></div>
+  </header>
+
+  <section class="input-section">
+    <label for="userInput">描述你想要的图像内容：</label>
+    <div class="input-wrap">
+      <input type="text" id="userInput" placeholder="例如：银发蓝眼的动漫少女、赛博朋克猫娘、樱花树下的和服少女..." autocomplete="off">
+      <button id="searchBtn" onclick="doSearch()">匹配标签</button>
+    </div>
+    <div class="examples">
+      <span class="examples-label">试试：</span>
+      <button class="example-btn" onclick="setEx('银发蓝眼')">银发蓝眼</button>
+      <button class="example-btn" onclick="setEx('赛博朋克猫娘')">赛博猫娘</button>
+      <button class="example-btn" onclick="setEx('金发双马尾女仆')">金发女仆</button>
+      <button class="example-btn" onclick="setEx('异色瞳精灵翅膀')">异色瞳精灵</button>
+      <button class="example-btn" onclick="setEx('初音未来')">初音未来</button>
+    </div>
+  </section>
+
+  <div class="loading" id="loading">
+    <div class="spinner"></div>
+    <div class="loading-text" id="loadText">AI 正在匹配标签...</div>
+  </div>
+
+  <div class="results-section" id="results">
+    <div class="results-header">
+      <h2>匹配结果 <span id="resCount"></span></h2>
+      <div style="display:flex;gap:.5rem">
+        <button class="action-btn" onclick="copyAll()">复制全部</button>
+        <button class="action-btn" onclick="doAnalyze()">智能诊断</button>
+      </div>
+    </div>
+    <div class="tags-grid" id="tagsGrid"></div>
+  </div>
+
+  <div class="explanation-box" id="expBox">
+    <h3>匹配说明</h3>
+    <p id="expText"></p>
+  </div>
+
+  <div class="diagnostics" id="diag">
+    <div class="diag-header" onclick="toggleDiag()">
+      <h3>🔬 智能诊断</h3>
+      <span class="diag-arrow" id="dArrow">▼</span>
+    </div>
+    <div class="diag-body" id="dBody"><div id="dContent"></div></div>
+  </div>
+</div>
+
+<div class="selected-bar" id="selBar">
+  <div class="sel-tags" id="selTags"></div>
+  <span class="sel-count" id="selCount"></span>
+  <button id="copySelBtn" onclick="copySel()">复制选中</button>
+</div>
+<div class="toast" id="toast"></div>
+
+<footer>
+  Danbooru 词库 · 智能匹配 · 实时搜索
+</footer>
+<div class="invite">
+  安诺涅邀请你加入捏捏骑士团 1041095604 · 伪人大本营 1062624601
+</div>
+
+<script>
+const API = '';
+const selected = new Set();
+let curTags = [];
+let diagOpen = false;
+
+function setEx(t) { document.getElementById('userInput').value = t; doSearch(); }
+
+async function doSearch() {
+    const q = document.getElementById('userInput').value.trim();
+    if (!q) return toast('请输入描述');
+    const btn = document.getElementById('searchBtn');
+    btn.disabled = true;
+    showLoad(true, '正在匹配标签...');
+    hideRes();
+
+    try {
+        const r = await fetch(API + '/api/match', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: q })
+        });
+        const d = await r.json();
+        if (!d.success) throw new Error(d.error || '匹配失败');
+        curTags = d.tags || [];
+        render(d);
+    } catch(e) {
+        toast('错误: ' + e.message);
+    } finally {
+        btn.disabled = false;
+        showLoad(false);
+    }
+}
+
+function render(d) {
+    const grid = document.getElementById('tagsGrid');
+    document.getElementById('resCount').textContent = `(${d.tags?.length || 0} 个标签)`;
+    grid.innerHTML = d.tags.map((t, i) => `
+        <div class="tag-card" onclick="toggleSel(${i})">
+            <div class="tag-name">${t.name}</div>
+            <div class="tag-zh">${t.zh}</div>
+            <div class="tag-reason">${t.reason || ''}</div>
+        </div>
+    `).join('');
+    document.getElementById('results').classList.add('active');
+
+    if (d.explanation) {
+        document.getElementById('expText').textContent = d.explanation;
+        document.getElementById('expBox').classList.add('active');
+    } else {
+        document.getElementById('expBox').classList.remove('active');
+    }
+    selected.clear();
+    updSel();
+}
+
+function toggleSel(i) {
+    const t = curTags[i];
+    if (!t) return;
+    if (selected.has(t.name)) selected.delete(t.name);
+    else selected.add(t.name);
+    document.querySelectorAll('.tag-card').forEach((c, j) => {
+        c.classList.toggle('selected', selected.has(curTags[j]?.name));
+    });
+    updSel();
+}
+
+function updSel() {
+    const bar = document.getElementById('selBar');
+    if (!selected.size) { bar.classList.remove('active'); return; }
+    bar.classList.add('active');
+    document.getElementById('selCount').textContent = `已选 ${selected.size} 个`;
+    document.getElementById('selTags').innerHTML = Array.from(selected).map(t =>
+        `<span class="sel-tag">${t}<span class="rm" onclick="remSel('${t}')">×</span></span>`
+    ).join('');
+}
+
+function remSel(n) { selected.delete(n); updSel(); document.querySelectorAll('.tag-card').forEach((c, i) => { if (curTags[i]?.name === n) c.classList.remove('selected'); }); }
+
+function copyAll() {
+    const t = curTags.map(t => t.name).join(', ');
+    navigator.clipboard.writeText(t);
+    toast(`已复制 ${curTags.length} 个标签`);
+}
+
+function copySel() {
+    const t = Array.from(selected).join(', ');
+    navigator.clipboard.writeText(t);
+    toast(`已复制 ${selected.size} 个标签`);
+}
+
+function hideRes() { document.getElementById('results').classList.remove('active'); document.getElementById('expBox').classList.remove('active'); document.getElementById('diag').classList.remove('active'); }
+function showLoad(s, txt) { const el = document.getElementById('loading'); el.classList.toggle('active', s); if (txt) document.getElementById('loadText').textContent = txt; }
+function toast(m) { const t = document.getElementById('toast'); t.textContent = m; t.classList.add('active'); setTimeout(() => t.classList.remove('active'), 2000); }
+
+async function doAnalyze() {
+    if (!curTags.length) return;
+    const diag = document.getElementById('diag');
+    diag.classList.add('active');
+    document.getElementById('dBody').classList.add('open');
+    document.getElementById('dArrow').classList.add('open');
+    const dContent = document.getElementById('dContent');
+    dContent.innerHTML = '<p style="color:var(--light);text-align:center;">分析中...</p>';
+    try {
+        const r = await fetch(API + '/api/analyze', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tags: curTags.map(t => t.name) })
+        });
+        const d = await r.json();
+        if (!d.success) throw new Error(d.error);
+        let h = '';
+        if (d.score !== undefined) {
+            const sc = d.score;
+            const col = sc >= 70 ? 'var(--t-character)' : sc >= 40 ? 'var(--t-general)' : 'var(--t-copyright)';
+            h += `<div style="margin-bottom:1rem;"><strong style="color:var(--accent);">独特性评分：</strong><span style="font-size:1.8rem;font-weight:700;color:${col}">${sc}</span>/100
+            <div style="font-size:.85rem;color:var(--light);margin-top:.2rem;">${sc >= 70 ? '标签组合很有辨识度' : '建议添加更多个性化标签'}</div></div>`;
+        }
+        if (d.pain?.length) {
+            h += '<div style="margin-bottom:1rem;"><strong style="color:var(--accent);">⚠️ 潜在问题</strong>';
+            d.pain.forEach(p => { h += `<div class="pain"><span class="pp-label">${p.type}</span>${p.desc}</div>`; });
+            h += '</div>';
+        }
+        if (d.suggest?.length) {
+            h += '<div style="margin-bottom:1rem;"><strong style="color:var(--accent);">✨ 优化建议</strong><div class="suggest-grid">';
+            d.suggest.forEach(s => { h += `<div class="suggest-card" onclick="addTag('${s.name}')"><div class="sg-name">${s.name}</div><div class="sg-zh">${s.zh}</div><div class="sg-reason">${s.reason}</div></div>`; });
+            h += '</div></div>';
+        }
+        if (d.combos?.length) {
+            h += '<div><strong style="color:var(--accent);">🔗 创意组合</strong>';
+            d.combos.forEach(c => { h += `<div class="combo-item" onclick="addTag('${c.name}')"><span class="ci-type">${c.type}</span><div class="ci-tags">${c.name} (${c.zh})</div><div class="ci-reason">${c.reason}</div></div>`; });
+            h += '</div>';
+        }
+        dContent.innerHTML = h || '<p style="color:var(--light);">暂无诊断结果。</p>';
+    } catch(e) {
+        dContent.innerHTML = `<p style="color:var(--light);">诊断失败：${e.message}</p>`;
+    }
+}
+
+function addTag(n) { selected.add(n); updSel(); toast(`已添加 ${n}`); }
+function toggleDiag() { diagOpen = !diagOpen; document.getElementById('dBody').classList.toggle('open', diagOpen); document.getElementById('dArrow').classList.toggle('open', diagOpen); }
+
+document.getElementById('userInput').addEventListener('keypress', e => { if (e.key === 'Enter') doSearch(); });
+</script>
+</body>
+</html>

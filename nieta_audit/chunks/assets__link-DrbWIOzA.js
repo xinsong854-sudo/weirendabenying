@@ -1,0 +1,1 @@
+import{q as s}from"./talesofai-modules-common-ED_nEx2U.js";const c=(e,t)=>{const n="nieta://app".concat(e,"?").concat(s.stringify(t)),o=Date.now(),i=setTimeout(()=>{Date.now()-o>3e3||window.open("https://nieta.volctrack.com/a/GQTYqugN","_self")},2e3);document.addEventListener("visibilitychange",()=>{document.hidden&&clearTimeout(i)}),window.open(n,"_self")};export{c as o};

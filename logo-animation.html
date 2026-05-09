@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>捏捏骑士团 - Logo 几何动画</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: #fff;
+            font-family: sans-serif;
+        }
+        .container { width: 450px; height: 550px; }
+        svg { width: 100%; height: 100%; }
+        .geo-shape { opacity: 0; }
+        .replay-btn {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 12px 32px;
+            background: linear-gradient(135deg, #e8998a, #a8c89a);
+            border: none;
+            border-radius: 25px;
+            color: white;
+            font-size: 15px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.12);
+            transition: all 0.2s;
+        }
+        .replay-btn:hover { transform: translateX(-50%) scale(1.05); }
+        .title { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); color: #aaa; font-size: 13px; letter-spacing: 3px; }
+    </style>
+</head>
+<body>
+    <div class="title">几 何 构 成 动 画</div>
+    <div class="container">
+        <svg viewBox="0 0 450 550" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+                <linearGradient id="hairGrad" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#e8998a"/>
+                    <stop offset="100%" stop-color="#d48878"/>
+                </linearGradient>
+                <linearGradient id="leafGrad" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#a8c89a"/>
+                    <stop offset="100%" stop-color="#8ab87a"/>
+                </linearGradient>
+            </defs>
+            
+            <!-- ===== 骑士头盔（白色轮廓） ===== -->
+            <!-- 头盔顶部 -->
+            <path class="geo-shape" id="helmet-top" 
+                d="M215,115 Q218,85 245,78 Q270,72 290,85 Q305,95 310,115 Q312,125 310,135" 
+                fill="#faf8f5" stroke="#f0ede8" stroke-width="2" opacity="0"/>
+            
+            <!-- 头盔面罩/护鼻 - 标志性的十字形 -->
+            <path class="geo-shape" id="visor" 
+                d="M200,140 Q195,150 192,165 Q190,175 192,185 Q195,195 200,200 Q205,205 212,205 Q220,205 228,200 Q235,195 240,185 Q245,175 245,165 Q245,155 242,148 Q238,142 232,138 Q225,135 218,138 Q212,142 208,148" 
+                fill="#faf8f5" stroke="#f0ede8" stroke-width="1.5" opacity="0"/>
+            
+            <!-- 护鼻竖条 -->
+            <rect class="geo-shape" id="nose-guard" 
+                x="218" y="155" width="6" height="35" rx="2" fill="#faf8f5" stroke="#ece8e0" stroke-width="1" opacity="0"/>
+            
+            <!-- 头盔眼部开口 -->
+            <path class="geo-shape" id="eye-slit" 
+                d="M198,160 Q205,155 215,158 Q220,160 225,162" stroke="#ece8e0" stroke-width="2.5" fill="none" stroke-linecap="round" opacity="0"/>
+            
+            <!-- 头盔下颌护甲 -->
+            <path class="geo-shape" id="chin-guard" 
+                d="M200,200 Q205,215 215,225 Q225,232 238,230 Q248,225 252,215 Q255,205 252,195 Q248,188 240,185 Q232,182 225,188 Q218,195 212,200" 
+                fill="#faf8f5" stroke="#f0ede8" stroke-width="1.5" opacity="0"/>
+            
+            <!-- 头盔颈甲 -->
+            <path class="geo-shape" id="neck-guard" 
+                d="M215,230 Q220,245 228,255 Q238,265 250,268 Q260,270 268,265 Q275,258 278,248 Q280,238 278,230 Q275,222 268,218 Q260,215 252,218 Q245,222 238,228 Q230,235 222,240" 
+                fill="#faf8f5" stroke="#f0ede8" stroke-width="1.5" opacity="0"/>
+            
+            <!-- ===== 粉色长发（从头盔后飘逸而出） ===== -->
+            <!-- 头发主体 -->
+            <path class="geo-shape" id="hair-main" 
+                d="M310,135 Q320,155 325,185 Q330,220 328,255 Q325,290 315,315 Q305,335 290,345 Q278,350 270,342 Q265,332 268,318 Q272,302 280,285 Q290,268 295,250 Q300,232 300,215 Q298,198 292,185 Q285,172 275,165 Q265,160 255,162 Q248,165 245,172 Q242,180 245,190 Q250,200 260,205 Q270,208 280,205 Q288,200 292,190 Q295,178 292,168 Q288,158 278,152 Q268,148 258,152 Q250,158 248,168 Q246,178 250,188 Q255,198 265,202 Q275,205 282,200 Q288,192 288,182 Q285,172 275,168 Q265,165 258,170 Q252,178 252,188 Q255,198 262,202 Q270,205 275,200 Q280,192 278,182 Q275,175 268,172 Q262,170 258,175 Q255,182 258,190 Q262,198 268,200 Q272,200 275,195 Q278,188 275,180 Q272,175 268,175 Q265,178 265,185 Q268,192 272,195 Q275,195 278,188 Q280,180 278,172 Q275,168 270,168 Q265,170 265,178 Q268,185 272,188 Q275,188 278,182 Q280,175 278,168 Q275,165 270,168 Q265,172 265,180 Q268,188 272,190 Q275,190 278,185 Q280,178 278,172 Q275,170 270,172 Q265,175 265,182 Q268,190 272,192 Q275,192 278,188 Q280,180 278,175 Q275,172 270,175 Q265,178 265,185 Q268,192 272,195 Q275,195 278,190 Q280,182 278,178 Q275,175 270,178 Q265,182 265,190 Q268,198 272,200 Q275,200 278,195 Q280,188 278,182 Q275,178 270,180 Q265,185 265,192 Q268,200 272,202 Q275,202 278,198 Q280,190 278,185 Q275,182 270,185 Q265,190 265,198 Q268,205 272,208 Q275,208 278,205 Q280,198 278,192 Q275,188 270,192 Q265,198 265,205 Q268,212 272,215 Q275,215 278,212 Q280,205 278,198 Q275,195 270,198 Q265,202 265,210 Q268,218 272,220 Q275,220 278,218 Q280,212 278,205 Q275,202 270,205 Q265,210 265,218 Q268,225 272,228 Q275,228 278,225 Q280,218 278,212 Q275,208 270,212 Q265,218 265,225 Q268,232 272,235 Q275,235 278,232 Q280,225 278,218 Q275,215 270,218 Q265,225 265,232 Q268,240 272,242 Q275,242 278,240 Q280,232 278,225 Q275,222 270,225 Q265,230 265,238 Q268,245 272,248 Q275,248 278,245 Q280,238 278,232 Q275,228 270,232 Q265,238 265,245 Q268,252 272,255 Q275,255 278,252 Q280,245 278,238 Q275,235 270,238 Q265,245 265,252 Q268,260 272,262 Q275,262 278,260 Q280,252 278,245 Q275,242 270,245 Q265,252 265,260 Q268,268 272,270 Q275,270 278,268 Q280,260 278,252 Q275,248 270,252 Q265,258 265,265 Q268,272 272,275 Q275,275 278,272 Q280,265 278,258 Q275,255 270,258 Q265,265 265,272 Q268,280 272,282 Q275,282 278,280 Q280,272 278,265 Q275,262 270,265 Q265,272 265,280 Q268,288 272,290 Q275,290 278,288 Q280,280 278,272 Q275,268 270,272 Q265,278 265,285 Q268,292 272,295 Q275,295 278,292 Q280,285 278,278 Q275,275 270,278 Q265,285 265,292 Q268,300 272,302 Q275,302 278,300 Q280,292 278,285 Q275,282 270,285 Q265,292 265,300 Q268,308 272,310 Q275,310 278,308 Q280,300 278,292 Q275,288 270,292 Q265,300 265,308 Q268,315 272,318 Q275,318 278,315 Q280,308 278,300 Q275,295 270,300 Q265,308 265,315 Q268,322 272,325 Q275,325 278,322 Q280,315 278,308 Q275,302 270,308 Q265,315 265,322 Q268,330 272,332 Q275,332 278,330 Q280,322 278,315 Q275,310 270,315 Q265,322 265,330 Q268,338 272,340 Q275,340 278,338 Q280,330 278,322 Q275,318 270,322 Q265,330 265,338 Q268,345 272,348 Q275,348 278,345 Q280,338 278,330 Q275,325 270,330 Q265,338 265,345 Q268,352 272,355 Q275,355 278,352 Q280,345 278,338 Q275,332 270,338 Q265,345 265,352 Q268,360 272,362 Q275,362 278,360 Q280,352 278,345 Q275,340 270,345 Q265,352 265,360 Q268,368 272,370 Q275,370 278,368 Q280,360 278,352 Q275,348 270,352 Q265,360 265,368 Q268,375 272,378 Q275,378 278,375 Q280,368 278,360 Q275,355 270,360 Q265,368 265,375 Q268,382 272,385 Q275,385 278,382 Q280,375 278,368 Q275,362 270,368 Q265,375 265,382 Q268,390 272,392 Q275,392 278,390 Q280,382 278,375 Q275,370 270,375 Q265,382 265,390 Q268,398 272,400 Q275,400 278,398 Q280,390 278,382 Q275,378 270,382 Q265,390 265,398 Q268,405 272,408 Q275,408 278,405 Q280,398 278,390 Q275,385 270,390 Q265,398 265,405 Q268,412 272,415 Q275,415 278,412 Q280,405 278,398 Q275,392 270,398 Q265,405 265,412 Q268,420 272,422 Q275,422 278,420 Q280,412 278,405 Q275,400 270,405 Q265,412 265,420 Q268,428 272,430 Q275,430 278,428 Q280,420 278,412 Q275,408 270,412 Q265,420 265,428 Q268,435 272,438 Q275,438 278,435 Q280,428 278,420 Q275,415 270,420 Q265,428 265,435 Q268,442 272,445 Q275,445 278,442 Q280,435 278,428 Q275,422 270,428 Q265,435 265,442 Q268,450 272,452 Q275,452 278,450 Q280,442 278,435 Q275,430 270,435 Q265,442 265,450 Q268,458 272,460 Q275,460 278,458 Q280,450 278,442 Q275,438 270,442 Q265,450 265,458 Q268,465 272,468 Q275,468 278,465 Q280,458 278,450 Q275,445 270,450 Q265,458 265,465 Q268,472 272,475 Q275,475 278,472 Q280,465 278,458 Q275,452 270,458 Q265,465 265,472 Q268,480 272,482 Q275,482 278,480 Q280,472 278,465 Q275,460 270,465 Q265,472 265,480 Q268,488 272,490 Q275,490 278,488 Q280,480 278,472 Q275,468 270,472 Q265,480 265,488 Q268,495 272,498 Q275,498 278,495 Q280,488 278,480 Q275,475 270,480 Q265,488 265,495 Q268,502 272,505 Q275,505 278,502 Q280,495 278,488 Q275,482 270,488 Q265,495 265,502 Q268,510 272,512 Q275,512 278,510 Q280,502 278,495 Q275,490 270,495 Q265,502 265,510 Q268,518 272,520 Q275,520 278,518 Q280,510 278,502 Q275,498 270,502 Q265,510 265,518 Q268,525 272,528 Q275,528 278,525 Q280,518 278,510 Q275,505 270,510 Q265,518 265,525 Q268,532 272,535 Q275,535 278,532 Q280,525 278,518 Q275,512 270,518 Q265,525 265,532 Z" 
+                fill="url(#hairGrad)" opacity="0"/>
+            
+            <!-- 头发飘逸尾部 -->
+            <path class="geo-shape" id="hair-tail" 
+                d="M290,345 Q285,355 280,360 Q275,363 272,358 Q270,352 275,345 Q280,340 285,338 Q288,338 290,345" 
+                fill="url(#hairGrad)" opacity="0"/>
+            
+            <!-- ===== 骑士铠甲身体 ===== -->
+            <!-- 肩膀/肩甲 -->
+            <path class="geo-shape" id="shoulder" 
+                d="M195,280 Q185,285 180,295 Q175,305 178,315 Q182,322 192,325 Q202,328 212,325 Q220,320 225,310" 
+                fill="#faf8f5" stroke="#f0ede8" stroke-width="1.5" opacity="0"/>
+            
+            <!-- 胸甲 -->
+            <path class="geo-shape" id="chest" 
+                d="M178,315 Q175,335 178,355 Q182,375 192,390 Q205,405 222,410 Q240,413 255,405 Q270,395 278,380 Q285,365 282,350 Q278,335 270,325 Q260,315 248,310 Q235,305 222,308 Q210,312 200,318" 
+                fill="#faf8f5" stroke="#f0ede8" stroke-width="1.5" opacity="0"/>
+            
+            <!-- 胸甲细节 - 中缝 -->
+            <path class="geo-shape" id="chest-line" 
+                d="M222,310 Q225,340 225,370 Q225,395 222,410" stroke="#ece8e0" stroke-width="2" fill="none" opacity="0"/>
+            
+            <!-- 腰甲 -->
+            <path class="geo-shape" id="waist" 
+                d="M195,390 Q205,400 220,405 Q235,408 248,402 Q260,395 268,382 Q272,372 270,365 Q265,358 255,355 Q245,352 235,355 Q225,360 215,368 Q208,375 202,382" 
+                fill="#f5f0ea" stroke="#ece8e0" stroke-width="1" opacity="0"/>
+            
+            <!-- ===== 绿色月桂花环 ===== -->
+            <!-- 左侧叶子 -->
+            <ellipse class="geo-shape" id="leaf-l1" cx="145" cy="360" rx="16" ry="9" transform="rotate(-18 145 360)" fill="url(#leafGrad)" opacity="0"/>
+            <ellipse class="geo-shape" id="leaf-l2" cx="128" cy="338" rx="14" ry="8" transform="rotate(-35 128 338)" fill="url(#leafGrad)" opacity="0"/>
+            <ellipse class="geo-shape" id="leaf-l3" cx="118" cy="312" rx="12" ry="7" transform="rotate(-48 118 312)" fill="url(#leafGrad)" opacity="0"/>
+            <ellipse class="geo-shape" id="leaf-l4" cx="112" cy="285" rx="10" ry="6" transform="rotate(-56 112 285)" fill="url(#leafGrad)" opacity="0"/>
+            <ellipse class="geo-shape" id="leaf-l5" cx="110" cy="258" rx="8" ry="5" transform="rotate(-62 110 258)" fill="url(#leafGrad)" opacity="0"/>
+            
+            <!-- 右侧叶子 -->
+            <ellipse class="geo-shape" id="leaf-r1" cx="275" cy="360" rx="16" ry="9" transform="rotate(18 275 360)" fill="url(#leafGrad)" opacity="0"/>
+            <ellipse class="geo-shape" id="leaf-r2" cx="292" cy="338" rx="14" ry="8" transform="rotate(35 292 338)" fill="url(#leafGrad)" opacity="0"/>
+            <ellipse class="geo-shape" id="leaf-r3" cx="302" cy="312" rx="12" ry="7" transform="rotate(48 302 312)" fill="url(#leafGrad)" opacity="0"/>
+            <ellipse class="geo-shape" id="leaf-r4" cx="308" cy="285" rx="10" ry="6" transform="rotate(56 308 285)" fill="url(#leafGrad)" opacity="0"/>
+            <ellipse class="geo-shape" id="leaf-r5" cx="310" cy="258" rx="8" ry="5" transform="rotate(62 310 258)" fill="url(#leafGrad)" opacity="0"/>
+            
+            <!-- 底部叶子 -->
+            <ellipse class="geo-shape" id="leaf-b1" cx="172" cy="385" rx="14" ry="8" transform="rotate(-10 172 385)" fill="url(#leafGrad)" opacity="0"/>
+            <ellipse class="geo-shape" id="leaf-b2" cx="192" cy="395" rx="12" ry="7" transform="rotate(-5 192 395)" fill="url(#leafGrad)" opacity="0"/>
+            <ellipse class="geo-shape" id="leaf-b3" cx="208" cy="400" rx="10" ry="6" fill="url(#leafGrad)" opacity="0"/>
+            <ellipse class="geo-shape" id="leaf-b4" cx="225" cy="398" rx="12" ry="7" transform="rotate(5 225 398)" fill="url(#leafGrad)" opacity="0"/>
+            <ellipse class="geo-shape" id="leaf-b5" cx="245" cy="388" rx="14" ry="8" transform="rotate(10 245 388)" fill="url(#leafGrad)" opacity="0"/>
+            
+            <!-- 花环底部弧线 -->
+            <path class="geo-shape" id="garland" 
+                d="M162,375 Q208,418 255,375" stroke="url(#leafGrad)" stroke-width="5" fill="none" stroke-linecap="round" opacity="0"/>
+            
+            <!-- 浆果 -->
+            <circle class="geo-shape" id="berry1" cx="138" cy="348" r="3" fill="#98b88a" opacity="0"/>
+            <circle class="geo-shape" id="berry2" cx="282" cy="348" r="3" fill="#98b88a" opacity="0"/>
+            <circle class="geo-shape" id="berry3" cx="208" cy="410" r="3" fill="#98b88a" opacity="0"/>
+            
+            <!-- ===== 文字 "捏捏骑士团" ===== -->
+            <g class="geo-shape" id="text" opacity="0">
+                <!-- 捏 -->
+                <rect x="112" y="435" width="5" height="35" fill="#c8b8a8"/>
+                <rect x="107" y="443" width="14" height="5" fill="#c8b8a8"/>
+                <rect x="110" y="456" width="10" height="5" fill="#c8b8a8"/>
+                <rect x="117" y="452" width="5" height="14" fill="#c8b8a8"/>
+                <path d="M121,458 L129,465 M121,465 L129,458" stroke="#c8b8a8" stroke-width="4" stroke-linecap="round"/>
+                
+                <!-- 捏 -->
+                <rect x="152" y="435" width="5" height="35" fill="#c8b8a8"/>
+                <rect x="147" y="443" width="14" height="5" fill="#c8b8a8"/>
+                <rect x="150" y="456" width="10" height="5" fill="#c8b8a8"/>
+                <rect x="157" y="452" width="5" height="14" fill="#c8b8a8"/>
+                <path d="M161,458 L169,465 M161,465 L169,458" stroke="#c8b8a8" stroke-width="4" stroke-linecap="round"/>
+                
+                <!-- 骑 -->
+                <rect x="187" y="435" width="5" height="32" fill="#c8b8a8"/>
+                <rect x="182" y="443" width="14" height="5" fill="#c8b8a8"/>
+                <rect x="187" y="454" width="10" height="5" fill="#c8b8a8"/>
+                <path d="M196,449 L204,456 M196,459 L204,466" stroke="#c8b8a8" stroke-width="4" stroke-linecap="round"/>
+                <rect x="209" y="435" width="16" height="5" fill="#c8b8a8"/>
+                <rect x="216" y="435" width="5" height="16" fill="#c8b8a8"/>
+                <rect x="209" y="451" width="16" height="5" fill="#c8b8a8"/>
+                <path d="M214,456 L214,467 L222,467" stroke="#c8b8a8" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                
+                <!-- 士 -->
+                <rect x="242" y="435" width="18" height="5" fill="#c8b8a8"/>
+                <rect x="249" y="435" width="5" height="35" fill="#c8b8a8"/>
+                <rect x="242" y="462" width="18" height="5" fill="#c8b8a8"/>
+                
+                <!-- 团 -->
+                <rect x="275" y="430" width="28" height="42" rx="2" fill="none" stroke="#c8b8a8" stroke-width="4"/>
+                <rect x="283" y="440" width="12" height="20" fill="#c8b8a8"/>
+            </g>
+            
+            <!-- 星星装饰 -->
+            <g class="geo-shape" id="stars" opacity="0">
+                <polygon points="130,105 133,113 142,113 135,117 137,125 130,121 123,125 125,117 118,113 127,113" fill="#e8d8c8"/>
+                <polygon points="320,125 322,131 328,131 324,135 326,141 320,137 314,141 316,135 312,131 318,131" fill="#e8d8c8"/>
+                <polygon points="168,90 170,95 175,95 172,98 173,103 168,100 163,103 164,98 161,95 166,95" fill="#e8d8c8"/>
+            </g>
+        </svg>
+    </div>
+    
+    <button class="replay-btn" onclick="replay()">重新播放</button>
+    
+    <script>
+        const animations = [
+            { id: 'stars', delay: 200, duration: 500 },
+            { id: 'helmet-top', delay: 500, duration: 400 },
+            { id: 'visor', delay: 700, duration: 400 },
+            { id: 'nose-guard', delay: 900, duration: 300 },
+            { id: 'eye-slit', delay: 1050, duration: 300 },
+            { id: 'chin-guard', delay: 1200, duration: 400 },
+            { id: 'neck-guard', delay: 1400, duration: 400 },
+            { id: 'hair-main', delay: 1600, duration: 600 },
+            { id: 'hair-tail', delay: 1900, duration: 350 },
+            { id: 'shoulder', delay: 2200, duration: 400 },
+            { id: 'chest', delay: 2400, duration: 500 },
+            { id: 'chest-line', delay: 2600, duration: 400 },
+            { id: 'waist', delay: 2800, duration: 400 },
+            { id: 'leaf-l1', delay: 3100, duration: 250 },
+            { id: 'leaf-r1', delay: 3100, duration: 250 },
+            { id: 'leaf-l2', delay: 3250, duration: 250 },
+            { id: 'leaf-r2', delay: 3250, duration: 250 },
+            { id: 'leaf-l3', delay: 3400, duration: 250 },
+            { id: 'leaf-r3', delay: 3400, duration: 250 },
+            { id: 'leaf-l4', delay: 3550, duration: 250 },
+            { id: 'leaf-r4', delay: 3550, duration: 250 },
+            { id: 'leaf-l5', delay: 3700, duration: 250 },
+            { id: 'leaf-r5', delay: 3700, duration: 250 },
+            { id: 'leaf-b1', delay: 3850, duration: 250 },
+            { id: 'leaf-b2', delay: 3950, duration: 250 },
+            { id: 'leaf-b3', delay: 4050, duration: 250 },
+            { id: 'leaf-b4', delay: 4150, duration: 250 },
+            { id: 'leaf-b5', delay: 4250, duration: 250 },
+            { id: 'garland', delay: 4350, duration: 400 },
+            { id: 'berry1', delay: 4500, duration: 200 },
+            { id: 'berry2', delay: 4600, duration: 200 },
+            { id: 'berry3', delay: 4700, duration: 200 },
+            { id: 'text', delay: 4900, duration: 600 },
+        ];
+        
+        let timeouts = [];
+        
+        function play() {
+            timeouts.forEach(t => clearTimeout(t));
+            timeouts = [];
+            
+            document.querySelectorAll('.geo-shape').forEach(el => {
+                el.style.opacity = '0';
+                el.style.transform = 'scale(0.7)';
+                el.style.transition = 'none';
+            });
+            
+            animations.forEach(a => {
+                const t = setTimeout(() => {
+                    const el = document.getElementById(a.id);
+                    if (el) {
+                        el.style.transition = `opacity ${a.duration}ms cubic-bezier(0.25,0.46,0.45,0.94), transform ${a.duration}ms cubic-bezier(0.34,1.56,0.64,1)`;
+                        el.style.opacity = '1';
+                        el.style.transform = 'scale(1)';
+                    }
+                }, a.delay);
+                timeouts.push(t);
+            });
+        }
+        
+        function replay() { play(); }
+        window.addEventListener('load', () => setTimeout(play, 400));
+    </script>
+</body>
+</html>

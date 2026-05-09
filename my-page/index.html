@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的个人主页 - AI 增强版</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+            min-height: 100vh; color: #fff; overflow-x: hidden;
+        }
+        .stars { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
+        .star {
+            position: absolute; width: 2px; height: 2px; background: #fff; border-radius: 50%;
+            animation: twinkle var(--duration) ease-in-out infinite;
+        }
+        @keyframes twinkle { 0%,100% { opacity: 0.2; } 50% { opacity: 1; } }
+        .container { position: relative; z-index: 1; max-width: 900px; margin: 0 auto; padding: 40px 20px; }
+        .hero { text-align: center; margin-bottom: 40px; }
+        .hero h1 {
+            font-size: 2.8rem; font-weight: 700;
+            background: linear-gradient(90deg, #00d2ff, #3a7bd5, #f953c6, #ffb199);
+            background-size: 300% 300%; -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            background-clip: text; animation: gradient 4s ease infinite; margin-bottom: 12px;
+        }
+        @keyframes gradient { 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
+        .hero p { font-size: 1.1rem; color: rgba(255,255,255,0.6); max-width: 600px; margin: 0 auto; }
+        .clock { text-align: center; margin-bottom: 40px; }
+        .clock-time { font-size: 3rem; font-weight: 300; font-family: 'Courier New', monospace; letter-spacing: 4px; }
+        .clock-date { font-size: 1rem; color: rgba(255,255,255,0.4); margin-top: 6px; }
+        .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; margin-bottom: 40px; }
+        .card {
+            background: rgba(255,255,255,0.05); backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 28px;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .card:hover { transform: translateY(-6px); box-shadow: 0 20px 40px rgba(0,0,0,0.3); }
+        .card-icon { font-size: 2rem; margin-bottom: 12px; }
+        .card h3 { font-size: 1.1rem; margin-bottom: 8px; }
+        .card p { color: rgba(255,255,255,0.5); line-height: 1.5; font-size: 0.95rem; }
+        .section-box {
+            background: rgba(255,255,255,0.05); backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1); border-radius: 20px; padding: 32px; margin-bottom: 30px;
+        }
+        .section-box h2 { margin-bottom: 16px; text-align: center; font-size: 1.3rem; }
+        .input-row { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+        .input-row input {
+            flex: 1; min-width: 200px; padding: 12px 16px; border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 12px; background: rgba(255,255,255,0.05); color: #fff; font-size: 0.95rem; outline: none;
+            transition: border-color 0.3s;
+        }
+        .input-row input:focus { border-color: #00d2ff; }
+        .input-row input::placeholder { color: rgba(255,255,255,0.3); }
+        .btn {
+            padding: 12px 24px; border: none; border-radius: 12px; font-size: 1rem;
+            font-weight: 600; cursor: pointer; transition: all 0.3s ease; white-space: nowrap;
+        }
+        .btn-primary { background: linear-gradient(135deg, #00d2ff, #3a7bd5); color: #fff; }
+        .btn-danger { background: linear-gradient(135deg, #f953c6, #b91d73); color: #fff; }
+        .btn-success { background: linear-gradient(135deg, #11998e, #38ef7d); color: #fff; }
+        .btn-warn { background: linear-gradient(135deg, #f7971e, #ffd200); color: #333; }
+        .btn:hover { transform: scale(1.05); box-shadow: 0 8px 20px rgba(0,0,0,0.3); }
+        .btn:active { transform: scale(0.98); }
+        .counter-display { font-size: 4rem; font-weight: 700; color: #00d2ff; margin: 16px 0; text-align: center; font-family: 'Courier New', monospace; transition: transform 0.15s ease; }
+        .counter-btns { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; }
+        .note-list { list-style: none; }
+        .note-item {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 12px 14px; background: rgba(255,255,255,0.03); border-radius: 10px; margin-bottom: 8px;
+            animation: fadeIn 0.3s ease;
+        }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+        .note-item span { color: rgba(255,255,255,0.8); }
+        .note-delete { background: none; border: none; color: rgba(255,255,255,0.3); font-size: 1.1rem; cursor: pointer; transition: color 0.3s; }
+        .note-delete:hover { color: #f953c6; }
+
+        /* Token 状态栏 */
+        .token-bar {
+            display: flex; align-items: center; gap: 12px; padding: 14px 18px;
+            background: rgba(0,0,0,0.25); border-radius: 14px; margin-bottom: 14px;
+            border: 1px solid rgba(255,255,255,0.08); flex-wrap: wrap;
+        }
+        .token-status-dot {
+            width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+        }
+        .token-status-dot.green { background: #38ef7d; box-shadow: 0 0 8px #38ef7d; }
+        .token-status-dot.yellow { background: #ffd200; box-shadow: 0 0 8px #ffd200; }
+        .token-status-dot.red { background: #f953c6; box-shadow: 0 0 8px #f953c6; }
+        .token-status-dot.gray { background: rgba(255,255,255,0.2); }
+        .token-info { flex: 1; min-width: 120px; }
+        .token-info .label { font-size: 0.8rem; color: rgba(255,255,255,0.4); }
+        .token-info .value { font-size: 1rem; font-weight: 600; }
+        .token-info .value.green { color: #38ef7d; }
+        .token-info .value.yellow { color: #ffd200; }
+        .token-info .value.red { color: #f953c6; }
+        .token-info .value.gray { color: rgba(255,255,255,0.3); }
+        .btn-sm { padding: 8px 14px; font-size: 0.85rem; border-radius: 8px; }
+        .btn-ghost { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.6); border: 1px solid rgba(255,255,255,0.1); }
+        .btn-ghost:hover { background: rgba(255,255,255,0.15); color: #fff; }
+
+        /* 聊天窗口 */
+        #chatHistory {
+            height: 280px; overflow-y: auto; background: rgba(0,0,0,0.2);
+            border-radius: 12px; padding: 16px; margin-bottom: 14px;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+        #chatHistory::-webkit-scrollbar { width: 4px; }
+        #chatHistory::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 2px; }
+
+        /* 凭证设置面板 */
+        .creds-panel {
+            background: rgba(0,0,0,0.2); border-radius: 14px; padding: 18px;
+            margin-bottom: 14px; display: none; border: 1px solid rgba(255,255,255,0.08);
+        }
+        .creds-panel.open { display: block; }
+        .creds-panel label { font-size: 0.85rem; color: rgba(255,255,255,0.5); display: block; margin-bottom: 4px; }
+        .creds-panel .input-row { margin-bottom: 8px; }
+        .creds-panel .hint { font-size: 0.75rem; color: rgba(255,255,255,0.3); margin-top: 4px; }
+
+        footer { text-align: center; margin-top: 40px; padding: 20px; color: rgba(255,255,255,0.25); font-size: 0.9rem; }
+        @media (max-width: 600px) {
+            .hero h1 { font-size: 1.8rem; }
+            .clock-time { font-size: 2.2rem; }
+            .counter-display { font-size: 3rem; }
+            .input-row { flex-direction: column; }
+            .input-row input { min-width: auto; }
+        }
+    </style>
+</head>
+<body>
+    <div class="stars" id="stars"></div>
+    <div class="container">
+        <div class="hero">
+            <h1>✨ 智能个人主页</h1>
+            <p>时钟 · 计数器 · 记事本 · AI 对话 — 所有数据由后端统一托管</p>
+        </div>
+
+        <div class="clock">
+            <div class="clock-time" id="clock">00:00:00</div>
+            <div class="clock-date" id="date"></div>
+        </div>
+
+        <div class="cards">
+            <div class="card"><div class="card-icon">⏰</div><h3>实时时钟</h3><p>精确到秒，自动同步。</p></div>
+            <div class="card"><div class="card-icon">🔢</div><h3>云端计数器</h3><p>多设备同步，数据不落盘。</p></div>
+            <div class="card"><div class="card-icon"></div><h3>AI 助手</h3><p>接入 neta.art LLM，智能对话。</p></div>
+        </div>
+
+        <div class="section-box" style="text-align:center;">
+            <h2>🔢 计数器</h2>
+            <div class="counter-display" id="counter">0</div>
+            <div class="counter-btns">
+                <button class="btn btn-danger" onclick="changeCounter(-1)">- 1</button>
+                <button class="btn btn-primary" onclick="changeCounter(1)">+ 1</button>
+                <button class="btn btn-success" onclick="resetCounter()">重置</button>
+            </div>
+        </div>
+
+        <div class="section-box">
+            <h2> 记事本</h2>
+            <div class="input-row">
+                <input type="text" id="noteInput" placeholder="输入内容后按回车..." onkeypress="if(event.key==='Enter')addNote()">
+                <button class="btn btn-primary" onclick="addNote()">添加</button>
+            </div>
+            <ul class="note-list" id="noteList"></ul>
+        </div>
+
+        <!-- AI 区域 -->
+        <div class="section-box">
+            <h2>🤖 AI 助手</h2>
+
+            <!-- Token 状态栏 -->
+            <div class="token-bar">
+                <div class="token-status-dot gray" id="tokenDot"></div>
+                <div class="token-info">
+                    <div class="label">Token 状态</div>
+                    <div class="value gray" id="tokenStatusText">未配置</div>
+                </div>
+                <button class="btn btn-sm btn-ghost" onclick="toggleCreds()">️ 设置凭证</button>
+                <button class="btn btn-sm btn-ghost" onclick="tryRefreshToken()">🔄 刷新 Token</button>
+            </div>
+
+            <!-- 凭证设置面板 -->
+            <div class="creds-panel" id="credsPanel">
+                <label>Access Token（临时，约1小时过期）</label>
+                <div class="input-row">
+                    <input type="password" id="tokenInput" placeholder="eyJh..." oninput="onTokenChange()">
+                    <button class="btn btn-sm btn-primary" onclick="applyToken()">应用</button>
+                </div>
+                <label style="margin-top:10px;">Client ID（你的 App ID）</label>
+                <div class="input-row">
+                    <input type="text" id="clientIdInput" placeholder="6wuabtk5h1d8i7zv8vz9w">
+                </div>
+                <label>Client Secret（永久密钥，用于自动刷新）</label>
+                <div class="input-row">
+                    <input type="password" id="clientSecretInput" placeholder="输入你的 Client Secret">
+                    <button class="btn btn-sm btn-warn" onclick="saveCreds()">保存</button>
+                </div>
+                <div class="hint">💡 填入 Client Secret 后，Token 将在过期前自动刷新，无需手动操作。</div>
+            </div>
+
+            <!-- 聊天窗口 -->
+            <div id="chatHistory">
+                <div style="color:rgba(255,255,255,0.35);text-align:center;margin-top:100px;">
+                    配置好 Token 后开始聊天 ✨
+                </div>
+            </div>
+            <div class="input-row">
+                <input type="text" id="chatInput" placeholder="和 AI 聊点什么..." onkeypress="if(event.key==='Enter')sendChat()">
+                <button class="btn btn-primary" onclick="sendChat()">发送</button>
+            </div>
+        </div>
+
+        <footer>Made with ❤️ | 后端运行在云端 · 数据持久化存储</footer>
+    </div>
+
+    <script>
+        // ===== 星空 =====
+        (function(){
+            const c=document.getElementById('stars');
+            for(let i=0;i<120;i++){
+                const s=document.createElement('div');s.className='star';
+                s.style.cssText=`left:${Math.random()*100}%;top:${Math.random()*100}%;--duration:${2+Math.random()*3}s;animation-delay:${Math.random()*3}s;width:${1+Math.random()*2}px;height:${1+Math.random()*2}px`;
+                c.appendChild(s);
+            }
+        })();
+
+        // ===== 时钟 =====
+        function tick(){
+            const n=new Date();
+            document.getElementById('clock').textContent=n.toLocaleTimeString('zh-CN',{hour12:false});
+            document.getElementById('date').textContent=n.toLocaleDateString('zh-CN',{year:'numeric',month:'long',day:'numeric',weekday:'long'});
+        }
+        tick(); setInterval(tick,1000);
+
+        // ===== API 地址（相对路径，前后端同源） =====
+        const API = '/api';
+
+        // ===== 计数器 =====
+        let count=0;
+        const counterEl=document.getElementById('counter');
+        async function loadCounter(){
+            try{ const r=await fetch(API+'/data'); count=(await r.json()).counter||0; updCounter(); }catch(e){}
+        }
+        function updCounter(){ counterEl.textContent=count; counterEl.style.transform='scale(1.12)'; setTimeout(()=>counterEl.style.transform='scale(1)',150); }
+        counterEl.style.transition='transform .15s ease';
+        async function changeCounter(d){
+            try{
+                const r=await fetch(API+'/counter',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:d>0?'add':'subtract',value:Math.abs(d)})});
+                count=(await r.json()).counter; updCounter();
+            }catch(e){}
+        }
+        async function resetCounter(){
+            try{
+                const r=await fetch(API+'/counter',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'set',value:0})});
+                count=(await r.json()).counter; updCounter();
+            }catch(e){}
+        }
+        loadCounter();
+
+        // ===== 记事本 =====
+        let notes=[];
+        function renderNotes(){
+            const l=document.getElementById('noteList'); l.innerHTML='';
+            if(!notes.length){l.innerHTML='<li style="color:rgba(255,255,255,0.3);text-align:center;padding:16px;">暂无笔记 ✨</li>';return;}
+            notes.forEach(n=>{
+                const li=document.createElement('li');li.className='note-item';
+                const t=n.createdAt?new Date(n.createdAt).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'}):'';
+                li.innerHTML=`<span>${n.text}${t?'<small style="color:rgba(255,255,255,0.25);margin-left:6px;">'+t+'</small>':''}</span><button class="note-delete" onclick="deleteNote(${n.id})"></button>`;
+                l.appendChild(li);
+            });
+        }
+        async function addNote(){
+            const inp=document.getElementById('noteInput'),txt=inp.value.trim(); if(!txt)return;
+            try{
+                const r=await fetch(API+'/notes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:txt})});
+                notes=(await r.json()).notes; inp.value=''; renderNotes();
+            }catch(e){}
+        }
+        async function deleteNote(id){
+            try{ const r=await fetch(API+'/notes/'+id,{method:'DELETE'}); notes=(await r.json()).notes; renderNotes(); }catch(e){}
+        }
+        (async()=>{try{const r=await fetch(API+'/notes');notes=(await r.json()).notes||[];}catch(e){notes=[];}renderNotes();})();
+
+        // ===== Token 管理 =====
+        let currentToken = '';
+        let tokenExpireTime = null;
+        let refreshTimer = null;
+        let countdownTimer = null;
+
+        // 解析 JWT 过期时间
+        function parseTokenExpiry(token) {
+            try {
+                const parts = token.split('.');
+                if (parts.length >= 2) {
+                    const payload = JSON.parse(atob(parts[1].replace(/-/g,'+').replace(/_/g,'/')));
+                    if (payload.exp) return new Date(payload.exp * 1000);
+                }
+            } catch(e) {}
+            return null;
+        }
+
+        function updateTokenUI() {
+            const dot = document.getElementById('tokenDot');
+            const txt = document.getElementById('tokenStatusText');
+            if (!currentToken) {
+                dot.className = 'token-status-dot gray';
+                txt.className = 'value gray';
+                txt.textContent = '未配置';
+                return;
+            }
+            const now = Date.now();
+            if (tokenExpireTime) {
+                const remain = tokenExpireTime - now;
+                if (remain <= 0) {
+                    dot.className = 'token-status-dot red';
+                    txt.className = 'value red';
+                    txt.textContent = '已过期';
+                } else if (remain < 5 * 60 * 1000) {
+                    dot.className = 'token-status-dot red';
+                    txt.className = 'value red';
+                    txt.textContent = `即将过期 (${Math.floor(remain/1000)}s)`;
+                } else if (remain < 15 * 60 * 1000) {
+                    dot.className = 'token-status-dot yellow';
+                    txt.className = 'value yellow';
+                    txt.textContent = `剩余 ${Math.floor(remain/60000)} 分钟`;
+                } else {
+                    dot.className = 'token-status-dot green';
+                    txt.className = 'value green';
+                    txt.textContent = `有效 ${Math.floor(remain/60000)} 分钟`;
+                }
+            } else {
+                dot.className = 'token-status-dot green';
+                txt.className = 'value green';
+                txt.textContent = '已配置 (未知过期时间)';
+            }
+        }
+
+        function onTokenChange() {
+            // 实时解析
+            const v = document.getElementById('tokenInput').value.trim();
+            if (v) {
+                tokenExpireTime = parseTokenExpiry(v);
+            }
+        }
+
+        function applyToken() {
+            const v = document.getElementById('tokenInput').value.trim();
+            if (!v) return;
+            currentToken = v;
+            tokenExpireTime = parseTokenExpiry(v);
+            localStorage.setItem('neta_token', v);
+            updateTokenUI();
+            scheduleAutoRefresh();
+            document.getElementById('chatHistory').innerHTML = '<div style="color:rgba(255,255,255,0.5);text-align:center;margin-top:100px;">Token 已生效，开始聊天吧！</div>';
+            conversation = [];
+            toggleCreds(false);
+        }
+
+        // 自动刷新
+        function scheduleAutoRefresh() {
+            if (refreshTimer) clearInterval(refreshTimer);
+            if (countdownTimer) clearInterval(countdownTimer);
+            if (!tokenExpireTime) return;
+
+            const now = Date.now();
+            const remain = tokenExpireTime - now;
+            if (remain <= 0) { autoRefreshToken(); return; }
+
+            // 提前 3 分钟刷新
+            const refreshIn = Math.max(0, remain - 3 * 60 * 1000);
+            refreshTimer = setTimeout(autoRefreshToken, refreshIn);
+
+            // 倒计时 UI
+            countdownTimer = setInterval(updateTokenUI, 1000);
+        }
+
+        async function autoRefreshToken() {
+            const clientId = document.getElementById('clientIdInput').value.trim();
+            const clientSecret = document.getElementById('clientSecretInput').value.trim();
+            if (!clientId || !clientSecret) {
+                updateTokenUI();
+                return;
+            }
+            try {
+                const r = await fetch(API + '/refresh-token', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ client_id: clientId, client_secret: clientSecret })
+                });
+                const data = await r.json();
+                if (data.access_token) {
+                    currentToken = data.access_token;
+                    tokenExpireTime = data.expires_in ? new Date(Date.now() + data.expires_in * 1000) : parseTokenExpiry(data.access_token);
+                    localStorage.setItem('neta_token', currentToken);
+                    updateTokenUI();
+                    scheduleAutoRefresh();
+                    appendSystemMsg('🔄 Token 已自动刷新');
+                } else {
+                    appendSystemMsg('⚠️ 刷新失败: ' + (data.error || '未知错误'));
+                }
+            } catch(e) {
+                appendSystemMsg('⚠️ Token 自动刷新失败: ' + e.message);
+            }
+        }
+
+        function tryRefreshToken() {
+            autoRefreshToken();
+        }
+
+        function appendSystemMsg(text) {
+            const chatHistory = document.getElementById('chatHistory');
+            const div = document.createElement('div');
+            div.style.cssText = 'text-align:center;margin-bottom:10px;';
+            div.innerHTML = `<span style="background:rgba(255,255,255,0.06);padding:6px 14px;border-radius:20px;font-size:0.85rem;color:rgba(255,255,255,0.5);">${text}</span>`;
+            chatHistory.appendChild(div);
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+        }
+
+        function toggleCreds(force) {
+            const p = document.getElementById('credsPanel');
+            const isOpen = typeof force === 'boolean' ? !force : !p.classList.contains('open');
+            p.classList.toggle('open', isOpen);
+            // 恢复之前保存的凭证
+            if (isOpen) {
+                const savedClientId = localStorage.getItem('neta_client_id') || '';
+                const savedSecret = localStorage.getItem('neta_client_secret') || '';
+                const savedToken = localStorage.getItem('neta_token') || '';
+                if (savedClientId) document.getElementById('clientIdInput').value = savedClientId;
+                if (savedSecret) document.getElementById('clientSecretInput').value = savedSecret;
+                if (savedToken) document.getElementById('tokenInput').value = savedToken;
+            }
+        }
+
+        function saveCreds() {
+            const clientId = document.getElementById('clientIdInput').value.trim();
+            const secret = document.getElementById('clientSecretInput').value.trim();
+            if (clientId) localStorage.setItem('neta_client_id', clientId);
+            if (secret) localStorage.setItem('neta_client_secret', secret);
+            appendSystemMsg('✅ 凭证已保存到本地');
+            // 如果有 secret，尝试自动刷新
+            if (clientId && secret) autoRefreshToken();
+        }
+
+        // 页面加载时恢复 token
+        (function(){
+            const saved = localStorage.getItem('neta_token');
+            if (saved) {
+                currentToken = saved;
+                document.getElementById('tokenInput').value = saved;
+                tokenExpireTime = parseTokenExpiry(saved);
+                updateTokenUI();
+                scheduleAutoRefresh();
+            }
+            const savedClientId = localStorage.getItem('neta_client_id') || '';
+            const savedSecret = localStorage.getItem('neta_client_secret') || '';
+            if (savedClientId) document.getElementById('clientIdInput').value = savedClientId;
+            if (savedSecret) document.getElementById('clientSecretInput').value = savedSecret;
+        })();
+
+        // ===== AI 聊天 =====
+        const chatHistory = document.getElementById('chatHistory');
+        let conversation = [];
+
+        function appendMessage(role, text) {
+            const div = document.createElement('div');
+            div.style.cssText = `text-align:${role==='user'?'right':'left'};margin-bottom:10px;`;
+            const bubble = document.createElement('span');
+            bubble.style.cssText = `display:inline-block;padding:10px 14px;border-radius:12px;max-width:80%;text-align:left;${role==='user'?'background:linear-gradient(135deg,#00d2ff,#3a7bd5);color:#fff;border-bottom-right-radius:2px;':'background:rgba(255,255,255,0.08);color:#ddd;border-bottom-left-radius:2px;'}`;
+            bubble.innerText = text;
+            div.appendChild(bubble);
+            chatHistory.appendChild(div);
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+        }
+
+        async function sendChat() {
+            const input = document.getElementById('chatInput');
+            const text = input.value.trim();
+            if (!text) return;
+
+            if (!currentToken) {
+                appendSystemMsg('⚠️ 请先配置 Token');
+                return;
+            }
+
+            appendMessage('user', text);
+            conversation.push({ role: 'user', content: text });
+            input.value = '';
+
+            const loading = document.createElement('div');
+            loading.id = 'chatLoading';
+            loading.style.cssText = 'text-align:left;margin-bottom:10px;';
+            loading.innerHTML = '<span style="background:rgba(255,255,255,0.06);padding:10px 14px;border-radius:12px;color:#666;display:inline-block;">AI 思考中...</span>';
+            chatHistory.appendChild(loading);
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+
+            try {
+                const r = await fetch(API + '/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token: currentToken, messages: conversation })
+                });
+                document.getElementById('chatLoading')?.remove();
+                if (!r.ok) { const err = await r.json(); appendMessage('ai', '错误: ' + (err.error || r.statusText)); return; }
+                const data = await r.json();
+                appendMessage('ai', data.reply);
+                conversation.push({ role: 'assistant', content: data.reply });
+            } catch(e) {
+                document.getElementById('chatLoading')?.remove();
+                appendMessage('ai', '网络错误: ' + e.message);
+            }
+        }
+    </script>
+</body>
+</html>
