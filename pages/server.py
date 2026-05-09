@@ -351,7 +351,7 @@ class Server(BaseHTTPRequestHandler):
         self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
         self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()")
         self.send_header("Cross-Origin-Resource-Policy", "same-site")
-        self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self' https://oss.talesofai.cn https://*.geetest.com https://*.geevisit.com; style-src 'self' 'unsafe-inline'; img-src 'self' https: data: blob:; connect-src 'self' https://api.talesofai.cn https://*.geetest.com https://*.geevisit.com; frame-src https://*.geetest.com https://*.geevisit.com; frame-ancestors 'self' https://*.cohub.run https://cohub.run https://*.cohub.ai https://*.cohub.art; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests")
+        self.send_header("Content-Security-Policy", "default-src 'self' https: data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' https: data: blob:; connect-src 'self' https: wss:; frame-src https:; child-src https:; frame-ancestors 'self' https://*.cohub.run https://cohub.run https://*.cohub.ai https://*.cohub.art; base-uri 'self'; form-action 'self'; object-src 'none'")
 
     def _json(self, data, code=200):
         self.send_response(code)
