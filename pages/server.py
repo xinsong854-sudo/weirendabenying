@@ -35,8 +35,32 @@ def init_db():
         user_uuid TEXT NOT NULL, user_name TEXT, user_avatar TEXT,
         content TEXT NOT NULL, created_at INTEGER DEFAULT (strftime('%s','now'))
     )""")
+    # 论坛发言表：真实后端存储，所有用户按频道同步可见
+    db.execute("""CREATE TABLE IF NOT EXISTS forum_posts(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        channel TEXT NOT NULL,
+        user_uuid TEXT NOT NULL,
+        user_name TEXT,
+        user_avatar TEXT,
+        content TEXT NOT NULL,
+        images_json TEXT DEFAULT '[]',
+        revoked INTEGER DEFAULT 0,
+        revoked_by TEXT,
+        created_at INTEGER DEFAULT (strftime('%s','now'))
+    )""")
+    # Wiki 词条表：用于后端检索，避免数据变大后全部压给前端搜索
+    db.execute("""CREATE TABLE IF NOT EXISTS entries(
+        uuid TEXT PRIMARY KEY,
+        category TEXT NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL,
+        updated_at INTEGER DEFAULT (strftime('%s','now'))
+    )""")
     db.execute("CREATE INDEX IF NOT EXISTS idx_c_entry ON comments(entry_uuid)")
     db.execute("CREATE INDEX IF NOT EXISTS idx_c_time ON comments(created_at DESC)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_entries_category ON entries(category)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_entries_name ON entries(name)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_forum_channel_time ON forum_posts(channel, created_at DESC)")
     
     # 初始化管理员
     admins = [
@@ -70,6 +94,32 @@ for cat, entries in ARCHIVE["lore"].items():
 
 ALL_JSON = json.dumps(ALL_ENTRIES, ensure_ascii=False)
 ARCHIVE_JSON = json.dumps(ARCHIVE, ensure_ascii=False)
+
+def sync_entries_to_db():
+    """把 JSON Wiki 同步进 SQLite，供后端参数化搜索使用。"""
+    db = get_db()
+    now = int(time.time())
+    seen = []
+    for entry in ALL_ENTRIES:
+        uuid = str(entry.get("uuid", "")).strip()
+        if not uuid:
+            continue
+        seen.append(uuid)
+        db.execute("""INSERT INTO entries(uuid, category, name, description, updated_at)
+                    VALUES(?,?,?,?,?)
+                    ON CONFLICT(uuid) DO UPDATE SET
+                    category=excluded.category,
+                    name=excluded.name,
+                    description=excluded.description,
+                    updated_at=excluded.updated_at""",
+                   (uuid, entry.get("category", ""), entry.get("name", ""), entry.get("description", ""), now))
+    if seen:
+        placeholders = ",".join("?" for _ in seen)
+        db.execute(f"DELETE FROM entries WHERE uuid NOT IN ({placeholders})", seen)
+    db.commit()
+    db.close()
+
+sync_entries_to_db()
 
 # ═══════════ 前端 ═══════════
 PAGE = f"""<!DOCTYPE html>
@@ -415,6 +465,32 @@ class Server(BaseHTTPRequestHandler):
             rows = db.execute("SELECT user_name,user_avatar,content,created_at FROM comments WHERE entry_uuid=? ORDER BY created_at DESC LIMIT 100", [eu]).fetchall()
             db.close()
             self._json([{"user_name": r["user_name"], "user_avatar": r["user_avatar"], "content": r["content"], "created_at": r["created_at"]} for r in rows])
+        elif p.path == "/api/forum/posts":
+            channel = parse_qs(p.query).get("channel", [""])[0].strip()[:80]
+            if not channel: self._json([]); return
+            db = get_db()
+            rows = db.execute("""SELECT id,channel,user_uuid,user_name,user_avatar,content,images_json,revoked,created_at
+                               FROM forum_posts WHERE channel=? ORDER BY created_at DESC LIMIT 120""", [channel]).fetchall()
+            db.close()
+            posts = []
+            for r in rows:
+                try: images = json.loads(r["images_json"] or "[]")
+                except Exception: images = []
+                posts.append({"id": r["id"], "channel": r["channel"], "user_uuid": r["user_uuid"], "user_name": r["user_name"], "user_avatar": r["user_avatar"], "content": r["content"], "images": images, "revoked": bool(r["revoked"]), "created_at": r["created_at"]})
+            self._json(posts)
+        elif p.path == "/api/search":
+            q = parse_qs(p.query).get("q", [""])[0].strip()[:80]
+            if not q:
+                self._json([]); return
+            # 参数化 LIKE：保留 SQLite 速度，同时避免 SQL 注入和通配符滥用
+            like = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+            db = get_db()
+            rows = db.execute("""SELECT uuid,category,name,description FROM entries
+                               WHERE name LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\'
+                               ORDER BY CASE WHEN name LIKE ? ESCAPE '\\' THEN 0 ELSE 1 END, category, name
+                               LIMIT 30""", (like, like, like)).fetchall()
+            db.close()
+            self._json([{"uuid": r["uuid"], "category": r["category"], "name": r["name"], "description": r["description"]} for r in rows])
         elif p.path == "/api/stats":
             db = get_db()
             tc = db.execute("SELECT COUNT(*) FROM comments").fetchone()[0]
@@ -502,6 +578,40 @@ class Server(BaseHTTPRequestHandler):
             db.execute("INSERT INTO comments(entry_uuid,user_uuid,user_name,user_avatar,content) VALUES(?,?,?,?,?)",
                        [eu, user["uuid"], user.get("nick_name") or user["name"], user.get("avatar_url", ""), content])
             db.execute("UPDATE members SET online=1,last_seen=? WHERE uuid=?", (int(time.time()), user["uuid"]))
+            db.commit(); db.close()
+            self._json({"ok": True})
+        elif p.path == "/api/forum/posts":
+            if not token: self._json({"error": "未登录"}, 401); return
+            try:
+                r = requests.get(f"{API}/v1/user/", headers={"x-token": token}, timeout=10); r.raise_for_status(); user = r.json()
+            except Exception:
+                self._json({"error": "令牌无效"}, 401); return
+            channel = str(body.get("channel", "")).strip()[:80]
+            content = str(body.get("content", "")).strip()
+            images = body.get("images", [])
+            if not isinstance(images, list): images = []
+            images = [str(x) for x in images if str(x).startswith(("http://", "https://"))][:9]
+            if not channel or (not content and not images): self._json({"error": "缺少内容"}, 400); return
+            if len(content) > 2000: self._json({"error": "发言过长"}, 400); return
+            db = get_db()
+            db.execute("""INSERT INTO forum_posts(channel,user_uuid,user_name,user_avatar,content,images_json)
+                       VALUES(?,?,?,?,?,?)""", [channel, user["uuid"], user.get("nick_name") or user.get("name", ""), user.get("avatar_url", ""), content, json.dumps(images, ensure_ascii=False)])
+            db.execute("UPDATE members SET online=1,last_seen=? WHERE uuid=?", (int(time.time()), user["uuid"]))
+            db.commit(); db.close()
+            self._json({"ok": True})
+        elif p.path == "/api/forum/revoke":
+            if not token: self._json({"error": "未登录"}, 401); return
+            try:
+                r = requests.get(f"{API}/v1/user/", headers={"x-token": token}, timeout=10); r.raise_for_status(); user = r.json()
+            except Exception:
+                self._json({"error": "令牌无效"}, 401); return
+            db = get_db()
+            role_row = db.execute("SELECT role FROM members WHERE uuid=?", [user.get("uuid", "")]).fetchone()
+            role = role_row["role"] if role_row else "member"
+            if role not in ("chief", "deputy", "admin"):
+                db.close(); self._json({"error": "权限不足"}, 403); return
+            post_id = int(body.get("id", 0) or 0)
+            db.execute("UPDATE forum_posts SET revoked=1,revoked_by=? WHERE id=?", [user.get("uuid", ""), post_id])
             db.commit(); db.close()
             self._json({"ok": True})
         else:
