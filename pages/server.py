@@ -3,7 +3,7 @@
 伪人大本营 — 捏Ta 登录 + 档案库 + 成员系统
 python3 server.py  →  localhost:3000
 """
-import json, os, time, sqlite3, hashlib
+import json, os, time, sqlite3, hashlib, mimetypes
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 import requests
@@ -11,7 +11,9 @@ import requests
 API = "https://api.talesofai.cn"
 PORT = 3000
 DB = os.path.join(os.path.dirname(__file__) or ".", "pseudo_human.db")
-DATA = os.path.join(os.path.dirname(__file__) or ".", "pseudo-human-data.json")
+BASE_DIR = os.path.dirname(__file__) or "."
+DATA = os.path.join(BASE_DIR, "pseudo-human-data.json")
+DIST_DIR = os.path.join(BASE_DIR, "dist")
 
 # ═══════════ 数据库 ═══════════
 def get_db():
@@ -344,23 +346,54 @@ function logout(){{token="";me=null;myRole=null;allData=null;localStorage.remove
 
 # ═══════════ 后端 API ═══════════
 class Server(BaseHTTPRequestHandler):
+    def _security_headers(self):
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
+        self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()")
+        self.send_header("Cross-Origin-Resource-Policy", "same-site")
+        self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self' https://oss.talesofai.cn https://*.geetest.com https://*.geevisit.com; style-src 'self' 'unsafe-inline'; img-src 'self' https: data: blob:; connect-src 'self' https://api.talesofai.cn https://*.geetest.com https://*.geevisit.com; frame-src https://*.geetest.com https://*.geevisit.com; frame-ancestors 'self' https://*.cohub.run https://cohub.run https://*.cohub.ai https://*.cohub.art; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests")
+
     def _json(self, data, code=200):
         self.send_response(code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "x-token, content-type")
+        self._security_headers()
         self.end_headers()
         self.wfile.write(json.dumps(data, ensure_ascii=False).encode())
+
+    def _serve_file(self, rel_path="index.html"):
+        rel_path = rel_path.lstrip("/") or "index.html"
+        full = os.path.abspath(os.path.join(DIST_DIR, rel_path))
+        root = os.path.abspath(DIST_DIR)
+        if not full.startswith(root + os.sep) and full != root:
+            self.send_error(403); return
+        if not os.path.isfile(full):
+            full = os.path.join(root, "index.html")
+        ctype = mimetypes.guess_type(full)[0] or "application/octet-stream"
+        self.send_response(200)
+        self.send_header("Content-Type", ctype + ("; charset=utf-8" if ctype.startswith("text/") or ctype in ("application/javascript", "application/json") else ""))
+        if "/assets/" in full:
+            self.send_header("Cache-Control", "public, max-age=31536000, immutable")
+        else:
+            self.send_header("Cache-Control", "no-cache")
+        self._security_headers()
+        self.end_headers()
+        with open(full, "rb") as f:
+            self.wfile.write(f.read())
 
     def do_OPTIONS(self):
         self._json({})
 
     def do_GET(self):
         p = urlparse(self.path)
-        if p.path == "/":
-            self.send_response(200); self.send_header("Content-Type", "text/html; charset=utf-8"); self.end_headers()
-            self.wfile.write(PAGE.encode())
+        if not p.path.startswith("/api/"):
+            if os.path.isdir(DIST_DIR) and os.path.isfile(os.path.join(DIST_DIR, "index.html")):
+                self._serve_file(p.path)
+            else:
+                self.send_response(200); self.send_header("Content-Type", "text/html; charset=utf-8"); self._security_headers(); self.end_headers()
+                self.wfile.write(PAGE.encode())
         elif p.path == "/api/members":
             db = get_db()
             now = int(time.time())
