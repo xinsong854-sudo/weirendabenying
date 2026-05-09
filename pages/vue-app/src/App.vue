@@ -191,13 +191,13 @@ const commentText = ref('')
 const posting = ref(false)
 const commentCounts = ref({})
 const settingsOpen = ref(false)
-const avatarFrame = ref(localStorage.getItem('NIETA_AVATAR_FRAME') || 'blue')
+const savedFrame = localStorage.getItem('NIETA_AVATAR_FRAME')
+const avatarFrame = ref(['none', 'roach', 'moonrise'].includes(savedFrame) ? savedFrame : 'roach')
 const session = reactive({ me: null, role: 'member', token: '' })
 const avatarFrames = [
   { id: 'none', name: '无头像框', url: '', type: 'none' },
-  { id: 'blue', name: '蓝晶', url: 'https://oss.talesofai.cn/sts/49c915e649254f55a7ea399ad3b6efd1/1666693f-f7b8-4ca2-a31f-354463acbeff.png', type: 'frame' },
-  { id: 'pink', name: '粉金', url: 'https://oss.talesofai.cn/sts/49c915e649254f55a7ea399ad3b6efd1/cf29f296-f1d5-484e-8fe4-0b02177fd9ca.png', type: 'frame' },
-  { id: 'roach', name: '乱爬蟑螂', url: 'https://oss.talesofai.cn/sts/49c915e649254f55a7ea399ad3b6efd1/53710f82-1ad8-4863-98ee-4d7bed45f215.png', type: 'roach' }
+  { id: 'roach', name: '乱爬蟑螂', url: 'https://oss.talesofai.cn/sts/49c915e649254f55a7ea399ad3b6efd1/53710f82-1ad8-4863-98ee-4d7bed45f215.png', type: 'roach' },
+  { id: 'moonrise', name: '月升', url: 'https://oss.talesofai.cn/sts/49c915e649254f55a7ea399ad3b6efd1/65785b12-302c-4953-bf6b-8efb37adbdae.png', type: 'frame' }
 ]
 
 const allEntries = Object.entries(archive.lore).flatMap(([category, entries]) => entries.map(e => ({ ...e, category })))
