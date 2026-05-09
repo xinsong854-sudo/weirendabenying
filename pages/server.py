@@ -26,9 +26,18 @@ def init_db():
     db = get_db()
     # 成员表
     db.execute("""CREATE TABLE IF NOT EXISTS members(
-        uuid TEXT PRIMARY KEY, name TEXT, avatar TEXT, role TEXT DEFAULT 'member',
+        uuid TEXT PRIMARY KEY, name TEXT, avatar TEXT, role TEXT DEFAULT 'member', title TEXT DEFAULT '', avatar_frame TEXT DEFAULT 'none',
         online INTEGER DEFAULT 0, last_seen INTEGER, joined_at INTEGER DEFAULT (strftime('%s','now'))
     )""")
+    # 兼容旧库：已有 members 表时补充 title 字段
+    try:
+        db.execute("ALTER TABLE members ADD COLUMN title TEXT DEFAULT ''")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute("ALTER TABLE members ADD COLUMN avatar_frame TEXT DEFAULT 'none'")
+    except sqlite3.OperationalError:
+        pass
     # 评论表
     db.execute("""CREATE TABLE IF NOT EXISTS comments(
         id INTEGER PRIMARY KEY AUTOINCREMENT, entry_uuid TEXT NOT NULL,
@@ -48,6 +57,15 @@ def init_db():
         revoked_by TEXT,
         created_at INTEGER DEFAULT (strftime('%s','now'))
     )""")
+    db.execute("""CREATE TABLE IF NOT EXISTS private_messages(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        from_uuid TEXT NOT NULL,
+        to_uuid TEXT NOT NULL,
+        from_name TEXT,
+        from_avatar TEXT,
+        content TEXT NOT NULL,
+        created_at INTEGER DEFAULT (strftime('%s','now'))
+    )""")
     # Wiki 词条表：用于后端检索，避免数据变大后全部压给前端搜索
     db.execute("""CREATE TABLE IF NOT EXISTS entries(
         uuid TEXT PRIMARY KEY,
@@ -61,6 +79,7 @@ def init_db():
     db.execute("CREATE INDEX IF NOT EXISTS idx_entries_category ON entries(category)")
     db.execute("CREATE INDEX IF NOT EXISTS idx_entries_name ON entries(name)")
     db.execute("CREATE INDEX IF NOT EXISTS idx_forum_channel_time ON forum_posts(channel, created_at DESC)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_private_pair_time ON private_messages(from_uuid, to_uuid, created_at DESC)")
     
     # 初始化管理员
     admins = [
@@ -447,17 +466,17 @@ class Server(BaseHTTPRequestHandler):
         elif p.path == "/api/members":
             db = get_db()
             now = int(time.time())
-            rows = db.execute("SELECT uuid,name,avatar,role,online,last_seen FROM members ORDER BY CASE role WHEN 'chief' THEN 0 WHEN 'deputy' THEN 1 WHEN 'admin' THEN 2 ELSE 3 END, name").fetchall()
+            rows = db.execute("SELECT uuid,name,avatar,role,title,avatar_frame,online,last_seen FROM members ORDER BY online DESC, last_seen DESC, CASE role WHEN 'chief' THEN 0 WHEN 'deputy' THEN 1 WHEN 'admin' THEN 2 ELSE 3 END, name").fetchall()
             db.close()
             members = []
             for r in rows:
                 online = r["online"] and (now - r["last_seen"] < 600) if r["last_seen"] else False
-                members.append({"uuid": r["uuid"], "name": r["name"], "avatar": r["avatar"], "role": r["role"], "online": online, "last_seen": r["last_seen"]})
+                members.append({"uuid": r["uuid"], "name": r["name"], "avatar": r["avatar"], "role": r["role"], "title": r["title"] or "", "avatar_frame": r["avatar_frame"] or "none", "online": online, "last_seen": r["last_seen"]})
             self._json(members)
         elif p.path == "/api/members/role":
             q = parse_qs(p.query); uuid = q.get("uuid", [""])[0]
-            db = get_db(); r = db.execute("SELECT role FROM members WHERE uuid=?", [uuid]).fetchone(); db.close()
-            self._json({"role": r["role"] if r else "member"})
+            db = get_db(); r = db.execute("SELECT role,avatar_frame FROM members WHERE uuid=?", [uuid]).fetchone(); db.close()
+            self._json({"role": r["role"] if r else "member", "avatar_frame": r["avatar_frame"] if r else "none"})
         elif p.path == "/api/comments":
             eu = parse_qs(p.query).get("entry_uuid", [None])[0]
             if not eu: self._json([]); return
@@ -469,14 +488,16 @@ class Server(BaseHTTPRequestHandler):
             channel = parse_qs(p.query).get("channel", [""])[0].strip()[:80]
             if not channel: self._json([]); return
             db = get_db()
-            rows = db.execute("""SELECT id,channel,user_uuid,user_name,user_avatar,content,images_json,revoked,created_at
-                               FROM forum_posts WHERE channel=? ORDER BY created_at DESC LIMIT 120""", [channel]).fetchall()
+            rows = db.execute("""SELECT p.id,p.channel,p.user_uuid,p.user_name,p.user_avatar,p.content,p.images_json,p.revoked,p.created_at,
+                                      COALESCE(m.avatar_frame,'none') AS avatar_frame
+                               FROM forum_posts p LEFT JOIN members m ON p.user_uuid=m.uuid
+                               WHERE p.channel=? ORDER BY p.created_at DESC LIMIT 120""", [channel]).fetchall()
             db.close()
             posts = []
             for r in rows:
                 try: images = json.loads(r["images_json"] or "[]")
                 except Exception: images = []
-                posts.append({"id": r["id"], "channel": r["channel"], "user_uuid": r["user_uuid"], "user_name": r["user_name"], "user_avatar": r["user_avatar"], "content": r["content"], "images": images, "revoked": bool(r["revoked"]), "created_at": r["created_at"]})
+                posts.append({"id": r["id"], "channel": r["channel"], "user_uuid": r["user_uuid"], "user_name": r["user_name"], "user_avatar": r["user_avatar"], "avatar_frame": r["avatar_frame"] or "none", "content": r["content"], "images": images, "revoked": bool(r["revoked"]), "created_at": r["created_at"]})
             self._json(posts)
         elif p.path == "/api/search":
             q = parse_qs(p.query).get("q", [""])[0].strip()[:80]
@@ -612,6 +633,56 @@ class Server(BaseHTTPRequestHandler):
                 db.close(); self._json({"error": "权限不足"}, 403); return
             post_id = int(body.get("id", 0) or 0)
             db.execute("UPDATE forum_posts SET revoked=1,revoked_by=? WHERE id=?", [user.get("uuid", ""), post_id])
+            db.commit(); db.close()
+            self._json({"ok": True})
+        elif p.path == "/api/members/title":
+            if not token: self._json({"error": "未登录"}, 401); return
+            try:
+                r = requests.get(f"{API}/v1/user/", headers={"x-token": token}, timeout=10); r.raise_for_status(); user = r.json()
+            except Exception:
+                self._json({"error": "令牌无效"}, 401); return
+            target_uuid = str(body.get("uuid", "")).strip()
+            title = str(body.get("title", "")).strip()[:30]
+            if not target_uuid: self._json({"error": "缺少成员 uuid"}, 400); return
+            db = get_db()
+            role_row = db.execute("SELECT role FROM members WHERE uuid=?", [user.get("uuid", "")]).fetchone()
+            role = role_row["role"] if role_row else "member"
+            if role not in ("chief", "deputy", "admin"):
+                db.close(); self._json({"error": "只有管理员可以授权称号"}, 403); return
+            exists = db.execute("SELECT uuid FROM members WHERE uuid=?", [target_uuid]).fetchone()
+            if not exists:
+                db.close(); self._json({"error": "成员不存在"}, 404); return
+            db.execute("UPDATE members SET title=? WHERE uuid=?", [title, target_uuid])
+            db.commit(); db.close()
+            self._json({"ok": True, "uuid": target_uuid, "title": title})
+        elif p.path == "/api/members/avatar-frame":
+            if not token: self._json({"error": "未登录"}, 401); return
+            try:
+                r = requests.get(f"{API}/v1/user/", headers={"x-token": token}, timeout=10); r.raise_for_status(); user = r.json()
+            except Exception:
+                self._json({"error": "令牌无效"}, 401); return
+            frame = str(body.get("avatar_frame", "none")).strip()
+            if frame not in ("none", "roach", "moonrise"): frame = "none"
+            db = get_db()
+            db.execute("UPDATE members SET avatar_frame=? WHERE uuid=?", [frame, user.get("uuid", "")])
+            db.commit(); db.close()
+            self._json({"ok": True, "avatar_frame": frame})
+        elif p.path == "/api/private/messages":
+            if not token: self._json({"error": "未登录"}, 401); return
+            try:
+                r = requests.get(f"{API}/v1/user/", headers={"x-token": token}, timeout=10); r.raise_for_status(); user = r.json()
+            except Exception:
+                self._json({"error": "令牌无效"}, 401); return
+            to_uuid = str(body.get("to_uuid", "")).strip()
+            content = str(body.get("content", "")).strip()
+            if not to_uuid or not content: self._json({"error": "缺少内容"}, 400); return
+            if len(content) > 2000: self._json({"error": "私聊过长"}, 400); return
+            db = get_db()
+            exists = db.execute("SELECT uuid FROM members WHERE uuid=?", [to_uuid]).fetchone()
+            if not exists:
+                db.close(); self._json({"error": "成员不存在"}, 404); return
+            db.execute("INSERT INTO private_messages(from_uuid,to_uuid,from_name,from_avatar,content) VALUES(?,?,?,?,?)", [user["uuid"], to_uuid, user.get("nick_name") or user.get("name", ""), user.get("avatar_url", ""), content])
+            db.execute("UPDATE members SET online=1,last_seen=? WHERE uuid=?", (int(time.time()), user["uuid"]))
             db.commit(); db.close()
             self._json({"ok": True})
         else:
