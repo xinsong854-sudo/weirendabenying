@@ -9,14 +9,15 @@ description: 捏Ta 手机号验证码登录获取 token，并用 token 调用图
 
 ## 登录获取 Token
 
-手机号 + 4位验证码登录，详见 `index.html`。
+手机号 + 4位验证码登录，详见 `index.html` / `/workspace/pages/server.py` 中内置页面。
 
 | 前端调用 | 3000 后端代理到 | 说明 |
 |------|------|------|
 | `POST /api/proxy/request-code` | `POST /v1/user/request-verification-code` | body: `{ phone_num, captcha_validate }` |
 | `POST /api/proxy/verify-code` | `POST /v1/user/verify-with-phone-num` | body: `{ phone_num, code }` |
+| `GET /api/health` | 本地健康检查 | 返回 `{ ok: true, service, port }` |
 
-说明：浏览器端建议走 3000 后端代理，避免 CORS/Origin 限制；发送验证码前需要极验 `captcha_validate`。
+说明：浏览器端建议走 3000 后端代理，避免 CORS/Origin 限制；发送验证码前需要极验 `captcha_validate`。后端代理需带 `Origin: https://app.nieta.art`、`Referer: https://app.nieta.art/`、`Content-Type: application/json`，并把非 JSON 上游错误包装为 JSON 返回，方便前端展示。
 
 登录成功返回 `token`，响应示例：
 

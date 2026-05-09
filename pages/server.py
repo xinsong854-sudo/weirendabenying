@@ -388,6 +388,8 @@ class Server(BaseHTTPRequestHandler):
             tm = db.execute("SELECT COUNT(*) FROM members").fetchone()[0]
             db.close()
             self._json({**ARCHIVE["stats"], "total_comments": tc, "total_members": tm})
+        elif p.path == "/api/health":
+            self._json({"ok": True, "service": "pseudo-human", "port": PORT})
         elif p.path == "/api/proxy/request-code" or p.path == "/api/proxy/verify-code":
             self.send_error(405)
         else:
@@ -399,19 +401,41 @@ class Server(BaseHTTPRequestHandler):
         token = self.headers.get("x-token", "")
         p = urlparse(self.path)
 
-        # 代理验证码请求（绕过浏览器 Origin 限制）
+        # 代理验证码请求（绕过浏览器 Origin/CORS 限制）
         if p.path == "/api/proxy/request-code":
             try:
-                r = requests.post(f"{API}/v1/user/request-verification-code", json=body, timeout=10, headers={"Referer": "https://app.nieta.art/"})
-                self._json(r.json(), r.status_code)
+                headers = {
+                    "Accept": "application/json",
+                    "Content-Type": "application/json",
+                    "Origin": "https://app.nieta.art",
+                    "Referer": "https://app.nieta.art/",
+                    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124 Safari/537.36",
+                }
+                r = requests.post(f"{API}/v1/user/request-verification-code", json=body, timeout=15, headers=headers)
+                try:
+                    data = r.json()
+                except Exception:
+                    data = {"error": r.text[:500] or r.reason}
+                self._json(data, r.status_code)
             except Exception as e:
                 self._json({"error": str(e)}, 502)
             return
 
         if p.path == "/api/proxy/verify-code":
             try:
-                r = requests.post(f"{API}/v1/user/verify-with-phone-num", json=body, timeout=10, headers={"Referer": "https://app.nieta.art/"})
-                self._json(r.json(), r.status_code)
+                headers = {
+                    "Accept": "application/json",
+                    "Content-Type": "application/json",
+                    "Origin": "https://app.nieta.art",
+                    "Referer": "https://app.nieta.art/",
+                    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124 Safari/537.36",
+                }
+                r = requests.post(f"{API}/v1/user/verify-with-phone-num", json=body, timeout=15, headers=headers)
+                try:
+                    data = r.json()
+                except Exception:
+                    data = {"error": r.text[:500] or r.reason}
+                self._json(data, r.status_code)
             except Exception as e:
                 self._json({"error": str(e)}, 502)
             return
