@@ -121,12 +121,22 @@
             <div v-if="!['活动颁布','成员','悬赏栏目'].includes(selectedForum) && imageLibrary.length" class="local-image-library"><b>本地图片库</b><button v-for="item in imageLibrary.slice(0, 12)" :key="item.url" @click="useLibraryImage(uploadedForumImages, item.url)"><img :src="item.url" alt=""><span>使用</span></button></div>
             <div v-if="!['活动颁布','成员','悬赏栏目'].includes(selectedForum)" class="chat-compose" :class="{ 'with-role-picker': selectedForum === '主论坛' }">
               <img :src="safeUrl(activeForumRoleCard?.avatar_img || session.me.avatar_url)" alt="">
-              <select v-if="selectedForum === '主论坛' && identityCards.length" v-model="selectedRoleCardId" class="compose-role-select" aria-label="选择发言角色卡"><option value="">角色卡</option><option v-for="card in identityCards" :key="card.id" :value="String(card.id)">{{ card.investigator?.name || card.source_name || '未命名角色' }}</option></select>
-              <button v-else-if="selectedForum === '主论坛'" class="compose-role-import" @click="openProfile">导入角色</button>
-              <input v-model.trim="forumText" type="text" :disabled="selectedForum === '主论坛' && !activeForumRoleCard" :placeholder="selectedForum === '主论坛' ? (activeForumRoleCard ? `以「${activeForumRoleCard.investigator?.name || activeForumRoleCard.source_name}」发言...` : '先选择/导入角色') : `在「${selectedForum}」发布讨论...`" @keydown.enter="postForumMessage">
+              <input v-model.trim="forumText" type="text" :disabled="selectedForum === '主论坛' && !activeForumRoleCard" :placeholder="selectedForum === '主论坛' ? (activeForumRoleCard ? `以「${activeForumRoleCard.investigator?.name || activeForumRoleCard.source_name}」发言...` : '点右侧角色按钮选择/导入角色') : `在「${selectedForum}」发布讨论...`" @keydown.enter="postForumMessage">
+              <button v-if="selectedForum === '主论坛'" class="compose-role-trigger" :class="{ empty: !activeForumRoleCard }" @click="rolePickerOpen = !rolePickerOpen" :title="activeForumRoleCard ? `当前角色：${activeForumRoleCard.investigator?.name || activeForumRoleCard.source_name}` : '选择或导入角色'">
+                <img v-if="safeUrl(activeForumRoleCard?.avatar_img)" :src="safeUrl(activeForumRoleCard.avatar_img)" alt="">
+                <span v-else>{{ activeForumRoleCard ? initials(activeForumRoleCard.investigator?.name || activeForumRoleCard.source_name) : '角' }}</span>
+              </button>
               <input ref="forumUploadInput" class="hidden-file" type="file" accept="image/*" multiple @change="onForumImages">
               <button @click="forumUploadInput?.click()">图片</button>
               <button :disabled="forumPosting || (selectedForum === '主论坛' && !activeForumRoleCard) || (!forumText && !uploadedForumImages.length)" @click="postForumMessage">{{ forumPosting ? '改写中' : '发送' }}</button>
+            </div>
+            <div v-if="rolePickerOpen && selectedForum === '主论坛'" class="compose-role-pop">
+              <header><b>选择发言角色</b><button @click="rolePickerOpen = false">×</button></header>
+              <button v-for="card in identityCards" :key="card.id" class="role-pick-item" :class="{ active: String(card.id) === String(selectedRoleCardId) }" @click="selectedRoleCardId = String(card.id); rolePickerOpen = false">
+                <img v-if="safeUrl(card.avatar_img)" :src="safeUrl(card.avatar_img)" alt=""><span v-else>{{ initials(card.investigator?.name || card.source_name) }}</span>
+                <em>{{ card.investigator?.name || card.source_name || '未命名角色' }}</em><i>HP {{ card.hp_current }}/{{ card.hp_max }}</i>
+              </button>
+              <button class="role-pick-import" @click="rolePickerOpen = false; openProfile()">＋ 导入角色卡</button>
             </div>
           </section>
           <aside class="chat-info">
@@ -571,6 +581,7 @@ const identityCardStage = ref('准备生成')
 let identityCardProgressTimer = null
 const identityCards = ref([])
 const selectedRoleCardId = ref('')
+const rolePickerOpen = ref(false)
 const selectedIdentityCardDetail = ref(null)
 const wikiReviewStatus = ref('pending')
 const forumUploadInput = ref(null)
