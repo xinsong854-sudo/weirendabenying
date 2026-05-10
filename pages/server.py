@@ -13,7 +13,7 @@ Privacy / Security Notes:
 """
 import json, os, time, sqlite3, hashlib, mimetypes, re, html, base64
 from http.server import HTTPServer, BaseHTTPRequestHandler
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, unquote
 import requests
 
 API = "https://api.talesofai.cn"

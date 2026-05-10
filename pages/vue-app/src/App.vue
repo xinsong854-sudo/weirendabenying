@@ -117,14 +117,14 @@
               </article>
               <div v-if="!forumLoading && visibleThreads.length === 0" class="item muted">这个频道还没有发言，来发第一条吧。</div>
             </div>
-            <div v-if="selectedForum === '主论坛'" class="role-card-gate">
+            <div v-if="selectedForum === '主论坛'" class="role-card-gate compact-role-gate">
               <template v-if="identityCards.length">
-                <b>主论坛强制角色扮演</b>
-                <select v-model="selectedRoleCardId"><option value="">选择发言角色卡</option><option v-for="card in identityCards" :key="card.id" :value="String(card.id)">{{ card.investigator?.name || card.source_name || '未命名角色' }}</option></select>
-                <small>你的发言会先被改写成所选角色的口吻，再显示在论坛中。</small>
+                <b>RP</b>
+                <select v-model="selectedRoleCardId" aria-label="选择发言角色卡"><option value="">选择角色卡</option><option v-for="card in identityCards" :key="card.id" :value="String(card.id)">{{ card.investigator?.name || card.source_name || '未命名角色' }}</option></select>
+                <small>主论坛发言将按所选角色改写。</small>
               </template>
               <template v-else>
-                <b>主论坛需要角色卡</b><small>请先到个人中心导入带有“伪人大本营”标签、且由你本人创作的捏Ta角色。</small><button class="back-note primary" @click="openProfile">去导入角色</button>
+                <b>RP</b><small>需先导入一张角色卡。</small><button class="back-note primary mini" @click="openProfile">导入</button>
               </template>
             </div>
             <div v-if="!['活动颁布','成员','悬赏栏目'].includes(selectedForum) && uploadedForumImages.length" class="upload-preview"><span v-for="img in uploadedForumImages" :key="img"><img :src="img" alt=""><button @click="removeUploadedImage(uploadedForumImages, img)">×</button></span></div>
@@ -305,46 +305,51 @@
             </div><div class="frame-save-row"><button class="back-note primary" @click="saveAvatarFrame">确定使用头像框</button></div>
           </div>
           <div v-else-if="activeProfilePanel === 'card'" class="setting-block identity-card-block identity-card-open">
-            <div class="identity-card-headline">
+            <div class="identity-card-headline dossier-headline">
               <div>
                 <span class="ritual-label">IDENTITY CARD</span>
-                <h3>身份卡 · CoC 车卡</h3>
-                <p>粘贴 Neta 角色分享链接 / UUID / 角色名，系统会读取角色公开资料与图片，并生成可跑团使用的 CoC 7版车卡。</p>
+                <h3>身份卡 · 档案封面</h3>
+                <p>粘贴 Neta 分享文本/短链会先解析 UUID，再生成 CoC 车卡。卡片以档案封面展示，点击查看详情。</p>
               </div>
             </div>
-            <div v-if="identityCards.length" class="identity-card-shelf">
-              <button v-for="card in identityCards" :key="card.id" class="saved-card-cover" @click="openIdentityCard(card.id)">
+            <div class="identity-card-form compact-import-form">
+              <input v-model.trim="identityCardLink" type="text" placeholder="粘贴 Neta 分享文本 / t.nieta.art 短链 / UUID / 角色名" @paste="onIdentityPaste" @keydown.enter="generateIdentityCard">
+              <button class="back-note primary" :disabled="identityCardLoading || !identityCardLink || identityCards.length >= 3" @click="generateIdentityCard">{{ identityCardLoading ? '生成中...' : identityCards.length >= 3 ? '已达上限' : '导入' }}</button>
+            </div>
+            <p v-if="identityParsedUuid" class="identity-parse-tip">已解析 UUID：{{ identityParsedUuid }}</p>
+            <div v-if="identityCards.length" class="identity-card-shelf dossier-card-shelf">
+              <button v-for="card in identityCards" :key="card.id" class="saved-card-cover dossier-card-cover" @click="openIdentityCard(card.id)">
                 <img v-if="safeUrl(card.avatar_img)" :src="safeUrl(card.avatar_img)" alt="">
                 <span v-else>{{ initials(card.source_name || card.investigator?.name) }}</span>
+                <i>FILE {{ String(card.id).padStart(3, '0') }}</i>
                 <b>{{ card.investigator?.name || card.source_name || '未命名调查员' }}</b>
-                <small>HP {{ card.hp_current }}/{{ card.hp_max }}</small>
+                <small>HP {{ card.hp_current }}/{{ card.hp_max }} · 点击查看</small>
               </button>
             </div>
-            <div v-if="selectedIdentityCardDetail" class="saved-card-detail">
-              <header><div><span class="ritual-label">SAVED CARD</span><h4>{{ selectedIdentityCardDetail.card?.investigator?.name || selectedIdentityCardDetail.summary?.source_name }}</h4></div><button class="back-note" @click="selectedIdentityCardDetail = null">收起</button></header>
-              <div class="identity-derived compact">
-                <span>HP {{ selectedIdentityCardDetail.summary.hp_current }}/{{ selectedIdentityCardDetail.summary.hp_max }}</span>
-                <button class="hp-chip" @click="updateIdentityCardHp(-1)">-1 HP</button>
-                <button class="hp-chip" @click="updateIdentityCardHp(1)">+1 HP</button>
-                <button class="hp-chip danger" @click="updateIdentityCardHp(-999)">撕卡</button>
-              </div>
-              <div class="dimension-radar-wrap" v-if="selectedIdentityCardDetail.card?.attribute_dimensions">
-                <svg class="dimension-radar" viewBox="0 0 120 120" aria-label="多维属性雷达图">
-                  <polygon class="radar-ring outer" points="60,14 106,60 60,106 14,60" />
-                  <polygon class="radar-ring middle" points="60,30 90,60 60,90 30,60" />
-                  <line v-for="axis in dimensionAxes" :key="axis.key" class="radar-axis" x1="60" y1="60" :x2="dimensionAxisPoint(axis.index).x" :y2="dimensionAxisPoint(axis.index).y" />
-                  <polygon class="radar-poly" :points="dimensionRadarPoints(selectedIdentityCardDetail.card.attribute_dimensions)" />
-                  <circle v-for="axis in dimensionAxes" :key="axis.key + '-dot'" class="radar-dot" :cx="dimensionValuePoint(selectedIdentityCardDetail.card.attribute_dimensions, axis.index, axis.key).x" :cy="dimensionValuePoint(selectedIdentityCardDetail.card.attribute_dimensions, axis.index, axis.key).y" r="2.8" />
-                </svg>
-                <div class="dimension-legend">
-                  <div v-for="axis in dimensionAxes" :key="axis.key"><b>{{ selectedIdentityCardDetail.card.attribute_dimensions[axis.key]?.label || axis.label }}</b><strong>{{ selectedIdentityCardDetail.card.attribute_dimensions[axis.key]?.score || 0 }}</strong><small>{{ (selectedIdentityCardDetail.card.attribute_dimensions[axis.key]?.traits || []).join(' · ') }}</small></div>
+            <div v-if="selectedIdentityCardDetail" class="profile-pop-mask card-detail-mask" @click.self="selectedIdentityCardDetail = null">
+              <section class="profile-pop-card saved-card-detail dossier-card-modal">
+                <header><div><span class="ritual-label">SAVED CARD</span><h4>{{ selectedIdentityCardDetail.card?.investigator?.name || selectedIdentityCardDetail.summary?.source_name }}</h4></div><button class="back-note" @click="selectedIdentityCardDetail = null">关闭</button></header>
+                <img v-if="safeUrl(selectedIdentityCardDetail.summary?.avatar_img)" class="dossier-modal-portrait" :src="safeUrl(selectedIdentityCardDetail.summary.avatar_img)" alt="">
+                <div class="identity-derived compact">
+                  <span>HP {{ selectedIdentityCardDetail.summary.hp_current }}/{{ selectedIdentityCardDetail.summary.hp_max }}</span>
+                  <button class="hp-chip" @click="updateIdentityCardHp(-1)">-1 HP</button>
+                  <button class="hp-chip" @click="updateIdentityCardHp(1)">+1 HP</button>
+                  <button class="hp-chip danger" @click="updateIdentityCardHp(-999)">撕卡</button>
                 </div>
-              </div>
-              <button class="back-note danger-soft" @click="deleteIdentityCard(selectedIdentityCardDetail.summary.id)">删除这张卡</button>
-            </div>
-            <div class="identity-card-form">
-              <input v-model.trim="identityCardLink" type="text" placeholder="粘贴 Neta 角色分享链接 / UUID / 角色名" @keydown.enter="generateIdentityCard">
-              <button class="back-note primary" :disabled="identityCardLoading || !identityCardLink || identityCards.length >= 3" @click="generateIdentityCard">{{ identityCardLoading ? '生成中...' : identityCards.length >= 3 ? '已达三张上限' : '生成身份卡' }}</button>
+                <div class="dimension-radar-wrap" v-if="selectedIdentityCardDetail.card?.attribute_dimensions">
+                  <svg class="dimension-radar" viewBox="0 0 120 120" aria-label="多维属性雷达图">
+                    <polygon class="radar-ring outer" points="60,14 106,60 60,106 14,60" />
+                    <polygon class="radar-ring middle" points="60,30 90,60 60,90 30,60" />
+                    <line v-for="axis in dimensionAxes" :key="axis.key" class="radar-axis" x1="60" y1="60" :x2="dimensionAxisPoint(axis.index).x" :y2="dimensionAxisPoint(axis.index).y" />
+                    <polygon class="radar-poly" :points="dimensionRadarPoints(selectedIdentityCardDetail.card.attribute_dimensions)" />
+                    <circle v-for="axis in dimensionAxes" :key="axis.key + '-dot'" class="radar-dot" :cx="dimensionValuePoint(selectedIdentityCardDetail.card.attribute_dimensions, axis.index, axis.key).x" :cy="dimensionValuePoint(selectedIdentityCardDetail.card.attribute_dimensions, axis.index, axis.key).y" r="2.8" />
+                  </svg>
+                  <div class="dimension-legend">
+                    <div v-for="axis in dimensionAxes" :key="axis.key"><b>{{ selectedIdentityCardDetail.card.attribute_dimensions[axis.key]?.label || axis.label }}</b><strong>{{ selectedIdentityCardDetail.card.attribute_dimensions[axis.key]?.score || 0 }}</strong><small>{{ (selectedIdentityCardDetail.card.attribute_dimensions[axis.key]?.traits || []).join(' · ') }}</small></div>
+                  </div>
+                </div>
+                <button class="back-note danger-soft" @click="deleteIdentityCard(selectedIdentityCardDetail.summary.id)">删除这张卡</button>
+              </section>
             </div>
             <div v-if="identityCardLoading" class="identity-generate-progress">
               <div class="progress-head"><b>{{ identityCardStage }}</b><span>{{ Math.round(identityCardProgress) }}%</span></div>
@@ -563,6 +568,7 @@ const wikiSubmitEntryName = ref('')
 const wikiSubmitContent = ref('')
 const activeProfilePanel = ref('frames')
 const identityCardLink = ref('')
+const identityParsedUuid = ref('')
 const identityCardLoading = ref(false)
 const identityCardError = ref('')
 const identityCardResult = ref(null)
@@ -960,6 +966,21 @@ function resetIdentityDraft() {
   identityCardProfile.value = null
   identityCardError.value = ''
 }
+function extractNietaShortUrl(text = '') { const m = String(text || '').match(/https:\/\/t\.nieta\.art\/[a-zA-Z0-9]+/); return m ? m[0] : '' }
+function extractUuidFromText(text = '') { const s = String(text || ''); const direct = s.match(/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/); if (direct) return direct[0]; try { return new URL(s).searchParams.get('uuid') || '' } catch { return '' } }
+async function resolveIdentityInput(raw) {
+  const text = String(raw || '').trim()
+  const direct = extractUuidFromText(text)
+  if (direct) return direct
+  const shortUrl = extractNietaShortUrl(text)
+  if (!shortUrl) return text
+  const longUrl = await api(`${API}/v1/util/original-url?short_url=${encodeURIComponent(shortUrl)}`)
+  const uuid = extractUuidFromText(typeof longUrl === 'string' ? longUrl : JSON.stringify(longUrl || {}))
+  if (!uuid) throw new Error('短链已解析，但未找到角色 UUID')
+  identityParsedUuid.value = uuid
+  return uuid
+}
+function onIdentityPaste() { setTimeout(async () => { try { const uuid = await resolveIdentityInput(identityCardLink.value); if (extractUuidFromText(uuid)) identityParsedUuid.value = uuid } catch {} }, 120) }
 async function generateIdentityCard() {
   if (!session.token) { showMsg('请先登录'); return }
   if (!identityCardLink.value) { showMsg('请粘贴角色链接 / UUID / 角色名'); return }
@@ -968,10 +989,11 @@ async function generateIdentityCard() {
   resetIdentityDraft()
   startIdentityProgress()
   try {
+    const resolvedLink = await resolveIdentityInput(identityCardLink.value)
     const data = await api('/api/coc/character-card', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-token': session.token },
-      body: JSON.stringify({ link: identityCardLink.value }),
+      body: JSON.stringify({ link: resolvedLink }),
       timeout: 90000
     })
     identityCardResult.value = data.card
@@ -1359,11 +1381,9 @@ async function useToken(token, requireCaptcha = false, markReady = true) {
   avatarFrame.value = avatarFrameIds.includes(role?.avatar_frame) ? role.avatar_frame : (avatarFrameIds.includes(verified?.avatar_frame) ? verified.avatar_frame : 'none')
   signatureText.value = role?.signature ?? verified?.signature ?? ''
   localStorage.setItem('NIETA_AVATAR_FRAME', avatarFrame.value)
-  await loadMembers(true)
-  await loadWikiArchive(true)
-  await loadForumMeta(true)
-  await loadForumPosts(true)
-  await loadIdentityCards(true)
+  // 首屏优先：先进论坛，避免等待 Wiki/成员/审核等非首屏数据导致论坛加载慢。
+  await Promise.allSettled([loadForumPosts(true), loadIdentityCards(true)])
+  Promise.allSettled([loadMembers(true), loadWikiArchive(true), loadForumMeta(true)]).then(() => tickForumRealtime()).catch(() => {})
   if (requireCaptcha) prepareHumanCaptcha()
   else if (markReady) welcomeReady.value = true
 }
