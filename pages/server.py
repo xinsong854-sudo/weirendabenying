@@ -73,6 +73,34 @@ def safe_public_url(url):
         return ""
     return s[:1000]
 
+FORUM_LEVELS = [
+    (0, "模仿外表"),
+    (30, "学习行为"),
+    (90, "理解情感"),
+    (180, "体验矛盾"),
+    (320, "建立羁绊"),
+    (520, "精通人性"),
+]
+
+def forum_level_label(exp):
+    value = int(exp or 0)
+    label = FORUM_LEVELS[0][1]
+    for threshold, name in FORUM_LEVELS:
+        if value >= threshold:
+            label = name
+    return label
+
+def today_key():
+    return time.strftime("%Y-%m-%d", time.localtime())
+
+def award_daily_exp(db, user_uuid, action, amount):
+    try:
+        db.execute("INSERT INTO exp_events(user_uuid, action, day, exp) VALUES(?,?,?,?)", [user_uuid, action, today_key(), amount])
+        db.execute("UPDATE members SET exp=COALESCE(exp,0)+? WHERE uuid=?", [amount, user_uuid])
+        return amount
+    except sqlite3.IntegrityError:
+        return 0
+
 
 def load_env_file(path):
     if not os.path.isfile(path):
@@ -128,7 +156,7 @@ def init_db():
     db = get_db()
     # 成员表
     db.execute("""CREATE TABLE IF NOT EXISTS members(
-        uuid TEXT PRIMARY KEY, name TEXT, avatar TEXT, role TEXT DEFAULT 'member', title TEXT DEFAULT '', avatar_frame TEXT DEFAULT 'none', signature TEXT DEFAULT '',
+        uuid TEXT PRIMARY KEY, name TEXT, avatar TEXT, role TEXT DEFAULT 'member', title TEXT DEFAULT '', avatar_frame TEXT DEFAULT 'none', signature TEXT DEFAULT '', exp INTEGER DEFAULT 0,
         online INTEGER DEFAULT 0, last_seen INTEGER, joined_at INTEGER DEFAULT (strftime('%s','now'))
     )""")
     # 兼容旧库：已有 members 表时补充 title 字段
@@ -144,6 +172,19 @@ def init_db():
         db.execute("ALTER TABLE members ADD COLUMN signature TEXT DEFAULT ''")
     except sqlite3.OperationalError:
         pass
+    try:
+        db.execute("ALTER TABLE members ADD COLUMN exp INTEGER DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
+    db.execute("""CREATE TABLE IF NOT EXISTS exp_events(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_uuid TEXT NOT NULL,
+        action TEXT NOT NULL,
+        day TEXT NOT NULL,
+        exp INTEGER NOT NULL,
+        created_at INTEGER DEFAULT (strftime('%s','now')),
+        UNIQUE(user_uuid, action, day)
+    )""")
     # 评论表
     db.execute("""CREATE TABLE IF NOT EXISTS comments(
         id INTEGER PRIMARY KEY AUTOINCREMENT, entry_uuid TEXT NOT NULL,
@@ -455,17 +496,19 @@ class Server(BaseHTTPRequestHandler):
         elif p.path == "/api/members":
             db = get_db()
             now = int(time.time())
-            rows = db.execute("SELECT uuid,name,avatar,role,title,avatar_frame,signature,online,last_seen FROM members ORDER BY online DESC, last_seen DESC, CASE role WHEN 'chief' THEN 0 WHEN 'deputy' THEN 1 WHEN 'admin' THEN 2 ELSE 3 END, name").fetchall()
+            rows = db.execute("SELECT uuid,name,avatar,role,title,avatar_frame,signature,COALESCE(exp,0) AS exp,online,last_seen FROM members ORDER BY online DESC, last_seen DESC, CASE role WHEN 'chief' THEN 0 WHEN 'deputy' THEN 1 WHEN 'admin' THEN 2 ELSE 3 END, name").fetchall()
             db.close()
             members = []
             for r in rows:
                 online = r["online"] and (now - r["last_seen"] < 600) if r["last_seen"] else False
-                members.append({"uuid": r["uuid"], "name": r["name"], "avatar": r["avatar"], "role": r["role"], "title": r["title"] or "", "avatar_frame": r["avatar_frame"] or "none", "signature": r["signature"] or "", "online": online, "last_seen": r["last_seen"]})
+                exp = int(r["exp"] or 0)
+                members.append({"uuid": r["uuid"], "name": r["name"], "avatar": r["avatar"], "role": r["role"], "title": r["title"] or "", "avatar_frame": r["avatar_frame"] or "none", "signature": r["signature"] or "", "exp": exp, "level_label": forum_level_label(exp), "online": online, "last_seen": r["last_seen"]})
             self._json(members)
         elif p.path == "/api/members/role":
             q = parse_qs(p.query); uuid = q.get("uuid", [""])[0]
-            db = get_db(); r = db.execute("SELECT role,avatar_frame,signature,title FROM members WHERE uuid=?", [uuid]).fetchone(); db.close()
-            self._json({"role": r["role"] if r else "member", "avatar_frame": r["avatar_frame"] if r else "none", "signature": r["signature"] if r else "", "title": r["title"] if r else ""})
+            db = get_db(); r = db.execute("SELECT role,avatar_frame,signature,title,COALESCE(exp,0) AS exp FROM members WHERE uuid=?", [uuid]).fetchone(); db.close()
+            exp = int(r["exp"] if r else 0)
+            self._json({"role": r["role"] if r else "member", "avatar_frame": r["avatar_frame"] if r else "none", "signature": r["signature"] if r else "", "title": r["title"] if r else "", "exp": exp, "level_label": forum_level_label(exp)})
         elif p.path == "/api/comments":
             eu = parse_qs(p.query).get("entry_uuid", [None])[0]
             if not eu: self._json([]); return
@@ -478,7 +521,8 @@ class Server(BaseHTTPRequestHandler):
             if not channel: self._json([]); return
             db = get_db()
             rows = db.execute("""SELECT p.id,p.channel,p.user_uuid,p.user_name,p.user_avatar,p.content,p.images_json,p.revoked,p.created_at,
-                                      COALESCE(m.avatar_frame,'none') AS avatar_frame
+                                      COALESCE(m.avatar_frame,'none') AS avatar_frame,
+                                      COALESCE(m.exp,0) AS exp
                                FROM forum_posts p LEFT JOIN members m ON p.user_uuid=m.uuid
                                WHERE p.channel=? ORDER BY p.created_at DESC LIMIT 120""", [channel]).fetchall()
             db.close()
@@ -486,7 +530,8 @@ class Server(BaseHTTPRequestHandler):
             for r in rows:
                 try: images = json.loads(r["images_json"] or "[]")
                 except Exception: images = []
-                posts.append({"id": r["id"], "channel": r["channel"], "user_uuid": r["user_uuid"], "user_name": r["user_name"], "user_avatar": r["user_avatar"], "avatar_frame": r["avatar_frame"] or "none", "content": r["content"], "images": images, "revoked": bool(r["revoked"]), "created_at": r["created_at"]})
+                exp = int(r["exp"] or 0)
+                posts.append({"id": r["id"], "channel": r["channel"], "user_uuid": r["user_uuid"], "user_name": r["user_name"], "user_avatar": r["user_avatar"], "avatar_frame": r["avatar_frame"] or "none", "exp": exp, "level_label": forum_level_label(exp), "content": r["content"], "images": images, "revoked": bool(r["revoked"]), "created_at": r["created_at"]})
             self._json(posts)
         elif p.path == "/api/forum/channels":
             db = get_db()
@@ -700,9 +745,10 @@ class Server(BaseHTTPRequestHandler):
             # 注册为普通成员（如果还不存在）
             db.execute("INSERT OR IGNORE INTO members(uuid,name,avatar,role) VALUES(?,?,?,'member')", (uuid, name, avatar))
             db.execute("UPDATE members SET name=?,avatar=?,online=1,last_seen=? WHERE uuid=?", (name, avatar, int(time.time()), uuid))
-            row = db.execute("SELECT signature,avatar_frame,role,title FROM members WHERE uuid=?", [uuid]).fetchone()
+            row = db.execute("SELECT signature,avatar_frame,role,title,COALESCE(exp,0) AS exp FROM members WHERE uuid=?", [uuid]).fetchone()
             db.commit(); db.close()
-            self._json({"ok": True, "signature": row["signature"] if row else "", "avatar_frame": row["avatar_frame"] if row else "none", "role": row["role"] if row else "member", "title": row["title"] if row else ""})
+            exp = int(row["exp"] if row else 0)
+            self._json({"ok": True, "signature": row["signature"] if row else "", "avatar_frame": row["avatar_frame"] if row else "none", "role": row["role"] if row else "member", "title": row["title"] if row else "", "exp": exp, "level_label": forum_level_label(exp)})
 
         elif p.path == "/api/comments":
             if not token: self._json({"error": "未登录"}, 401); return
@@ -735,9 +781,23 @@ class Server(BaseHTTPRequestHandler):
             db = get_db()
             db.execute("""INSERT INTO forum_posts(channel,user_uuid,user_name,user_avatar,content,images_json)
                        VALUES(?,?,?,?,?,?)""", [channel, user["uuid"], user.get("nick_name") or user.get("name", ""), user.get("avatar_url", ""), content, json.dumps(images, ensure_ascii=False)])
+            gained = award_daily_exp(db, user["uuid"], "forum_post", 10)
             db.execute("UPDATE members SET online=1,last_seen=? WHERE uuid=?", (int(time.time()), user["uuid"]))
             db.commit(); db.close()
-            self._json({"ok": True})
+            self._json({"ok": True, "exp_gained": gained})
+        elif p.path == "/api/explore/daily":
+            if not token: self._json({"error": "未登录"}, 401); return
+            try:
+                r = requests.get(f"{API}/v1/user/", headers={"x-token": token}, timeout=10); r.raise_for_status(); user = r.json()
+            except Exception:
+                self._json({"error": "令牌无效"}, 401); return
+            db = get_db()
+            gained = award_daily_exp(db, user["uuid"], "explore", 15)
+            db.execute("UPDATE members SET online=1,last_seen=? WHERE uuid=?", (int(time.time()), user["uuid"]))
+            row = db.execute("SELECT COALESCE(exp,0) AS exp FROM members WHERE uuid=?", [user["uuid"]]).fetchone()
+            db.commit(); db.close()
+            exp = int(row["exp"] if row else 0)
+            self._json({"ok": True, "exp_gained": gained, "exp": exp, "level_label": forum_level_label(exp)})
         elif p.path == "/api/forum/revoke":
             if not token: self._json({"error": "未登录"}, 401); return
             try:

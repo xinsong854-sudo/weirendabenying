@@ -65,13 +65,13 @@
                 <div class="friend-list">
                   <button v-for="m in filteredMembers" :key="m.uuid" class="friend-row" :class="{ online: m.online, active: selectedMember?.uuid === m.uuid }" @click="selectMember(m)">
                     <span class="friend-avatar" @click.stop.prevent="openMemberModal(m)"><span class="framed-avatar" :class="avatarFrameClassFor(m)"><img class="avatar-base" v-if="safeUrl(m.avatar)" :src="safeUrl(m.avatar)" alt="" loading="lazy" referrerpolicy="no-referrer"><b v-else>{{ initials(m.name) }}</b><img v-if="avatarFrameFor(m)?.type === 'frame'" class="avatar-frame" :src="avatarFrameFor(m).url" alt=""><span v-if="avatarFrameFor(m)?.type === 'roach'" class="roach-orbit" aria-hidden="true"><img :src="avatarFrameFor(m).url" alt=""></span></span></span>
-                    <span><b>{{ m.name }} <i v-if="['chief','deputy','admin'].includes(m.role)" class="verify-v">V</i></b><small v-if="memberTitle(m)">{{ memberTitle(m) }}</small></span>
+                    <span><b>{{ m.name }} <i v-if="['chief','deputy','admin'].includes(m.role)" class="verify-v">V</i></b><small>{{ memberLevelLabel(m) }} · {{ m.exp || 0 }} EXP</small><small v-if="memberTitle(m)">{{ memberTitle(m) }}</small></span>
                     <em>{{ m.online ? '在线' : timeAgo(m.last_seen) }}</em>
                   </button>
                 </div>
               </aside>
               <section v-if="selectedMember" class="friend-detail-pane">
-                  <header class="friend-detail-head"><button class="detail-avatar" @click.stop.prevent="openMemberModal(selectedMember)"><span class="framed-avatar" :class="avatarFrameClassFor(selectedMember)"><img class="avatar-base" v-if="safeUrl(selectedMember.avatar)" :src="safeUrl(selectedMember.avatar)" alt="" referrerpolicy="no-referrer"><b v-else>{{ initials(selectedMember.name) }}</b><img v-if="avatarFrameFor(selectedMember)?.type === 'frame'" class="avatar-frame" :src="avatarFrameFor(selectedMember).url" alt=""><span v-if="avatarFrameFor(selectedMember)?.type === 'roach'" class="roach-orbit" aria-hidden="true"><img :src="avatarFrameFor(selectedMember).url" alt=""></span></span></button><div><h2>{{ selectedMember.name }} <span v-if="profileBadge(selectedMember.role)" class="profile-role-badge">{{ profileBadge(selectedMember.role) }}</span><span v-if="['chief','deputy','admin'].includes(selectedMember.role)" class="verify-v">V</span></h2><p v-if="memberTitle(selectedMember)" class="pop-title-badge">{{ memberTitle(selectedMember) }}</p><small>{{ selectedMember.online ? '在线' : timeAgo(selectedMember.last_seen) }}</small><blockquote v-if="selectedMember.signature" class="pop-signature">{{ selectedMember.signature }}</blockquote></div><div class="detail-actions"><button class="title-auth-btn" @click="openPrivatePane(selectedMember)">私聊</button><button v-if="isAdmin" class="title-auth-btn" @click="authorizeTitle(selectedMember)">授权称号</button></div></header>
+                  <header class="friend-detail-head"><button class="detail-avatar" @click.stop.prevent="openMemberModal(selectedMember)"><span class="framed-avatar" :class="avatarFrameClassFor(selectedMember)"><img class="avatar-base" v-if="safeUrl(selectedMember.avatar)" :src="safeUrl(selectedMember.avatar)" alt="" referrerpolicy="no-referrer"><b v-else>{{ initials(selectedMember.name) }}</b><img v-if="avatarFrameFor(selectedMember)?.type === 'frame'" class="avatar-frame" :src="avatarFrameFor(selectedMember).url" alt=""><span v-if="avatarFrameFor(selectedMember)?.type === 'roach'" class="roach-orbit" aria-hidden="true"><img :src="avatarFrameFor(selectedMember).url" alt=""></span></span></button><div><h2>{{ selectedMember.name }} <span v-if="profileBadge(selectedMember.role)" class="profile-role-badge">{{ profileBadge(selectedMember.role) }}</span><span v-if="['chief','deputy','admin'].includes(selectedMember.role)" class="verify-v">V</span></h2><p v-if="memberTitle(selectedMember)" class="pop-title-badge">{{ memberTitle(selectedMember) }}</p><small>{{ selectedMember.online ? '在线' : timeAgo(selectedMember.last_seen) }} · {{ memberLevelLabel(selectedMember) }} · {{ selectedMember.exp || 0 }} EXP</small><blockquote v-if="selectedMember.signature" class="pop-signature">{{ selectedMember.signature }}</blockquote></div><div class="detail-actions"><button class="title-auth-btn" @click="openPrivatePane(selectedMember)">私聊</button><button v-if="isAdmin" class="title-auth-btn" @click="authorizeTitle(selectedMember)">授权称号</button></div></header>
               </section>
               <section v-if="selectedMember && selectedMemberTool === '私聊'" class="private-side-pane private-drawer">
                 <header><b>私聊 · {{ selectedMember.name }}</b><button @click="selectedMemberTool = '资料'">收起</button></header>
@@ -88,7 +88,7 @@
               <article v-for="thread in visibleThreads" :key="thread.id" class="thread-message" :class="{ own: thread.user_uuid === session.me?.uuid }">
                 <button class="forum-avatar" @click="openForumUser(thread)"><span class="framed-avatar" :class="avatarFrameClassFor(thread)"><img class="avatar-base" v-if="safeUrl(thread.user_avatar)" :src="safeUrl(thread.user_avatar)" alt="" loading="lazy" referrerpolicy="no-referrer"><b v-else>{{ initials(thread.user_name) }}</b><img v-if="avatarFrameFor(thread)?.type === 'frame'" class="avatar-frame" :src="avatarFrameFor(thread).url" alt=""><span v-if="avatarFrameFor(thread)?.type === 'roach'" class="roach-orbit" aria-hidden="true"><img :src="avatarFrameFor(thread).url" alt=""></span></span></button>
                 <div class="message-bubble">
-                  <header><b>{{ thread.user_name }}</b><time>{{ timeAgo(thread.created_at) }}</time><button v-if="isAdmin" class="danger-mini revoke-inline" @click="revokeThread(thread.id)">撤销</button></header>
+                  <header><b>{{ thread.user_name }} <small class="thread-level">{{ memberLevelLabel(thread) }}</small></b><time>{{ timeAgo(thread.created_at) }}</time><button v-if="isAdmin" class="danger-mini revoke-inline" @click="revokeThread(thread.id)">撤销</button></header>
                   <p v-if="thread.content">{{ thread.content }}</p>
                   <div v-if="thread.images?.length" class="message-images"><img v-for="img in thread.images" :key="img" :src="img" alt="" loading="lazy"></div>
                 </div>
@@ -198,6 +198,7 @@
             <p>探索任务、异常坐标与调查报告入口。完整功能稍后开放。</p>
           </div>
         </header>
+        <div class="explore-exp-card"><b>每日里界探索</b><p>完成一次巡游记录，今日可获得 15 EXP。</p><button class="back-note primary" @click="claimExploreExp">进行里界探索</button></div>
         <div class="column-grid">
           <article class="column-card"><h3>异常坐标</h3><p>记录里界地点、路线与危险等级。</p><small>待开放</small></article>
           <article class="column-card"><h3>调查队</h3><p>组织成员探索小队，登记参与者与携带物资。</p><small>待开放</small></article>
@@ -251,7 +252,7 @@
             <div class="identity-summary-main">
               <b>{{ session.me.nick_name || session.me.name }}</b>
               <div class="profile-tags"><b v-if="roleLabel(session.role)">{{ roleLabel(session.role) }}</b><i>{{ pseudoHumanLevel.label }}</i><i v-if="memberTitle(currentUserProfile)">{{ memberTitle(currentUserProfile) }}</i></div>
-              <p class="pseudo-level-note">{{ pseudoHumanLevel.note }}</p>
+              <p class="pseudo-level-note">{{ pseudoHumanLevel.note }} 当前经验：{{ pseudoHumanLevel.exp }} EXP</p>
               <button v-if="!signatureEditing" class="summary-signature" @click="signatureEditing = true">{{ signatureText || '点击留下签名。' }}</button>
               <section v-else class="inline-signature-editor">
                 <label>个人签名</label>
@@ -414,6 +415,7 @@
         <div class="profile-pop-top"><span>USER PROFILE</span><i>{{ selectedMemberModal.online ? 'ONLINE' : 'OFFLINE' }}</i></div>
         <div class="profile-pop-avatar framed-avatar" :class="avatarFrameClassFor(selectedMemberModal)"><img v-if="safeUrl(selectedMemberModal.avatar)" class="avatar-base" :src="safeUrl(selectedMemberModal.avatar)" alt="" referrerpolicy="no-referrer"><b v-else>{{ initials(selectedMemberModal.name) }}</b><img v-if="avatarFrameFor(selectedMemberModal)?.type === 'frame'" class="avatar-frame" :src="avatarFrameFor(selectedMemberModal).url" alt=""><span v-if="avatarFrameFor(selectedMemberModal)?.type === 'roach'" class="roach-orbit" aria-hidden="true"><img :src="avatarFrameFor(selectedMemberModal).url" alt=""></span></div>
         <h2>{{ selectedMemberModal.name }} <span v-if="profileBadge(selectedMemberModal.role)" class="profile-role-badge">{{ profileBadge(selectedMemberModal.role) }}</span><span v-if="['chief','deputy','admin'].includes(selectedMemberModal.role)" class="verify-v">V</span></h2>
+        <p class="pop-title-badge">{{ memberLevelLabel(selectedMemberModal) }} · {{ selectedMemberModal.exp || 0 }} EXP</p>
         <p v-if="memberTitle(selectedMemberModal)" class="pop-title-badge">{{ memberTitle(selectedMemberModal) }}</p>
         <blockquote class="pop-signature"><b>签名</b><span>{{ selectedMemberModal.signature || '这个人还没有留下签名。' }}</span></blockquote>
         <div v-if="selectedMemberCards.length" class="pop-card-list">
@@ -685,22 +687,8 @@ const filteredMembers = computed(() => {
   const q = memberQuery.value.toLowerCase()
   return sortedMembers.value.filter(m => !q || `${m.name} ${memberTitle(m)}`.toLowerCase().includes(q))
 })
-const currentUserProfile = computed(() => members.value.find(m => m.uuid === session.me?.uuid) || { role: session.role, title: '', signature: signatureText.value })
-const pseudoHumanLevel = computed(() => {
-  const uuid = String(session.me?.uuid || '')
-  const seed = Array.from(uuid || 'pseudo').reduce((sum, ch) => sum + ch.charCodeAt(0), 0)
-  const bonus = Math.min(2, Math.floor((commentCounts.value?.[session.me?.uuid] || 0) / 8))
-  const idx = Math.min(5, (seed % 4) + bonus)
-  const notes = [
-    '已能维持基础外观拟态，建议继续观察人类日常。',
-    '开始学习论坛交流、发言节奏与成员互动。',
-    '可识别多数情绪线索，但仍需谨慎处理玩笑。',
-    '能够同时容纳冲突指令与自我怀疑。',
-    '已与大本营形成稳定关系链，具备归属反应。',
-    '高度拟人化个体，允许进入深层论坛记录。'
-  ]
-  return { index: idx + 1, label: pseudoHumanLevels[idx], note: notes[idx] }
-})
+const currentUserProfile = computed(() => members.value.find(m => m.uuid === session.me?.uuid) || { role: session.role, title: '', signature: signatureText.value, exp: 0, level_label: '模仿外表' })
+const pseudoHumanLevel = computed(() => levelInfo(currentUserProfile.value?.exp || 0, currentUserProfile.value?.level_label))
 const currentAvatarFrame = computed(() => avatarFrames.find(f => f.id === avatarFrame.value && f.url) || null)
 const identityCardPortrait = computed(() => identityCardResult.value?.portrait?.avatar_img || identityCardResult.value?.source_character?.avatar_img || identityCardProfile.value?.avatar_img || identityCardResult.value?.portrait?.header_img || identityCardProfile.value?.header_img || '')
 const avatarFrameClass = computed(() => currentAvatarFrame.value ? (currentAvatarFrame.value.type === 'roach' ? 'has-roach-frame avatar-frame-roach' : `avatar-frame-${currentAvatarFrame.value.id}`) : '')
@@ -710,6 +698,14 @@ function avatarFrameFor(member) {
   return avatarFrames.find(f => f.id === frameId && f.url) || null
 }
 function avatarFrameClassFor(member) { const f = avatarFrameFor(member); return f ? (f.type === 'roach' ? 'has-roach-frame avatar-frame-roach' : `avatar-frame-${f.id}`) : '' }
+function levelInfo(exp = 0, label = '') {
+  const thresholds = [0, 30, 90, 180, 320, 520]
+  let idx = pseudoHumanLevels.indexOf(label || '')
+  if (idx < 0) { idx = 0; for (let i = 0; i < thresholds.length; i++) if (Number(exp || 0) >= thresholds[i]) idx = i }
+  const notes = ['已能维持基础外观拟态，建议继续观察人类日常。','开始学习论坛交流、发言节奏与成员互动。','可识别多数情绪线索，但仍需谨慎处理玩笑。','能够同时容纳冲突指令与自我怀疑。','已与大本营形成稳定关系链，具备归属反应。','高度拟人化个体，允许进入深层论坛记录。']
+  return { label: pseudoHumanLevels[idx] || '模仿外表', exp: Number(exp || 0), note: notes[idx] || notes[0] }
+}
+function memberLevelLabel(member) { return member?.level_label || levelInfo(member?.exp || 0).label }
 
 function openFormDialog(options) {
   formDialog.title = options.title || '操作'
@@ -1183,10 +1179,10 @@ async function postForumMessage() {
   if (forumPosting.value || (!forumText.value && !uploadedForumImages.value.length)) return
   forumPosting.value = true
   try {
-    await api('/api/forum/posts', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ channel: selectedForum.value, content: forumText.value, images: uploadedForumImages.value }) })
+    const res = await api('/api/forum/posts', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ channel: selectedForum.value, content: forumText.value, images: uploadedForumImages.value }) })
     forumText.value = ''; uploadedForumImages.value = []
-    await loadForumPosts(true)
-    showMsg('已发送', 'ok')
+    await Promise.all([loadForumPosts(true), loadMembers(true)])
+    showMsg(res?.exp_gained ? `已发送，获得 ${res.exp_gained} EXP` : '已发送', 'ok')
   } catch (e) { showMsg(`发送失败：${e.message}`) } finally { forumPosting.value = false }
 }
 
@@ -1240,10 +1236,10 @@ async function login() {
   try {
     const data = await api('/api/proxy/verify-code', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone_num: p, code: c }) })
     if (!data?.token) throw new Error('未获取到令牌')
-    await useToken(data.token)
+    await useToken(data.token, true)
   } catch (e) { showMsg(`登录失败：${e.message}`) } finally { logging.value = false }
 }
-async function useToken(token) {
+async function useToken(token, requireCaptcha = false) {
   const me = await api(`${API}/v1/user/`, { headers: { 'x-token': token } })
   if (!me?.uuid) throw new Error('令牌无效')
   // Token 本地保存：仅写入用户浏览器 localStorage，不上传后端持久化。
@@ -1259,7 +1255,7 @@ async function useToken(token) {
   await loadForumMeta(true)
   await loadForumPosts(true)
   await loadIdentityCards(true)
-  if (!sessionStorage.getItem(`WEIREN_HUMAN_CHECK_${me.uuid}`)) prepareHumanCaptcha()
+  if (requireCaptcha) prepareHumanCaptcha()
 }
 async function loadMembers(force = false) {
   if (!force && cacheFresh('members') && members.value.length) return
@@ -1293,6 +1289,14 @@ function openArchive() { navigate('archive'); currentCat.value = ''; catQuery.va
 function enterWikiGroup(group) { selectedWikiGroup.value = group; selectedWikiSubsection.value = ''; selectedWikiCategory.value = ''; selectedArtifactCategory.value = ''; wikiSubmitOpen.value = false; window.scrollTo(0, 0) }
 function leaveWikiLevel() { if (selectedWikiGroup.value === '世界信息') { if (selectedWikiCategory.value) { selectedWikiCategory.value = ''; wikiSubmitOpen.value = false; return } if (selectedWikiSubsection.value) { selectedWikiSubsection.value = ''; return } selectedWikiGroup.value = ''; return } if (selectedWikiGroup.value === '伪物档案') { if (selectedArtifactCategory.value) { selectedArtifactCategory.value = ''; wikiSubmitOpen.value = false; return } selectedWikiGroup.value = '' } }
 function openExplore() { navigate('explore') }
+async function claimExploreExp() {
+  if (!session.token) { showMsg('请先登录后再探索'); return }
+  try {
+    const res = await api('/api/explore/daily', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: '{}' })
+    await loadMembers(true)
+    showMsg(res?.exp_gained ? `里界探索完成，获得 ${res.exp_gained} EXP` : '今日已完成里界探索，明天再来。', res?.exp_gained ? 'ok' : 'muted')
+  } catch (e) { showMsg(`探索失败：${e.message}`) }
+}
 function openCategory(cat) { currentCat.value = cat; catQuery.value = ''; navigate('category') }
 async function openEntry(uuid, fromGlobal = false) { if (!confirmPendingUpload()) return; const entry = allEntries.value.find(e => e.uuid === uuid); if (!entry) return; currentEntry.value = entry; currentCat.value = entry.category; view.value = 'entry'; if (fromGlobal) globalQuery.value = ''; window.scrollTo({ top: 0, behavior: 'instant' }); await loadComments(uuid) }
 async function loadComments(uuid) { comments.value = await api(`/api/comments?entry_uuid=${encodeURIComponent(uuid)}`).catch(() => []); commentCounts.value = { ...commentCounts.value, [uuid]: comments.value.length } }
@@ -1322,6 +1326,6 @@ onMounted(async () => {
   liveUserTimer = setInterval(tickLiveUsers, 4500)
   await loadWikiArchive()
   const saved = localStorage.getItem(TOKEN_KEY)
-  if (saved) { logging.value = true; showMsg('检测到已保存的登录状态', 'muted'); try { await useToken(saved) } catch { localStorage.removeItem(TOKEN_KEY); showMsg('登录状态已过期，请重新登录') } finally { logging.value = false } }
+  if (saved) { logging.value = true; showMsg('检测到已保存的登录状态', 'muted'); try { await useToken(saved, false) } catch { localStorage.removeItem(TOKEN_KEY); showMsg('登录状态已过期，请重新登录') } finally { logging.value = false } }
 })
 </script>
