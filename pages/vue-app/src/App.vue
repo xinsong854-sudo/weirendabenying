@@ -9,6 +9,8 @@
         <button :class="{on:view==='members'}" @click="view='members'">成员</button>
         <button :class="{on:view==='wiki'}" @click="view='wiki'">Wiki</button>
         <button :class="{on:view==='codex'}" @click="view='codex'">图鉴</button>
+        <button :class="{on:view==='explore'}" @click="view='explore'">探索</button>
+        <button :class="{on:view==='inventory'}" @click="view='inventory'">背包</button>
         <button :class="{on:view==='profile'}" @click="view='profile'">个人</button>
       </nav>
       <ForumView v-if="view==='forum'" :session="session" />
@@ -16,6 +18,8 @@
       <MembersView v-else-if="view==='members'" />
       <WikiView v-else-if="view==='wiki'" :session="session" />
       <CodexView v-else-if="view==='codex'" />
+      <ExploreView v-else-if="view==='explore'" :session="session" />
+      <InventoryView v-else-if="view==='inventory'" :session="session" />
       <ProfileView v-else :session="session" :user="me" @updated="onProfileUpdated" />
     </section>
   </main>
@@ -30,6 +34,8 @@ import MembersView from './views/MembersView.vue'
 import WikiView from './views/WikiView.vue'
 import CodexView from './views/CodexView.vue'
 import ProfileView from './views/ProfileView.vue'
+import ExploreView from './views/ExploreView.vue'
+import InventoryView from './views/InventoryView.vue'
 import TopBar from './components/TopBar.vue'
 const session=ref(localStorage.getItem(SITE_SESSION_KEY)||'')
 const me=ref(JSON.parse(localStorage.getItem(USER_CACHE_KEY)||'null'))

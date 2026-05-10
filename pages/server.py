@@ -37,6 +37,7 @@ def init_db():
         ('avatar_frame', "ALTER TABLE members ADD COLUMN avatar_frame TEXT DEFAULT 'none'"),
         ('creator_uuid', "ALTER TABLE members ADD COLUMN creator_uuid TEXT DEFAULT ''"),
         ('exp', "ALTER TABLE members ADD COLUMN exp INTEGER DEFAULT 0"),
+        ('benzhen', "ALTER TABLE members ADD COLUMN benzhen INTEGER DEFAULT 0"),
     ]:
         try: con.execute(ddl)
         except sqlite3.OperationalError: pass
@@ -61,6 +62,14 @@ def init_db():
     con.execute('''CREATE TABLE IF NOT EXISTS private_messages(
         id INTEGER PRIMARY KEY AUTOINCREMENT, from_uuid TEXT, to_uuid TEXT, from_name TEXT, from_avatar TEXT,
         content TEXT, created_at INTEGER DEFAULT (strftime('%s','now'))
+    )''')
+    con.execute('''CREATE TABLE IF NOT EXISTS inventory_artifacts(
+        id INTEGER PRIMARY KEY AUTOINCREMENT, user_uuid TEXT, artifact_key TEXT, name TEXT, risk TEXT, rarity TEXT,
+        description TEXT, effect TEXT, uses INTEGER DEFAULT -1, obtained_from TEXT, created_at INTEGER DEFAULT (strftime('%s','now'))
+    )''')
+    con.execute('''CREATE TABLE IF NOT EXISTS explore_runs(
+        id INTEGER PRIMARY KEY AUTOINCREMENT, user_uuid TEXT, card_id INTEGER, card_name TEXT, artifact_id INTEGER,
+        area TEXT, danger TEXT, dice INTEGER, result TEXT, reward INTEGER, artifact_json TEXT DEFAULT '{}', created_at INTEGER DEFAULT (strftime('%s','now'))
     )''')
     con.commit(); con.close()
 
@@ -177,6 +186,40 @@ def json_response(handler, data, status=200):
     handler.end_headers(); handler.wfile.write(raw)
 
 
+ARTIFACT_POOL = [
+    {'key':'tap-tv','name':'拍一拍才能用的电视机','risk':'safe','rarity':'common','description':'一台必须被轻拍三次才会亮起的老电视。只会播放用户三秒前错过的画面。','effect':'探索中可获得一次轻微信息提示。'},
+    {'key':'shy-key','name':'害羞钥匙','risk':'safe','rarity':'common','description':'当有人盯着它看时就打不开门。闭眼时反而很配合。','effect':'探索中遇到门类事件时 +5。'},
+    {'key':'warm-receipt','name':'会发热的小票','risk':'caution','rarity':'uncommon','description':'记录着你尚未购买的东西。越接近对应物品，小票越烫。','effect':'探索结束本真奖励 +2。'},
+    {'key':'wrong-map','name':'差一条街地图','risk':'caution','rarity':'uncommon','description':'永远能把你带到目的地旁边一条街。安全，但非常气人。','effect':'降低迷路惩罚。'},
+    {'key':'polite-stone','name':'很有礼貌的石头','risk':'safe','rarity':'rare','description':'每次被捡起都会说谢谢。放下时会道歉。偶尔替你回答危险问题。','effect':'探索中一次社交检定 +10。'},
+    {'key':'borrowed-shadow','name':'借来的影子','risk':'danger','rarity':'rare','description':'它比你慢半拍，但在你害怕时会先一步逃跑。','effect':'危险事件可抵消一次伤害，但可能带来怪异记录。'},
+    {'key':'eye-thread','name':'眼线残丝','risk':'hazard','rarity':'legendary','description':'一缕像视线一样的丝线。握住时，你会知道某处也正在看你。','effect':'高危探索中大幅提高发现稀有伪物概率。'},
+]
+AREAS = ['槐安公寓夹层','电子屏门后','旧哨站走廊','误入的纸盒里界','风暴海岸边缘','错位花园温室','无人层 03:18','非常电影院后台']
+DANGERS = ['🟩SAFE','🟨CAUTION','🟧DANGER','🟥HAZARD']
+
+def rarity_weight(item):
+    return {'common':55,'uncommon':28,'rare':13,'legendary':4}.get(item.get('rarity'),20)
+
+def choose_artifact(boost=0):
+    import random
+    weights=[]
+    for it in ARTIFACT_POOL:
+        w=rarity_weight(it)
+        if boost and it['rarity'] in ('rare','legendary'):
+            w += boost
+        weights.append(w)
+    return random.choices(ARTIFACT_POOL, weights=weights, k=1)[0]
+
+def add_artifact(con, user_uuid, item, source):
+    con.execute('''INSERT INTO inventory_artifacts(user_uuid,artifact_key,name,risk,rarity,description,effect,obtained_from)
+                   VALUES(?,?,?,?,?,?,?,?)''', [user_uuid,item['key'],item['name'],item['risk'],item['rarity'],item['description'],item['effect'],source])
+    return con.execute('SELECT * FROM inventory_artifacts WHERE id=last_insert_rowid()').fetchone()
+
+def artifact_row(r):
+    return dict(r)
+
+
 class Server(BaseHTTPRequestHandler):
     def security_headers(self):
         self.send_header('X-Content-Type-Options', 'nosniff')
@@ -242,6 +285,10 @@ class Server(BaseHTTPRequestHandler):
                 u=self.user(); con=db(); role=con.execute('SELECT role FROM members WHERE uuid=?',[u['uuid']]).fetchone(); status=clean(parse_qs(p.query).get('status',['pending'])[0],20)
                 if not role or role['role'] not in ('chief','deputy','admin'): con.close(); return self.send_json([])
                 rows=con.execute('SELECT * FROM wiki_submissions WHERE status=? ORDER BY created_at DESC LIMIT 100',[status]).fetchall(); con.close(); return self.send_json([dict(r) for r in rows])
+            if p.path == '/api/inventory':
+                u=self.user(); con=db(); rows=con.execute('SELECT * FROM inventory_artifacts WHERE user_uuid=? ORDER BY created_at DESC,id DESC',[u['uuid']]).fetchall(); bal=con.execute('SELECT COALESCE(benzhen,0) AS benzhen FROM members WHERE uuid=?',[u['uuid']]).fetchone(); con.close(); return self.send_json({'benzhen':int(bal['benzhen'] if bal else 0),'items':[artifact_row(r) for r in rows]})
+            if p.path == '/api/explore/runs':
+                u=self.user(); con=db(); rows=con.execute('SELECT * FROM explore_runs WHERE user_uuid=? ORDER BY created_at DESC LIMIT 30',[u['uuid']]).fetchall(); con.close(); return self.send_json([dict(r) for r in rows])
             if p.path == '/api/identity-cards':
                 u = self.user(); con = db(); rows = con.execute("SELECT * FROM identity_cards WHERE user_uuid=? AND status='active' ORDER BY updated_at DESC", [u['uuid']]).fetchall(); con.close()
                 return self.send_json([self.card_summary(r) for r in rows])
@@ -279,6 +326,21 @@ class Server(BaseHTTPRequestHandler):
                 u=self.user(); con=db(); role=con.execute('SELECT role FROM members WHERE uuid=?',[u['uuid']]).fetchone()
                 if not role or role['role'] not in ('chief','deputy','admin'): con.close(); return self.send_json({'error':'权限不足'},403)
                 sid=int(body.get('id') or 0); action='approved' if body.get('action')=='approved' else 'rejected'; con.execute('UPDATE wiki_submissions SET status=? WHERE id=?',[action,sid]); con.commit(); con.close(); return self.send_json({'ok':True,'status':action})
+            if p.path == '/api/artifacts/draw':
+                u=self.user(); con=db(); bal=con.execute('SELECT COALESCE(benzhen,0) AS benzhen FROM members WHERE uuid=?',[u['uuid']]).fetchone(); benzhen=int(bal['benzhen'] if bal else 0)
+                if benzhen < 20: con.close(); return self.send_json({'error':'本真不足，需要 20'},400)
+                item=choose_artifact(boost=4); row=add_artifact(con,u['uuid'],item,'本真抽取'); con.execute('UPDATE members SET benzhen=COALESCE(benzhen,0)-20 WHERE uuid=?',[u['uuid']]); bal=con.execute('SELECT COALESCE(benzhen,0) AS benzhen FROM members WHERE uuid=?',[u['uuid']]).fetchone(); con.commit(); con.close(); return self.send_json({'ok':True,'item':artifact_row(row),'benzhen':int(bal['benzhen'] if bal else 0)})
+            if p.path == '/api/explore/run':
+                import random
+                u=self.user(); card_id=int(body.get('card_id') or 0); artifact_id=int(body.get('artifact_id') or 0); con=db(); card=None; art=None
+                if card_id: card=con.execute("SELECT source_name FROM identity_cards WHERE id=? AND user_uuid=? AND status='active'",[card_id,u['uuid']]).fetchone()
+                if artifact_id: art=con.execute('SELECT * FROM inventory_artifacts WHERE id=? AND user_uuid=?',[artifact_id,u['uuid']]).fetchone()
+                dice=random.randint(1,100); area=random.choice(AREAS); danger=random.choice(DANGERS); bonus=8 if art else 0; score=dice+bonus
+                reward=max(4, score//10 + (4 if 'DANGER' in danger or 'HAZARD' in danger else 0)); drop=None
+                if score>=72 or random.random()<0.18:
+                    drop=choose_artifact(boost=8 if art and art['rarity']=='legendary' else 0); drop_row=add_artifact(con,u['uuid'],drop,'里界探索'); drop=artifact_row(drop_row)
+                result=f"{card['source_name'] if card else '你'}进入{area}，遭遇{danger}事件，掷骰 {dice}" + (f"，借助「{art['name']}」获得 +{bonus}" if art else '') + f"。{'你带回了一件伪物。' if drop else '你只带回了若干本真和一身灰。'}"
+                con.execute('UPDATE members SET benzhen=COALESCE(benzhen,0)+? WHERE uuid=?',[reward,u['uuid']]); con.execute('INSERT INTO explore_runs(user_uuid,card_id,card_name,artifact_id,area,danger,dice,result,reward,artifact_json) VALUES(?,?,?,?,?,?,?,?,?,?)',[u['uuid'],card_id,card['source_name'] if card else '',artifact_id,area,danger,dice,result,reward,json.dumps(drop or {},ensure_ascii=False)]); bal=con.execute('SELECT COALESCE(benzhen,0) AS benzhen FROM members WHERE uuid=?',[u['uuid']]).fetchone(); con.commit(); con.close(); return self.send_json({'ok':True,'result':result,'reward':reward,'artifact':drop,'benzhen':int(bal['benzhen'] if bal else 0)})
             if p.path == '/api/forum/posts':
                 u = self.user(); channel=clean(body.get('channel') or '主论坛',80); content=clean(body.get('content'),2000); images=body.get('images') if isinstance(body.get('images'),list) else []
                 role_id = int(body.get('role_card_id') or 0)
