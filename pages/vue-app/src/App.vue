@@ -402,9 +402,9 @@
     <div v-if="welcomeLoading" class="welcome-loading-mask">
       <section class="welcome-loading-card">
         <span>DATA SWITCHING</span>
-        <h2>欢迎你，{{ pseudoHumanLevel.label }}的{{ session.me?.nick_name || session.me?.name || '伪人' }}</h2>
+        <h2>{{ welcomeText }}</h2>
         <div class="progress-track"><i></i></div>
-        <p>正在同步论坛、Wiki、成员身份与伪人适应等级……</p>
+        <p>正在将■■切换为可读身份数据……</p>
       </section>
     </div>
 
@@ -548,8 +548,9 @@ const captchaCells = ref([])
 const captchaSelected = ref([])
 const captchaError = ref('')
 const welcomeLoading = ref(false)
-const potatoFallback = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120"><rect width="120" height="120" rx="18" fill="#d8bc75"/><ellipse cx="60" cy="63" rx="38" ry="31" fill="#a9783f"/><circle cx="43" cy="54" r="4" fill="#6f4a29"/><circle cx="72" cy="70" r="3.5" fill="#6f4a29"/><circle cx="63" cy="48" r="3" fill="#6f4a29"/></svg>')
-const nietaFallback = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120"><rect width="120" height="120" rx="18" fill="#2b2142"/><circle cx="60" cy="56" r="34" fill="#f4e9ff"/><circle cx="48" cy="55" r="5" fill="#7b55d9"/><circle cx="72" cy="55" r="5" fill="#7b55d9"/><path d="M46 75Q60 86 74 75" stroke="#7b55d9" stroke-width="5" fill="none" stroke-linecap="round"/><path d="M35 30Q48 16 60 31Q72 16 85 30" stroke="#f0a3ff" stroke-width="8" fill="none" stroke-linecap="round"/></svg>')
+const welcomeText = ref('■■■■■■■■■■■■')
+const captchaPotatoUrl = 'https://oss.talesofai.cn/upload/b91c3751186d4f649576686168347900/2f83b558-cd25-4b81-86be-423d829363e4.jpg'
+const captchaNietaUrl = 'https://oss.talesofai.cn/picture/db88fc7a-71fc-4b91-991d-7ec97e4ea94c.webp'
 const pseudoHumanLevels = ['模仿外表', '学习行为', '理解情感', '体验矛盾', '建立羁绊', '精通人性']
 const savedFrame = localStorage.getItem('NIETA_AVATAR_FRAME')
 const avatarFrame = ref(['none', 'roach', 'moonrise'].includes(savedFrame) ? savedFrame : 'roach')
@@ -1059,9 +1060,7 @@ function useLibraryImage(target, url) {
   showMsg('已从本地图片库添加', 'ok')
 }
 function captchaImages() {
-  const potato = imageLibrary.value[0]?.url || potatoFallback
-  const nieta = imageLibrary.value[1]?.url || nietaFallback
-  return { potato, nieta }
+  return { potato: captchaPotatoUrl, nieta: captchaNietaUrl }
 }
 function shuffleList(list) {
   return [...list].sort(() => Math.random() - 0.5)
@@ -1089,11 +1088,23 @@ function submitHumanCaptcha() {
     captchaError.value = msg
   }
 }
+function startWelcomeDecode() {
+  const finalText = `欢迎你，${pseudoHumanLevel.value.label}的${session.me?.nick_name || session.me?.name || '伪人'}`
+  welcomeText.value = '■'.repeat(finalText.length)
+  let i = 0
+  const timer = setInterval(() => {
+    i += 1
+    welcomeText.value = finalText.slice(0, i) + '■'.repeat(Math.max(0, finalText.length - i))
+    if (i >= finalText.length) clearInterval(timer)
+  }, 55)
+  return finalText
+}
 function finishHumanCaptcha() {
   humanCaptchaOpen.value = false
   if (session.me?.uuid) sessionStorage.setItem(`WEIREN_HUMAN_CHECK_${session.me.uuid}`, 'ok')
   welcomeLoading.value = true
-  setTimeout(() => { welcomeLoading.value = false; showMsg(`欢迎你，${pseudoHumanLevel.value.label}的${session.me?.nick_name || session.me?.name || '伪人'}`, 'ok') }, 1500)
+  const finalText = startWelcomeDecode()
+  setTimeout(() => { welcomeLoading.value = false; showMsg(finalText, 'ok') }, 1700)
 }
 function fileToBase64(file, task) {
   return new Promise((resolve, reject) => {
