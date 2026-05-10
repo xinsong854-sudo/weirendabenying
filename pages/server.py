@@ -99,7 +99,24 @@ LLM_MODEL = os.environ.get("LLM_MODEL", "qwen3.5-plus-no-think")
 LLM_FAST_MODEL = os.environ.get("LLM_FAST_MODEL", "qwen3.5-plus-no-think")
 NETA_API_BASE_URL = os.environ.get("NETA_API_BASE_URL", API)
 
+DEFAULT_ALLOWED_ORIGINS = {
+    "https://xinsong854-sudo.github.io",
+    "https://s-63a86395-de5c-46f9-a54d-0f7d02aa0671-3000.cohub.run",
+}
 # ═══════════ 数据库 ═══════════
+def normalize_origin(value):
+    try:
+        u = urlparse(str(value or "").strip())
+        if u.scheme != "https" or not u.netloc:
+            return ""
+        return f"{u.scheme}://{u.netloc}".rstrip("/")
+    except Exception:
+        return ""
+
+def allowed_origins():
+    extra = {normalize_origin(o) for o in os.environ.get("ALLOWED_ORIGINS", "").split(",") if o.strip()}
+    return DEFAULT_ALLOWED_ORIGINS | {o for o in extra if o}
+
 def get_db():
     db = sqlite3.connect(DB)
     db.row_factory = sqlite3.Row
@@ -370,12 +387,28 @@ class Server(BaseHTTPRequestHandler):
         self.send_header("Cross-Origin-Resource-Policy", "same-site")
         self.send_header("Content-Security-Policy", "default-src 'self' https: data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' https: data: blob:; connect-src 'self' https: wss:; frame-src https:; child-src https:; frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'")
 
+    def _cors_origin(self):
+        origin = normalize_origin(self.headers.get("Origin", ""))
+        return origin if origin in allowed_origins() else ""
+
+    def _origin_allowed(self):
+        origin = self.headers.get("Origin", "")
+        # Non-browser/server-side requests may not include Origin; allow them.
+        return not origin or bool(self._cors_origin())
+
+    def _cors_headers(self):
+        origin = self._cors_origin()
+        if origin:
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "x-token, content-type")
+        self.send_header("Access-Control-Max-Age", "600")
+
     def _json(self, data, code=200):
         self.send_response(code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "x-token, content-type")
+        self._cors_headers()
         self._security_headers()
         self.end_headers()
         self.wfile.write(json.dumps(data, ensure_ascii=False).encode())
@@ -400,6 +433,8 @@ class Server(BaseHTTPRequestHandler):
             self.wfile.write(f.read())
 
     def do_OPTIONS(self):
+        if not self._origin_allowed():
+            self._json({"error": "Origin not allowed"}, 403); return
         self._json({})
 
     def do_GET(self):
@@ -555,6 +590,8 @@ class Server(BaseHTTPRequestHandler):
             self.send_error(404)
 
     def do_POST(self):
+        if not self._origin_allowed():
+            self._json({"error": "Origin not allowed"}, 403); return
         length = int(self.headers.get("Content-Length", 0) or 0)
         if length > MAX_BODY_BYTES:
             self._json({"error": "请求体过大"}, 413); return
