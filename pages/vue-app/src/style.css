@@ -27,3 +27,42 @@
 
 /* 悬赏闭环 + 论坛能力表现层 */
 .bounty-board,.effect-panel{margin:12px 0;padding:13px;border:1px solid #d8c7ad;border-radius:14px;background:#fffdf7}.bounty-board>header,.effect-panel>div:first-child{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:10px}.bounty-board header b,.effect-panel b{font-size:17px}.bounty-card{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;margin:10px 0;padding:13px;border:1px solid #eadbc5;border-radius:14px;background:#fff}.bounty-card strong,.bounty-card small,.bounty-card em{display:block}.bounty-card small{color:#7c3f24;margin:3px 0}.bounty-card p{white-space:pre-wrap;color:#6c5a48;line-height:1.65}.bounty-card em{font-style:normal;color:#7b6a58;font-size:12px}.submission-text{padding:8px;border-radius:10px;background:#fff5e8}.bounty-actions{display:grid;gap:8px;align-content:start}.bounty-actions button,.bounty-board .back-note{padding:8px 10px;border:1px solid #7c3f24;border-radius:10px;background:#7c3f24;color:white;font-weight:800}.effect-panel small{color:#7b6a58}.effect-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:8px}.effect-grid label{display:grid;gap:4px;color:#7c3f24;font-weight:800;font-size:12px}.effect-grid select,.effect-panel textarea{width:100%;padding:9px 10px;border:1px solid #d8c7ad;border-radius:10px;background:#fff;color:#241c16}.spirit-text{display:block;margin:8px 0;padding:9px 11px;border-left:4px solid #5b6fa8;border-radius:10px;background:#eef3ff;color:#24314f;font-weight:700}.rich-post.echo-post{filter:saturate(.9);background:linear-gradient(180deg,#fff,#f7f1f1)!important;border-color:#b9828a!important}.rich-post.artifact-post{box-shadow:0 0 0 2px #b88a2d33,0 14px 38px #b88a2d22}.rich-post.ability-post{border-color:#7c3f24!important}.rich-post.ability-post header:after{content:'ABILITY';margin-left:auto;padding:2px 8px;border-radius:999px;background:#7c3f24;color:#fff;font-size:10px;font-weight:900}@media(max-width:680px){.bounty-card{grid-template-columns:1fr}.bounty-actions{display:flex;flex-wrap:wrap}.effect-grid{grid-template-columns:1fr}}
+
+/* 登录页 - 参照 page_phone_login 范例 */
+.login-stage{--bg:#0a0e15;min-height:100dvh;display:flex;flex-direction:column;align-items:center;padding:max(34px,env(safe-area-inset-top)) 24px max(28px,env(safe-area-inset-bottom));background:radial-gradient(ellipse at 50% 0%,rgba(168,137,74,.12),transparent 34%),linear-gradient(175deg,#0a0e15,#0e121a 54%,#0a0e15);overflow:hidden;position:relative}
+.login-stage:after{content:"";position:fixed;inset:0;pointer-events:none;opacity:.22;background:linear-gradient(90deg,rgba(230,220,199,.020) 1px,transparent 1px),linear-gradient(0deg,rgba(230,220,199,.016) 1px,transparent 1px);background-size:34px 34px,34px 34px}
+.login-brand{z-index:1;text-align:center;padding-top:max(10px,4vh)}
+.login-brand-name{margin:0;font-size:clamp(28px,7vw,48px);font-weight:800;letter-spacing:.06em;color:#ece4d2;font-family:"Songti SC","Noto Serif SC",serif}
+.login-brand-sub{margin:4px 0 0;font-size:10px;font-weight:800;letter-spacing:.22em;text-transform:uppercase;color:rgba(168,137,74,.78)}
+.login-panel{z-index:1;width:100%;max-width:400px;margin-top:max(36px,5vh)}
+.field{position:relative;height:54px;display:flex;align-items:center;border-bottom:1px solid rgba(168,137,74,.20);margin-top:2px}
+.field:first-of-type{margin-top:0}
+.prefix{flex:none;margin-right:12px;color:#ece4d2;font-size:17px;font-weight:600}
+.login-stage input{min-width:0;flex:1;height:52px;border:0;outline:0;padding:0;background:transparent;color:#ece4d2;font-size:17px;font-weight:500}
+.login-stage input::placeholder{color:rgba(230,220,199,.26)}
+.code-btn{flex:none;min-width:88px;height:34px;margin-left:8px;border:0;border-radius:17px;background:rgba(168,137,74,.12);color:rgba(168,137,74,.90);font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap}
+.code-btn:disabled{opacity:.35}
+.agree{display:flex;gap:6px;align-items:flex-start;margin-top:18px;color:rgba(230,220,199,.50);font-size:12px;line-height:20px}
+.agree input{flex:0 0 13px;width:13px;height:13px;min-width:13px;margin:3px 0 0;accent-color:#a8894a}
+.agree a{color:#a8894a;font-weight:600;text-decoration:none}
+.login-btn{width:100%;height:52px;margin-top:26px;border:0;border-radius:26px;color:#0a0e15;font-size:17px;font-weight:800;cursor:pointer;letter-spacing:.06em;background:linear-gradient(90deg,rgba(230,220,199,.90),rgba(168,137,74,.82));box-shadow:0 12px 28px rgba(0,0,0,.20)}
+.login-btn:disabled{opacity:.45}
+.login-foot{margin-top:auto;padding:20px 0 8px;text-align:center;color:rgba(230,220,199,.30);font-size:12px}
+.msg{width:100%;max-width:400px;margin:12px auto 0;padding:10px 14px;border-radius:10px;background:rgba(230,220,199,.06);color:rgba(230,220,199,.58);font-size:12px;line-height:18px}
+.msg.success{background:rgba(90,99,80,.12);color:#9aac8c}
+.msg.error{background:rgba(104,52,60,.14);color:#c98a90}
+.captcha-mask{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:24px;background:rgba(10,14,21,.76);backdrop-filter:blur(10px)}
+.captcha-card{width:min(400px,100%);padding:26px;border:1px solid rgba(168,137,74,.28);border-radius:14px;background:linear-gradient(175deg,#f5efe0,#e6dcc7);color:#1c1712;box-shadow:0 28px 58px rgba(0,0,0,.32)}
+.captcha-card h2{margin:0 0 4px;font-size:22px;font-family:"Songti SC","Noto Serif SC",serif}
+.captcha-card p{margin:0 0 14px;color:#6a5f50;font-size:13px}
+.captcha-card .login-brand-sub{display:block;margin-bottom:8px;color:#68343c}
+.captcha-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:14px 0}
+.captcha-grid button{aspect-ratio:1;border:2px solid rgba(73,56,35,.16);border-radius:6px;background:rgba(245,239,224,.40);padding:0;overflow:hidden}
+.captcha-grid button.selected{border-color:#68343c;box-shadow:0 0 0 4px rgba(104,52,60,.08)}
+.captcha-grid img{width:100%;height:100%;object-fit:cover}
+.captcha-error{color:#68343c!important;font-weight:700;font-size:13px;margin-top:8px}
+.captcha-card.loading{text-align:center}
+.progress-track{height:5px;margin:16px 0;border-radius:999px;background:rgba(73,56,35,.10);overflow:hidden}
+.progress-track i{display:block;height:100%;width:100%;border-radius:inherit;background:linear-gradient(90deg,#a8894a,#68343c);animation:welcomeBar 1.4s ease-in-out infinite}
+@keyframes welcomeBar{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
+@media(max-width:480px){.login-stage{padding-left:20px;padding-right:20px}.login-brand-name{font-size:26px}.login-panel{margin-top:28px}.login-btn{height:50px;font-size:16px}.agree{font-size:11px}}
