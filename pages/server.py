@@ -28,12 +28,13 @@ def init_db():
     con = db()
     con.execute('''CREATE TABLE IF NOT EXISTS members(
         uuid TEXT PRIMARY KEY, name TEXT, avatar TEXT, role TEXT DEFAULT 'member', title TEXT DEFAULT '',
-        signature TEXT DEFAULT '', creator_uuid TEXT DEFAULT '', exp INTEGER DEFAULT 0,
+        signature TEXT DEFAULT '', avatar_frame TEXT DEFAULT 'none', creator_uuid TEXT DEFAULT '', exp INTEGER DEFAULT 0,
         online INTEGER DEFAULT 0, last_seen INTEGER, joined_at INTEGER DEFAULT (strftime('%s','now'))
     )''')
     for col, ddl in [
         ('title', "ALTER TABLE members ADD COLUMN title TEXT DEFAULT ''"),
         ('signature', "ALTER TABLE members ADD COLUMN signature TEXT DEFAULT ''"),
+        ('avatar_frame', "ALTER TABLE members ADD COLUMN avatar_frame TEXT DEFAULT 'none'"),
         ('creator_uuid', "ALTER TABLE members ADD COLUMN creator_uuid TEXT DEFAULT ''"),
         ('exp', "ALTER TABLE members ADD COLUMN exp INTEGER DEFAULT 0"),
     ]:
@@ -222,8 +223,10 @@ class Server(BaseHTTPRequestHandler):
             if p.path == '/api/knight/resolve':
                 q = parse_qs(p.query).get('uuid', [''])[0] or parse_qs(p.query).get('url', [''])[0]
                 return self.send_json(resolve_knight(q))
+            if p.path == '/api/profile':
+                u=self.user(); con=db(); r=con.execute("SELECT signature,avatar_frame,role,title FROM members WHERE uuid=?",[u['uuid']]).fetchone(); con.close(); return self.send_json({'signature':r['signature'] if r else '', 'avatar_frame':r['avatar_frame'] if r else 'none', 'role':r['role'] if r else 'member', 'title':r['title'] if r else ''})
             if p.path == '/api/members':
-                con = db(); rows = con.execute('SELECT uuid,name,avatar,role,title,signature,creator_uuid,COALESCE(exp,0) exp,online,last_seen FROM members ORDER BY online DESC,last_seen DESC,name').fetchall(); con.close()
+                con = db(); rows = con.execute('SELECT uuid,name,avatar,role,title,signature,creator_uuid,avatar_frame,COALESCE(exp,0) exp,online,last_seen FROM members ORDER BY online DESC,last_seen DESC,name').fetchall(); con.close()
                 return self.send_json([dict(r) for r in rows])
             if p.path == '/api/forum/posts':
                 channel = clean(parse_qs(p.query).get('channel', ['主论坛'])[0], 80)
@@ -262,6 +265,8 @@ class Server(BaseHTTPRequestHandler):
                 u = SESSIONS[sess[5:]]['user']
                 con = db(); con.execute("INSERT OR IGNORE INTO members(uuid,name,avatar,role,creator_uuid) VALUES(?,?,?,'member',?)", [u['uuid'], u['nick_name'], u['avatar_url'], u['creator_uuid']]); con.execute('UPDATE members SET name=?,avatar=?,creator_uuid=COALESCE(NULLIF(creator_uuid,\'\'),?),online=1,last_seen=? WHERE uuid=?', [u['nick_name'], u['avatar_url'], u['creator_uuid'], int(time.time()), u['uuid']]); row = con.execute('SELECT role,title,signature FROM members WHERE uuid=?',[u['uuid']]).fetchone(); con.commit(); con.close()
                 return self.send_json({'ok': True, 'session': sess, 'me': u, 'role': row['role'] if row else 'member', 'title': row['title'] if row else '', 'signature': row['signature'] if row else ''})
+            if p.path == '/api/profile':
+                u=self.user(); sig=clean(body.get('signature'),80); frame=clean(body.get('avatar_frame') or 'none',20); con=db(); con.execute('UPDATE members SET signature=?,avatar_frame=? WHERE uuid=?',[sig,frame,u['uuid']]); con.commit(); con.close(); return self.send_json({'ok':True,'signature':sig,'avatar_frame':frame,'me':{'signature':sig,'avatar_frame':frame}})
             if p.path == '/api/forum/posts':
                 u = self.user(); channel=clean(body.get('channel') or '主论坛',80); content=clean(body.get('content'),2000); images=body.get('images') if isinstance(body.get('images'),list) else []
                 role_id = int(body.get('role_card_id') or 0)
