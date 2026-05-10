@@ -1,7 +1,7 @@
 <template>
   <section class="legacy-archive codex-view">
     <div class="page-actions"><button class="back-note primary" @click="submitOpen=!submitOpen">{{ submitOpen?'收起投稿':'改 Wiki / 新增图鉴' }}</button></div>
-    <header class="archive-marquee"><span class="ritual-label">PSEUDO-ARTIFACTS ARCHIVE</span><h1>伪物档案</h1><p>伪物资料需管理员审核后公开。审核通过的投稿会写入图鉴数据库，并给投稿者返还一件固化后的伪物实例。</p></header>
+    <header class="archive-marquee"><span class="ritual-label">Artificial Human Base Camp</span><h1>伪物档案</h1><p>伪物资料需管理员审核后公开。审核通过的投稿会写入图鉴数据库，并给投稿者返还一件固化后的伪物实例。</p></header>
 
     <form v-if="submitOpen" class="wiki-submit-panel wiki-editor-panel" @submit.prevent="submitCodex">
       <div class="wiki-form-grid"><label>伪物名称<input v-model.trim="draft.name" placeholder="例如：迟到的门牌"></label><label>风险等级<select v-model="draft.risk"><option value="safe">🟩 SAFE</option><option value="caution">🟨 CAUTION</option><option value="danger">🟧 DANGER</option><option value="hazard">🟥 HAZARD</option><option value="unknown">⬜ UNKNOWN</option></select></label><label>图片 URL<input v-model.trim="draft.image" placeholder="可选"></label></div>
@@ -10,7 +10,7 @@
     </form>
 
     <section class="wiki-drill-panel artifact-drill">
-      <header class="drill-head artifact"><div><span class="ritual-label">INTERNAL CODEX</span><h2>内部图鉴</h2><p>按危险等级查看伪物。静态 Wiki 与数据库收录条目会合并显示。</p></div></header>
+      <header class="drill-head artifact"><div><span class="ritual-label">Artificial Human Base Camp</span><h2>内部图鉴</h2><p>按危险等级查看伪物。静态 Wiki 与数据库收录条目会合并显示。</p></div></header>
       <div class="risk-tabs"><button v-for="r in risks" :key="r.v" :class="{on:risk===r.v}" @click="risk=r.v">{{ r.t }} <small>{{ count(r.v) }}</small></button></div>
       <div class="artifact-files">
         <button v-for="e in entries" :key="e.uuid || e.name" class="artifact-file" @click="selected=e">
@@ -20,7 +20,7 @@
       </div>
     </section>
 
-    <div v-if="selected" class="drawer" @click.self="selected=null"><article><button class="close" @click="selected=null">×</button><img v-if="selected.image" class="detail-img" :src="selected.image"><span class="ritual-label">{{ selected.source==='database'?'DATABASE ENTRY':'STATIC ARCHIVE' }}</span><h3>{{ selected.name }}</h3><b class="pill">{{ riskOf(selected).t }} · {{ selected.artifact_id || selected.artifact_code || '未编号' }}</b><p>{{ selected.description }}</p></article></div>
+    <div v-if="selected" class="drawer" @click.self="selected=null"><article><button class="close" @click="selected=null">×</button><img v-if="selected.image" class="detail-img" :src="selected.image"><span class="ritual-label">Artificial Human Base Camp</span><h3>{{ selected.name }}</h3><b class="pill">{{ riskOf(selected).t }} · {{ selected.artifact_id || selected.artifact_code || '未编号' }}</b><p>{{ selected.description }}</p></article></div>
   </section>
 </template>
 <script setup>

@@ -1,7 +1,7 @@
 <template>
   <section class="legacy-archive wiki-view">
     <div class="page-actions"><button class="back-note primary" @click="editorOpen=!editorOpen">{{ editorOpen?'收起投稿':'改 Wiki / 新增词条' }}</button></div>
-    <header class="archive-marquee wiki-marquee"><span class="ritual-label">WEIREN ARCHIVE</span><h1>Wiki 档案馆</h1><p>这里不是百科首页，而是伪人大本营的卷宗柜：表界、里界、伪人、哨站、伪物和活动记录会按层级归档。投稿审核通过后，伪物类条目会进入图鉴数据库并返还背包奖励。</p></header>
+    <header class="archive-marquee wiki-marquee"><span class="ritual-label">Artificial Human Base Camp</span><h1>Wiki 档案馆</h1><p>这里不是百科首页，而是伪人大本营的卷宗柜：表界、里界、伪人、哨站、伪物和活动记录会按层级归档。投稿审核通过后，伪物类条目会进入图鉴数据库并返还背包奖励。</p></header>
 
     <form v-if="editorOpen" class="wiki-submit-panel wiki-editor-panel" @submit.prevent="submit">
       <div class="wiki-form-grid"><label>分类名称<input v-model.trim="draft.target" list="wiki-cats" placeholder="世界观 / 里界 / 伪物档案"><datalist id="wiki-cats"><option v-for="c in categories" :key="c.name" :value="c.name" /></datalist></label><label>编辑类型<select v-model="draft.submit_type"><option>新增词条</option><option>修订词条</option><option>新建分类</option><option>图鉴投稿</option></select></label><label>条目名称<input v-model.trim="draft.title" placeholder="档案标题"></label></div>
@@ -17,7 +17,7 @@
         <button v-for="cat in filteredCategories" :key="cat.name" :class="{active:openCat===cat.name}" @click="openCat=openCat===cat.name?'':cat.name"><b>{{ cat.name }}</b><small>{{ cat.entries.length }} 条 · {{ categoryHint(cat.name) }}</small></button>
       </aside>
       <section class="wiki-drill-panel">
-        <header class="drill-head"><div><span class="ritual-label">SELECT ARCHIVE VOLUME</span><h2>{{ openCat || (query ? '搜索结果' : '选择档案卷宗') }}</h2><p>{{ openCat ? categoryHint(openCat) + ' / 当前栏目记录' : '从左侧选择卷宗；移动端可直接向下浏览分类。' }}</p></div><button v-if="openCat" class="back-note" @click="openCat=''">返回卷宗</button></header>
+        <header class="drill-head"><div><span class="ritual-label">Artificial Human Base Camp</span><h2>{{ openCat || (query ? '搜索结果' : '选择档案卷宗') }}</h2><p>{{ openCat ? categoryHint(openCat) + ' / 当前栏目记录' : '从左侧选择卷宗；移动端可直接向下浏览分类。' }}</p></div><button v-if="openCat" class="back-note" @click="openCat=''">返回卷宗</button></header>
         <div v-if="!visibleCategories.length" class="wiki-empty-tip">没有匹配到档案。</div>
         <template v-for="cat in visibleCategories" :key="cat.name">
           <div v-if="!openCat && query" class="artifact-warning"><b>{{ cat.name }}</b><span>{{ cat.entries.length }} 条匹配记录</span></div>

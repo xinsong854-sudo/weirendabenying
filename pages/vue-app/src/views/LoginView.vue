@@ -1,11 +1,11 @@
 <template>
-  <section class="login-scene login-1999">
-    <div class="login-ornament left">1999</div>
-    <div class="login-ornament right">FILE</div>
+  <section class="login-scene login-artificial">
+    <div class="login-ornament left">Artificial</div>
+    <div class="login-ornament right">Base Camp</div>
     <div class="login-disclaimer"><span>隐私说明：手机号用于身份验证、安全防护与关联捏Ta已有资产；不会用于营销或分享给第三方，验证码验证完成后即时失效。</span><span aria-hidden="true">隐私说明：手机号用于身份验证、安全防护与关联捏Ta已有资产；不会用于营销或分享给第三方，验证码验证完成后即时失效。</span></div>
-    <div class="login-stage-copy"><span>REVERSE ARCHIVE / 1999</span><h1>伪人大本营</h1><p>和我们一起，成为入吧</p><div class="stage-rule"><i></i><b>THE PSEUDO HUMAN DOSSIER</b><i></i></div></div>
+    <div class="login-stage-copy"><span>Artificial Human Base Camp</span><h1>伪人大本营</h1><p>和我们一起，成为入吧</p><div class="stage-rule"><i></i><b>Artificial Human Base Camp</b><i></i></div></div>
     <div class="login-card labyrinth-window login-card-refined">
-      <div class="window-title">IDENTITY RITUAL</div><div class="login-file-tab"><span>ACCESS FILE</span><b>404</b></div>
+      <div class="window-title">Artificial Human Base Camp</div><div class="login-file-tab"><span>Base Camp</span><b>404</b></div>
       <h1>捏Ta账号登录</h1><p class="tagline">使用捏Ta官方验证码登录，仅用于确认成员身份</p>
       <details class="login-why"><summary>我们为何需要你的手机号？</summary><ul><li><b>身份验证：</b>仅用于验证你是“捏Ta”平台的用户，以关联你的已有资产。</li><li><b>安全防护：</b>防止恶意注册与机器人攻击。</li><li><b>数据保护：</b>你的手机号仅作为登录凭证，本站后端不保存捏Ta token。</li></ul></details>
       <div class="field"><span class="prefix">+86</span><input v-model.trim="phone" type="tel" inputmode="numeric" maxlength="11" placeholder="输入捏Ta绑定手机号" autocomplete="tel"></div>
@@ -13,8 +13,8 @@
       <label class="agree"><input v-model="agree" type="checkbox"><span>我已阅读并同意 <a href="https://oss.talesofai.cn/static/blackboard/protocol-page/user-agreement.html" target="_blank" rel="noopener noreferrer">用户协议</a> 和 <a href="https://oss.talesofai.cn/static/blackboard/protocol-page/privacy-policy.html" target="_blank" rel="noopener noreferrer">隐私政策</a></span></label>
       <button class="submit" :disabled="logging" @click="login">{{ logging?'登录中...':'踏入世间' }}</button><div class="msg" :class="messageType">{{ msg }}</div><div class="foot">未注册手机号验证后将自动登录 · t.nieta.art/UTLCFvWs</div>
     </div>
-    <div v-if="humanCaptchaOpen" class="captcha-mask"><section class="pseudo-captcha-card labyrinth-window"><div class="window-title">PSEUDO HUMAN CHECK</div><h2>我们需要确定你是伪人</h2><p>请从九宫格中找出<strong>不是土豆</strong>的特殊颜色目标。只有一个小捏，点多或不点都不算。</p><div class="captcha-grid"><button v-for="cell in captchaCells" :key="cell.id" :class="{selected:captchaSelected.includes(cell.id),target:cell.type==='nieta'}" @click="toggleCaptchaCell(cell.id)"><img :src="cell.src" alt="验证图块"></button></div><p v-if="captchaError" class="captcha-error">{{ captchaError }}</p><button class="back-note primary" @click="submitHumanCaptcha">提交识别结果</button></section></div>
-    <div v-if="welcomeLoading" class="welcome-loading-mask"><section class="welcome-loading-card"><span>DATA SWITCHING</span><h2>{{ welcomeText }}</h2><div class="progress-track"><i></i></div><p>正在将■■切换为可读身份数据……</p></section></div>
+    <div v-if="humanCaptchaOpen" class="captcha-mask"><section class="pseudo-captcha-card labyrinth-window"><div class="window-title">Artificial Human Base Camp</div><h2>我们需要确定你是伪人</h2><p>只有一个小捏，点多或不点都不算。</p><div class="captcha-grid"><button v-for="cell in captchaCells" :key="cell.id" :class="{selected:captchaSelected.includes(cell.id),target:cell.type==='nieta'}" @click="toggleCaptchaCell(cell.id)"><img :src="cell.src" alt="验证图块"></button></div><p v-if="captchaError" class="captcha-error">{{ captchaError }}</p><button class="back-note primary" @click="submitHumanCaptcha">提交识别结果</button></section></div>
+    <div v-if="welcomeLoading" class="welcome-loading-mask"><section class="welcome-loading-card"><span>Artificial Human Base Camp</span><h2>{{ welcomeText }}</h2><div class="progress-track"><i></i></div><p>正在将■■切换为可读身份数据……</p></section></div>
   </section>
 </template>
 <script setup>
