@@ -28,7 +28,7 @@
       <button class="submit" :disabled="logging" @click="login">{{ logging ? '登录中...' : '踏入世间' }}</button>
       <div class="msg" :class="messageType">{{ message }}</div>
       <div class="foot">未注册手机号完成捏Ta官方验证码验证后，将进入捏Ta账号登录/注册流程。</div>
-      <nav class="site-legal-links" aria-label="站点信息"><button @click="openLegal('about')">关于我们</button><button @click="openLegal('privacy')">隐私政策</button><button @click="openLegal('contact')">联系我们</button></nav>
+      <nav class="site-legal-links" aria-label="站点信息"><button @click="openLegal('about')">关于我们</button><button @click="openLegal('privacy')">隐私政策</button><button @click="openLegal('contact')">联系我们</button><span class="site-verified-badge">Google 站点所有权已验证</span></nav>
     </div>
   </section>
 
@@ -430,7 +430,7 @@
       </section>
     </div>
 
-    <nav class="site-legal-links app-legal-links" aria-label="站点信息"><button @click="openLegal('about')">关于我们</button><button @click="openLegal('privacy')">隐私政策</button><button @click="openLegal('contact')">联系我们</button></nav>
+    <nav class="site-legal-links app-legal-links" aria-label="站点信息"><button @click="openLegal('about')">关于我们</button><button @click="openLegal('privacy')">隐私政策</button><button @click="openLegal('contact')">联系我们</button><span class="site-verified-badge">Google 站点所有权已验证</span></nav>
 
     <footer class="bottom-dock">
       <button :class="{ active: view === 'forum' }" @click="openForum">论坛</button>
@@ -725,8 +725,8 @@ function memberLevelLabel(member) { return member?.level_label || levelInfo(memb
 
 function openLegal(type) {
   const data = {
-    about: { title: '关于我们', desc: '伪人大本营站点说明', lines: ['伪人大本营是面向成员的社区前端页面，提供捏Ta账号登录、论坛交流、Wiki 浏览、身份卡展示与里界探索等功能。', '本站不提供软件下载，不诱导转账，不收集银行卡或支付信息。', '动态接口由当前 3000 后端提供，GitHub Pages 仅托管静态前端。'] },
-    privacy: { title: '隐私政策', desc: '数据使用与保护说明', lines: ['手机号仅用于捏Ta官方验证码登录与身份验证。', '验证码验证完成后即时失效，不会在当前网站服务器留存。', '登录 token 仅保存在用户浏览器本地；后端只在每次请求中临时验证身份，不会持久化保存 token、手机号、验证码、IP 或设备指纹。', '用户主动提交的论坛发言、Wiki 投稿、签名、身份卡等站内内容会保存在后端，用于站点功能展示。'] },
+    about: { title: '关于我们', desc: '伪人大本营站点说明', lines: ['伪人大本营是面向成员的社区前端页面，提供捏Ta账号登录、论坛交流、Wiki 浏览、身份卡展示与里界探索等功能。', '本站不提供软件下载，不诱导转账，不收集银行卡或支付信息。', '动态接口由当前 3000 后端提供，GitHub Pages 仅托管静态前端。', '本站已完成 Google Search Console 站点所有权验证，用于站点归属确认、搜索收录与安全问题通知。'] },
+    privacy: { title: '隐私政策', desc: '数据使用与保护说明', lines: ['手机号仅用于捏Ta官方验证码登录与身份验证。', '验证码验证完成后即时失效，不会在当前网站服务器留存。', '登录 token 仅保存在用户浏览器本地；后端只在每次请求中临时验证身份，不会持久化保存 token、手机号、验证码、IP 或设备指纹。', '用户主动提交的论坛发言、Wiki 投稿、签名、身份卡等站内内容会保存在后端，用于站点功能展示。', 'Google 站点所有权验证文件仅用于证明站点归属，不涉及用户个人信息。'] },
     contact: { title: '联系我们', desc: '站点联系信息', lines: ['联系 QQ：1062624601', '如遇到账号登录、误拦截、内容删除或安全问题，可通过该联系方式反馈。'] }
   }[type]
   Object.assign(legalDialog, { open: true, ...data })
