@@ -88,6 +88,72 @@ def session_user(token):
     return dict(data['user'])
 
 
+
+def extract_uuid(text):
+    m = re.search(r'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}', str(text or ''))
+    return m.group(0) if m else ''
+
+def extract_short_url(text):
+    m = re.search(r'https?://t\.nieta\.art/[a-zA-Z0-9]+', str(text or ''))
+    return m.group(0) if m else ''
+
+def resolve_original_url(text):
+    short = extract_short_url(text)
+    if not short:
+        return str(text or '')
+    import requests
+    r = requests.get('https://api.talesofai.cn/v1/util/original-url', params={'short_url': short}, timeout=10)
+    data = r.json()
+    if not r.ok:
+        raise ValueError((data or {}).get('detail') or '短链解析失败')
+    return data if isinstance(data, str) else json.dumps(data, ensure_ascii=False)
+
+def resolve_knight(raw):
+    import requests
+    text = resolve_original_url(raw)
+    uuid = extract_uuid(text)
+    if not uuid:
+        raise ValueError('未找到角色 UUID')
+    r = requests.get(f'https://api.talesofai.cn/v2/travel/parent/{uuid}/profile', headers={
+        'x-platform': 'nieta-app/web',
+        'x-nieta-app-version': '6.8.9',
+        'accept': 'application/json',
+        'user-agent': 'Mozilla/5.0'
+    }, timeout=10)
+    data = r.json()
+    if not r.ok:
+        raise ValueError(data.get('detail') or data.get('error') or '角色查询失败')
+    author = data.get('owner_profile') or data.get('creator') or {}
+    cfg = data.get('config') or {}
+    bio = cfg.get('char_info') or data.get('oc_bio') or {}
+    return {
+        'oc': {
+            'uuid': data.get('uuid') or uuid,
+            'name': data.get('name') or data.get('short_name') or '',
+            'short_name': data.get('short_name') or '',
+            'gender': data.get('gender') or '',
+            'status': data.get('status') or '',
+            'accessibility': data.get('accessibility') or '',
+            'heat_score': data.get('heat_score') or 0,
+            'hashtags': data.get('hashtags') or data.get('tags') or [],
+            'avatar_img': cfg.get('avatar_img') or data.get('avatar_img') or '',
+            'header_img': cfg.get('header_img') or '',
+            'bio_summary': {
+                'age': bio.get('age') or '',
+                'persona': bio.get('tone') if bio.get('tone') != 'not_available' else '',
+                'background': bio.get('background') if bio.get('background') != 'not_available' else (cfg.get('travel_preview') or data.get('description') or '')
+            }
+        },
+        'author': {
+            'uuid': author.get('uuid') or '',
+            'nick_name': author.get('nick_name') or author.get('name') or '未知用户',
+            'avatar_url': author.get('avatar_url') or author.get('avatar') or '',
+            'subscriber_count': author.get('subscriber_count') or 0,
+            'story_count': author.get('story_count') or 0
+        },
+        'raw': data
+    }
+
 def make_card(profile):
     name = clean(profile.get('name') or profile.get('oc_bio', {}).get('name') or '未命名角色', 120)
     desc = clean(profile.get('description') or profile.get('oc_bio', {}).get('description') or profile.get('persona') or '', 4000)
@@ -153,6 +219,9 @@ class Server(BaseHTTPRequestHandler):
         try:
             if p.path == '/api/health': return self.send_json({'ok': True})
             if p.path == '/api/session': return self.send_json({'ok': True, 'me': self.user()})
+            if p.path == '/api/knight/resolve':
+                q = parse_qs(p.query).get('uuid', [''])[0] or parse_qs(p.query).get('url', [''])[0]
+                return self.send_json(resolve_knight(q))
             if p.path == '/api/members':
                 con = db(); rows = con.execute('SELECT uuid,name,avatar,role,title,signature,creator_uuid,COALESCE(exp,0) exp,online,last_seen FROM members ORDER BY online DESC,last_seen DESC,name').fetchall(); con.close()
                 return self.send_json([dict(r) for r in rows])
