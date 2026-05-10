@@ -1493,19 +1493,17 @@ async function login() {
 }
 async function useToken(token, requireCaptcha = false, markReady = true) {
   welcomeReady.value = false
-  const me = await api(`${API}/v1/user/`, { headers: { 'x-token': token } })
+  const verified = await api('/api/verify', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': token }, body: '{}' })
+  const me = verified?.me || await api(`${API}/v1/user/`, { headers: { 'x-token': token } })
   if (!me?.uuid) throw new Error('令牌无效')
   // Token 本地保存：仅写入用户浏览器 localStorage，不上传后端持久化。
   session.me = me; session.token = token; localStorage.setItem(TOKEN_KEY, token)
-  const verified = await api('/api/verify', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': token }, body: JSON.stringify(me) }).catch(() => null)
-  const role = await api(`/api/members/role?uuid=${encodeURIComponent(me.uuid)}`)
-  session.role = role?.role || verified?.role || 'member'
-  avatarFrame.value = avatarFrameIds.includes(role?.avatar_frame) ? role.avatar_frame : (avatarFrameIds.includes(verified?.avatar_frame) ? verified.avatar_frame : 'none')
-  signatureText.value = role?.signature ?? verified?.signature ?? ''
+  session.role = verified?.role || 'member'
+  avatarFrame.value = avatarFrameIds.includes(verified?.avatar_frame) ? verified.avatar_frame : 'none'
+  signatureText.value = verified?.signature ?? ''
   localStorage.setItem('NIETA_AVATAR_FRAME', avatarFrame.value)
-  // 首屏优先：先进论坛，避免等待 Wiki/成员/审核等非首屏数据导致论坛加载慢。
-  await Promise.allSettled([loadForumPosts(true), loadIdentityCards(true)])
-  Promise.allSettled([loadMembers(true), loadWikiArchive(true), loadForumMeta(true)]).then(() => tickForumRealtime()).catch(() => {})
+  // 首屏优先：先进论坛，避免等待身份卡/成员/Wiki 等非首屏数据导致登录页停留。
+  Promise.allSettled([loadForumPosts(true), loadIdentityCards(true), loadMembers(true), loadWikiArchive(true), loadForumMeta(true)]).then(() => tickForumRealtime()).catch(() => {})
   if (requireCaptcha) prepareHumanCaptcha()
   else if (markReady) welcomeReady.value = true
 }
@@ -1594,7 +1592,6 @@ onMounted(async () => {
   liveUserTimer = setInterval(tickLiveUsers, 4500)
   forumRealtimeTimer = setInterval(tickForumRealtime, 2500)
   document.addEventListener('visibilitychange', tickForumRealtime)
-  await loadWikiArchive()
   const saved = localStorage.getItem(TOKEN_KEY)
   if (saved) {
     logging.value = true
@@ -1616,6 +1613,9 @@ onMounted(async () => {
     } finally {
       logging.value = false
     }
+  } else {
+    welcomeLoading.value = false
+    await loadWikiArchive()
   }
 })
 </script>

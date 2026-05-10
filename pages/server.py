@@ -1075,7 +1075,7 @@ class Server(BaseHTTPRequestHandler):
             row = db.execute("SELECT signature,avatar_frame,role,title,creator_uuid,COALESCE(exp,0) AS exp,COALESCE(benzhen,0) AS benzhen FROM members WHERE uuid=?", [uuid]).fetchone()
             db.commit(); db.close()
             exp = int(row["exp"] if row else 0)
-            self._json({"ok": True, "signature": row["signature"] if row else "", "avatar_frame": row["avatar_frame"] if row else "none", "role": row["role"] if row else "member", "title": row["title"] if row else "", "exp": exp, "benzhen": int(row["benzhen"] if row else 0), "level_label": forum_level_label(exp)})
+            self._json({"ok": True, "me": {"uuid": uuid, "nick_name": name, "name": name, "avatar_url": avatar}, "signature": row["signature"] if row else "", "avatar_frame": row["avatar_frame"] if row else "none", "role": row["role"] if row else "member", "title": row["title"] if row else "", "creator_uuid": row["creator_uuid"] if row else uuid, "exp": exp, "benzhen": int(row["benzhen"] if row else 0), "level_label": forum_level_label(exp)})
 
         elif p.path == "/api/comments":
             if not token: self._json({"error": "未登录"}, 401); return
