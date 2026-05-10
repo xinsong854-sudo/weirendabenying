@@ -8,6 +8,7 @@ PORT = int(os.environ.get('PORT', '3000'))
 BASE_DIR = os.path.dirname(__file__) or '.'
 DIST_DIR = os.path.join(BASE_DIR, 'dist')
 DB = os.path.join(BASE_DIR, 'pseudo_human.db')
+DATA_JSON = os.path.join(BASE_DIR, 'pseudo-human-data.json')
 MAX_BODY_BYTES = 1024 * 1024
 SESSION_TTL = 7 * 24 * 3600
 SESSIONS = {}
@@ -383,6 +384,71 @@ def generated_artifact(context=None):
     }
 
 
+def load_lore_data():
+    try:
+        with open(DATA_JSON, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def wiki_character_pool():
+    lore = (load_lore_data().get('lore') or {})
+    pool = []
+    for cat in ('伪人档案','人类档案','deus false'):
+        for e in lore.get(cat, [])[:120]:
+            name = clean(e.get('name'), 80)
+            desc = clean(e.get('description'), 1200)
+            if name and desc:
+                pool.append({'name': name, 'description': desc, 'category': cat, 'avatar': clean(e.get('image') or e.get('avatar') or '', 500)})
+    return pool
+
+
+def choose_wiki_character():
+    import random
+    pool = wiki_character_pool()
+    return random.choice(pool) if pool else {'name':'无名伪人','description':'槐安公寓里一个不愿登记姓名的住户。','category':'伪人档案','avatar':''}
+
+
+def generate_daily_news(channel):
+    base = {
+        '渊': '中式现代、黎守、公寓、哨站、城市怪谈与温和管控。',
+        '赤红新星': '工业强国、秩序、生产力、边境合作与技术新闻。',
+        '西陆联盟': '教廷、伪神、派系、猎魔人、宗教与古老传闻。',
+        '渊东': '群岛、航运、轻工业、海边哨站与中转节点。',
+        '悬赏栏': '民间委托、寻物、调查、护送、伪物线索与灰色交易。'
+    }
+    today = time.strftime('%Y-%m-%d')
+    if llm_enabled():
+        try:
+            prompt = f'你是《伪人大本营》的论坛新闻播报员。频道：{channel}。区域设定：{base.get(channel,"伪人大本营综合论坛")}。生成今日论坛新闻 3 条，短小、有世界观沉浸感，不要现实政治，不要破坏设定。只返回 JSON: {{"title":"今日标题","items":["新闻1","新闻2","新闻3"]}}'
+            data = parse_llm_json(llm_chat([{'role':'user','content':prompt}], temperature=0.75, model=LLM_FAST_MODEL, timeout=25))
+            items = data.get('items') if isinstance(data.get('items'), list) else []
+            return {'date': today, 'channel': channel, 'title': clean(data.get('title') or f'{channel} 当日简报', 80), 'items': [clean(x, 220) for x in items[:3]]}
+        except Exception:
+            pass
+    fallback = [
+        f'{channel} 今日有新的门缝目击报告，黎守提醒居民不要围观电子屏边缘的异常闪烁。',
+        '附近哨站更新委托板，寻物、护送与异常影像鉴定类委托数量上升。',
+        '公寓住户称夜间听见走廊里有人倒背自己的论坛昵称，目前未造成伤害。'
+    ]
+    return {'date': today, 'channel': channel, 'title': f'{channel} 当日简报', 'items': fallback}
+
+
+def generate_npc_comment(channel, topic=''):
+    npc = choose_wiki_character()
+    name = npc['name']
+    if llm_enabled():
+        try:
+            prompt = f'你正在为《伪人大本营》论坛生成一条 NPC 随机评论。角色名：{name}\n角色资料：{npc["description"][:900]}\n频道：{channel}\n话题：{topic or "频道闲聊"}\n要求：像角色本人随口发言，30到90字，沉浸、自然、不要解释设定，不要说自己是AI，不要出现JSON。'
+            text = llm_chat([{'role':'user','content':prompt}], temperature=0.85, model=LLM_FAST_MODEL, timeout=25)
+            if text:
+                return {'name': name, 'avatar': npc.get('avatar') or '', 'content': clean(text, 500), 'category': npc.get('category')}
+        except Exception:
+            pass
+    return {'name': name, 'avatar': npc.get('avatar') or '', 'content': f'刚路过{channel}，总觉得这里的字比昨天多了一点。你们有人听见门后面也在回帖吗？', 'category': npc.get('category')}
+
+
 class Server(BaseHTTPRequestHandler):
     def security_headers(self):
         self.send_header('X-Content-Type-Options', 'nosniff')
@@ -435,6 +501,9 @@ class Server(BaseHTTPRequestHandler):
             if p.path == '/api/members':
                 con = db(); rows = con.execute('SELECT uuid,name,avatar,role,title,signature,creator_uuid,avatar_frame,COALESCE(exp,0) exp,online,last_seen FROM members ORDER BY online DESC,last_seen DESC,name').fetchall(); con.close()
                 return self.send_json([dict(r) for r in rows])
+            if p.path == '/api/forum/daily-news':
+                channel = clean(parse_qs(p.query).get('channel', ['渊'])[0], 80)
+                return self.send_json(generate_daily_news(channel))
             if p.path == '/api/forum/posts':
                 channel = clean(parse_qs(p.query).get('channel', ['主论坛'])[0], 80)
                 con = db(); rows = con.execute('SELECT * FROM forum_posts WHERE channel=? AND revoked=0 ORDER BY created_at DESC LIMIT 120', [channel]).fetchall(); con.close()
@@ -550,6 +619,10 @@ class Server(BaseHTTPRequestHandler):
                         an=random.choice(['门缝听觉','反文阅读','危险预感','伪物共鸣'])
                         con.execute('INSERT INTO character_abilities(card_id,user_uuid,name,source,scope,effect,cost) VALUES(?,?,?,?,?,?,?)',[card_id,u['uuid'],an,'里界探索','forum,rpg,codex','可在论坛发言中体现异常感知，并在探索中获得一次轻微加值。','冷却 24h / 可能增加污染'])
                 con.execute('UPDATE members SET benzhen=COALESCE(benzhen,0)+? WHERE uuid=?',[reward,u['uuid']]); con.execute('INSERT INTO explore_runs(user_uuid,card_id,card_name,artifact_id,area,danger,dice,result,reward,artifact_json) VALUES(?,?,?,?,?,?,?,?,?,?)',[u['uuid'],card_id,card['source_name'] if card else '',artifact_id,area,danger,dice,result,reward,json.dumps(drop or {},ensure_ascii=False)]); bal=con.execute('SELECT COALESCE(benzhen,0) AS benzhen FROM members WHERE uuid=?',[u['uuid']]).fetchone(); con.commit(); con.close(); return self.send_json({'ok':True,'result':result,'reward':reward,'artifact':drop,'benzhen':int(bal['benzhen'] if bal else 0)})
+            if p.path == '/api/forum/npc-comment':
+                u=self.user(); channel=clean(body.get('channel') or '主论坛',80); topic=clean(body.get('topic'),300)
+                if channel == '主论坛': return self.send_json({'error':'主论坛不自动刷新人机评论'},400)
+                npc=generate_npc_comment(channel, topic); con=db(); con.execute('INSERT INTO forum_posts(channel,user_uuid,user_name,user_avatar,content,images_json) VALUES(?,?,?,?,?,?)',[channel,'npc:'+clean(npc['name'],80),clean(npc['name'],120),clean(npc.get('avatar'),500),clean(npc['content'],800),'[]']); con.commit(); con.close(); return self.send_json({'ok':True,'npc':npc})
             if p.path == '/api/forum/posts':
                 u = self.user(); channel=clean(body.get('channel') or '主论坛',80); content=clean(body.get('content'),2000); images=body.get('images') if isinstance(body.get('images'),list) else []
                 role_id = int(body.get('role_card_id') or 0)
