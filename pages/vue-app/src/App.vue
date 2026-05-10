@@ -385,29 +385,6 @@
       </Transition>
     </main>
 
-    <div v-if="humanCaptchaOpen" class="captcha-mask">
-      <section class="pseudo-captcha-card labyrinth-window">
-        <div class="window-title">PSEUDO HUMAN CHECK</div>
-        <h2>我们需要确定你是伪人</h2>
-        <p>请从九宫格中找出<strong>不是土豆</strong>的特殊颜色目标。只有一个小捏，点多或不点都不算。</p>
-        <div class="captcha-grid">
-          <button v-for="cell in captchaCells" :key="cell.id" :class="{ selected: captchaSelected.includes(cell.id), target: cell.type === 'nieta' }" @click="toggleCaptchaCell(cell.id)">
-            <img :src="cell.src" alt="验证图块">
-          </button>
-        </div>
-        <p v-if="captchaError" class="captcha-error">{{ captchaError }}</p>
-        <button class="back-note primary" @click="submitHumanCaptcha">提交识别结果</button>
-      </section>
-    </div>
-
-    <div v-if="welcomeLoading" class="welcome-loading-mask">
-      <section class="welcome-loading-card">
-        <span>DATA SWITCHING</span>
-        <h2>{{ welcomeText }}</h2>
-        <div class="progress-track"><i></i></div>
-        <p>正在将■■切换为可读身份数据……</p>
-      </section>
-    </div>
 
     <div v-if="selectedMemberModal" class="profile-pop-mask" @click.self="closeMemberModal">
       <section class="profile-pop-card">
@@ -459,6 +436,30 @@
       <button :class="{ active: view === 'profile' }" @click="openProfile">个人中心</button>
     </footer>
   </section>
+
+  <div v-if="humanCaptchaOpen" class="captcha-mask">
+    <section class="pseudo-captcha-card labyrinth-window">
+      <div class="window-title">PSEUDO HUMAN CHECK</div>
+      <h2>我们需要确定你是伪人</h2>
+      <p>请从九宫格中找出<strong>不是土豆</strong>的特殊颜色目标。只有一个小捏，点多或不点都不算。</p>
+      <div class="captcha-grid">
+        <button v-for="cell in captchaCells" :key="cell.id" :class="{ selected: captchaSelected.includes(cell.id), target: cell.type === 'nieta' }" @click="toggleCaptchaCell(cell.id)">
+          <img :src="cell.src" alt="验证图块">
+        </button>
+      </div>
+      <p v-if="captchaError" class="captcha-error">{{ captchaError }}</p>
+      <button class="back-note primary" @click="submitHumanCaptcha">提交识别结果</button>
+    </section>
+  </div>
+
+  <div v-if="welcomeLoading" class="welcome-loading-mask">
+    <section class="welcome-loading-card">
+      <span>DATA SWITCHING</span>
+      <h2>{{ welcomeText }}</h2>
+      <div class="progress-track"><i></i></div>
+      <p>正在将■■切换为可读身份数据……</p>
+    </section>
+  </div>
 </template>
 
 <script setup>
@@ -551,6 +552,7 @@ const captchaSelected = ref([])
 const captchaError = ref('')
 const welcomeLoading = ref(false)
 const welcomeText = ref('■■■■■■■■■■■■')
+const pendingLoginToken = ref('')
 const captchaNietaUrl = 'https://oss.talesofai.cn/sts/49c915e649254f55a7ea399ad3b6efd1/2ee7bcbe-7fa3-41ba-beeb-294f1f23f3b9.jpg'
 const captchaPotatoUrl = 'https://oss.talesofai.cn/picture/db88fc7a-71fc-4b91-991d-7ec97e4ea94c.webp'
 const pseudoHumanLevels = ['模仿外表', '学习行为', '理解情感', '体验矛盾', '建立羁绊', '精通人性']
@@ -1095,8 +1097,14 @@ function startWelcomeDecode() {
   }, 55)
   return finalText
 }
-function finishHumanCaptcha() {
+async function finishHumanCaptcha() {
   humanCaptchaOpen.value = false
+  const token = pendingLoginToken.value
+  pendingLoginToken.value = ''
+  if (token && !session.me) {
+    logging.value = true
+    try { await useToken(token, false) } catch (e) { welcomeLoading.value = false; showMsg(`登录失败：${e.message}`); return } finally { logging.value = false }
+  }
   if (session.me?.uuid) sessionStorage.setItem(`WEIREN_HUMAN_CHECK_${session.me.uuid}`, 'ok')
   welcomeLoading.value = true
   const finalText = startWelcomeDecode()
@@ -1236,7 +1244,9 @@ async function login() {
   try {
     const data = await api('/api/proxy/verify-code', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone_num: p, code: c }) })
     if (!data?.token) throw new Error('未获取到令牌')
-    await useToken(data.token, true)
+    pendingLoginToken.value = data.token
+    prepareHumanCaptcha()
+    showMsg('请完成伪人验证', 'muted')
   } catch (e) { showMsg(`登录失败：${e.message}`) } finally { logging.value = false }
 }
 async function useToken(token, requireCaptcha = false) {
