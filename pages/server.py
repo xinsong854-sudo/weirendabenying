@@ -156,7 +156,7 @@ def init_db():
     # 成员表
     db.execute("""CREATE TABLE IF NOT EXISTS members(
         uuid TEXT PRIMARY KEY, name TEXT, avatar TEXT, role TEXT DEFAULT 'member', title TEXT DEFAULT '', avatar_frame TEXT DEFAULT 'none', signature TEXT DEFAULT '', exp INTEGER DEFAULT 0,
-        online INTEGER DEFAULT 0, last_seen INTEGER, joined_at INTEGER DEFAULT (strftime('%s','now'))
+        creator_uuid TEXT DEFAULT '', online INTEGER DEFAULT 0, last_seen INTEGER, joined_at INTEGER DEFAULT (strftime('%s','now'))
     )""")
     # 兼容旧库：已有 members 表时补充 title 字段
     try:
@@ -173,6 +173,10 @@ def init_db():
         pass
     try:
         db.execute("ALTER TABLE members ADD COLUMN exp INTEGER DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute("ALTER TABLE members ADD COLUMN creator_uuid TEXT DEFAULT ''")
     except sqlite3.OperationalError:
         pass
     db.execute("""CREATE TABLE IF NOT EXISTS exp_events(
@@ -488,6 +492,14 @@ def get_user_by_token(token):
         user = r.json()
         if not user.get("uuid"):
             raise ValueError("令牌无效")
+        try:
+            db = get_db()
+            row = db.execute("SELECT creator_uuid FROM members WHERE uuid=?", [user.get("uuid")]).fetchone()
+            db.close()
+            if row and row["creator_uuid"]:
+                user["creator_uuid"] = row["creator_uuid"]
+        except Exception:
+            pass
         return user
     except Exception as e:
         msg = str(e)
@@ -597,9 +609,9 @@ def fetch_neta_character_profile(user_token, link):
     return apply_creator_uuid_from_text(profile, raw)
 
 def validate_character_for_user(profile, user):
-    # 身份卡导入只做“创作者 UUID == 当前登录用户 UUID”的硬校验。
-    # 短链解析出来的长链接 / profile 内通常带 creator/owner 字段；不要用本地成员资料兜底，也不要放过无法判定归属的角色。
-    uid = str(user.get("uuid") or "").strip()
+    # 身份卡导入只做“创作者 UUID == 登录时保存的本人创作者 UUID”的硬校验。
+    # 不拿其他成员资料兜底；无法确认角色归属时直接拒绝。
+    uid = str(user.get("creator_uuid") or user.get("uuid") or "").strip()
     creator = profile.get("creator") or profile.get("owner_profile") or profile.get("user") or {}
     candidate_ids = [
         profile.get("owner_uuid"),
@@ -1051,9 +1063,9 @@ class Server(BaseHTTPRequestHandler):
             if not uuid: self._json({"error": "无效用户"}, 400); return
             db = get_db()
             # 注册为普通成员（如果还不存在）
-            db.execute("INSERT OR IGNORE INTO members(uuid,name,avatar,role) VALUES(?,?,?,'member')", (uuid, name, avatar))
-            db.execute("UPDATE members SET name=?,avatar=?,online=1,last_seen=? WHERE uuid=?", (name, avatar, int(time.time()), uuid))
-            row = db.execute("SELECT signature,avatar_frame,role,title,COALESCE(exp,0) AS exp,COALESCE(benzhen,0) AS benzhen FROM members WHERE uuid=?", [uuid]).fetchone()
+            db.execute("INSERT OR IGNORE INTO members(uuid,name,avatar,role,creator_uuid) VALUES(?,?,?,'member',?)", (uuid, name, avatar, uuid))
+            db.execute("UPDATE members SET name=?,avatar=?,creator_uuid=COALESCE(NULLIF(creator_uuid,''),?),online=1,last_seen=? WHERE uuid=?", (name, avatar, uuid, int(time.time()), uuid))
+            row = db.execute("SELECT signature,avatar_frame,role,title,creator_uuid,COALESCE(exp,0) AS exp,COALESCE(benzhen,0) AS benzhen FROM members WHERE uuid=?", [uuid]).fetchone()
             db.commit(); db.close()
             exp = int(row["exp"] if row else 0)
             self._json({"ok": True, "signature": row["signature"] if row else "", "avatar_frame": row["avatar_frame"] if row else "none", "role": row["role"] if row else "member", "title": row["title"] if row else "", "exp": exp, "benzhen": int(row["benzhen"] if row else 0), "level_label": forum_level_label(exp)})
@@ -1365,8 +1377,8 @@ class Server(BaseHTTPRequestHandler):
             name = user.get("nick_name") or user.get("name", "")
             avatar = user.get("avatar_url", "")
             db = get_db()
-            db.execute("INSERT OR IGNORE INTO members(uuid,name,avatar,role) VALUES(?,?,?,'member')", [uuid, name, avatar])
-            db.execute("UPDATE members SET name=?, avatar=?, signature=?, online=1, last_seen=? WHERE uuid=?", [name, avatar, signature, int(time.time()), uuid])
+            db.execute("INSERT OR IGNORE INTO members(uuid,name,avatar,role,creator_uuid) VALUES(?,?,?,'member',?)", [uuid, name, avatar, uuid])
+            db.execute("UPDATE members SET name=?, avatar=?, signature=?, creator_uuid=COALESCE(NULLIF(creator_uuid,''),?), online=1, last_seen=? WHERE uuid=?", [name, avatar, signature, uuid, int(time.time()), uuid])
             db.commit(); db.close()
             self._json({"ok": True, "signature": signature})
         elif p.path == "/api/neta/original-url":
