@@ -31,7 +31,7 @@
     </div>
   </section>
 
-  <section v-else-if="session.me && (welcomeReady || (!welcomeLoading && !humanCaptchaOpen && !pendingLoginToken))" class="labyrinth-app">
+  <section v-else-if="session.me && (welcomeReady || (!welcomeLoading && !humanCaptchaOpen && !pendingLoginToken))" class="labyrinth-app" :class="{ 'forum-active': view === 'forum' }">
     <div v-if="message" class="global-toast" :class="messageType">{{ message }}</div>
     <div v-if="uploadTasks.length" class="upload-task-panel">
       <div class="upload-task-head"><b>图片上传任务</b><span>{{ uploadInProgress ? '上传中，请勿关闭页面' : '上传完成' }}</span></div>

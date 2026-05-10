@@ -237,9 +237,11 @@ input,textarea,select{outline:none}input:focus,textarea:focus,select:focus{borde
 .thread-list{padding:26px 30px 18px 38px;overflow-x:hidden}.thread-message{padding:8px 0;overflow:visible!important;content-visibility:visible!important;contain:none!important}.forum-avatar{position:relative;z-index:3;margin:8px 3px}.forum-avatar .framed-avatar{--frame-scale:1.78}.message-bubble{z-index:1}.friend-row,.profile-pop-card,.friend-detail-head{overflow:visible!important}.activity-card.bounty-card{content-visibility:visible!important;contain:none!important}
 @media(max-width:900px){.archive-theater,.category-theater,.entry-theater,.forum-theater,.profile-theater{padding-bottom:calc(104px + env(safe-area-inset-bottom))!important}.chat-forum{padding:8px 8px calc(96px + env(safe-area-inset-bottom))!important}.chat-shell{height:calc(100svh - 92px - env(safe-area-inset-bottom));margin-bottom:0}.thread-list{padding:26px 18px 18px 32px}.bottom-dock{bottom:calc(8px + env(safe-area-inset-bottom))}.chat-compose{padding-bottom:12px}.bounty-board{grid-template-columns:1fr;align-content:start}.bounty-detail{padding:15px}.bounty-file-head h2{font-size:var(--fs-lg)}}
 
-/* mobile forum full-screen rescue: keep main forum from becoming a tiny card */
+/* mobile forum full-screen rescue: only active forum uses fixed chat layout */
 @media(max-width:900px){
-  .chat-forum{
+  .labyrinth-app:not(.forum-active),.labyrinth-app:not(.forum-active) .stage-main{height:auto!important;min-height:100vh!important;overflow:visible!important}
+  .labyrinth-app:not(.forum-active) .archive-theater,.labyrinth-app:not(.forum-active) .category-theater,.labyrinth-app:not(.forum-active) .entry-theater,.labyrinth-app:not(.forum-active) .profile-theater,.labyrinth-app:not(.forum-active) .forum-theater:not(.chat-forum){position:relative!important;inset:auto!important;height:auto!important;min-height:100vh!important;overflow:visible!important}
+  .forum-active .chat-forum{
     position:fixed!important;
     left:0!important;right:0!important;top:0!important;
     bottom:calc(76px + env(safe-area-inset-bottom))!important;
@@ -247,17 +249,17 @@ input,textarea,select{outline:none}input:focus,textarea:focus,select:focus{borde
     margin:0!important;padding:6px!important;
     overflow:hidden!important;
   }
-  .chat-forum .chat-shell{
+  .forum-active .chat-forum .chat-shell{
     width:100%!important;height:100%!important;min-height:0!important;margin:0!important;
     border-radius:12px!important;display:flex!important;flex-direction:column!important;
   }
-  .chat-forum .game-channel-sidebar{flex:0 0 auto!important;min-height:0!important;max-height:132px!important;display:flex!important;flex-direction:column!important}
-  .chat-forum .game-rail{flex:0 0 auto!important;padding:7px!important}
-  .chat-forum .sub-channel-panel{flex:0 0 auto!important;min-height:0!important;max-height:66px!important;padding:7px!important}
-  .chat-forum .chat-room{flex:1 1 auto!important;min-height:0!important;height:auto!important}
-  .chat-forum .thread-list{flex:1 1 auto!important;min-height:0!important;padding:24px 18px 14px 32px!important}
-  .chat-forum .chat-compose{flex:0 0 auto!important;padding:10px 10px calc(10px + env(safe-area-inset-bottom))!important}
-  .chat-forum .role-card-gate,.chat-forum .upload-preview,.chat-forum .local-image-library{flex:0 0 auto!important;max-height:96px!important;overflow:auto!important}
+  .forum-active .chat-forum .game-channel-sidebar{flex:0 0 auto!important;min-height:0!important;max-height:132px!important;display:flex!important;flex-direction:column!important}
+  .forum-active .chat-forum .game-rail{flex:0 0 auto!important;padding:7px!important}
+  .forum-active .chat-forum .sub-channel-panel{flex:0 0 auto!important;min-height:0!important;max-height:66px!important;padding:7px!important}
+  .forum-active .chat-forum .chat-room{flex:1 1 auto!important;min-height:0!important;height:auto!important}
+  .forum-active .chat-forum .thread-list{flex:1 1 auto!important;min-height:0!important;padding:24px 18px 14px 32px!important}
+  .forum-active .chat-forum .chat-compose{flex:0 0 auto!important;padding:10px 10px calc(10px + env(safe-area-inset-bottom))!important}
+  .forum-active .chat-forum .role-card-gate,.forum-active .chat-forum .upload-preview,.forum-active .chat-forum .local-image-library{flex:0 0 auto!important;max-height:96px!important;overflow:auto!important}
   .bottom-dock{height:58px!important;bottom:calc(8px + env(safe-area-inset-bottom))!important;z-index:500!important}
 }
 
