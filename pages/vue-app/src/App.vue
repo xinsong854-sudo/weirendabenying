@@ -118,7 +118,7 @@
               <div v-if="!forumLoading && visibleThreads.length === 0" class="item muted">这个频道还没有发言，来发第一条吧。</div>
             </div>
             <div v-if="!['活动颁布','成员','悬赏栏目'].includes(selectedForum) && uploadedForumImages.length" class="upload-preview"><span v-for="img in uploadedForumImages" :key="img"><img :src="img" alt=""><button @click="removeUploadedImage(uploadedForumImages, img)">×</button></span></div>
-            <div v-if="!['活动颁布','成员','悬赏栏目'].includes(selectedForum) && imageLibrary.length" class="local-image-library"><b>本地图片库</b><button v-for="item in imageLibrary.slice(0, 12)" :key="item.url" @click="useLibraryImage(uploadedForumImages, item.url)"><img :src="item.url" alt=""><span>使用</span></button></div>
+            <div v-if="!['活动颁布','成员','悬赏栏目'].includes(selectedForum) && forumLibraryOpen" class="local-image-library image-picker-drawer"><b>本地图片库</b><button class="library-upload-btn" @click="forumUploadInput?.click()">＋ 上传</button><button v-for="item in imageLibrary.slice(0, 12)" :key="item.url" @click="useLibraryImage(uploadedForumImages, item.url)"><img :src="item.url" alt=""><span>使用</span></button><small v-if="!imageLibrary.length">还没有本地图片，先上传一张。</small></div>
             <div v-if="!['活动颁布','成员','悬赏栏目'].includes(selectedForum)" class="chat-compose" :class="{ 'with-role-picker': selectedForum === '主论坛' }">
               <img :src="safeUrl(activeForumRoleCard?.avatar_img || session.me.avatar_url)" alt="">
               <input v-model.trim="forumText" type="text" :disabled="selectedForum === '主论坛' && !activeForumRoleCard" :placeholder="selectedForum === '主论坛' ? (activeForumRoleCard ? `以「${activeForumRoleCard.investigator?.name || activeForumRoleCard.source_name}」发言...` : '点右侧角色按钮选择/导入角色') : `在「${selectedForum}」发布讨论...`" @keydown.enter="postForumMessage">
@@ -129,7 +129,7 @@
                 <i>{{ activeForumRoleCard ? 'RP' : 'NEW' }}</i>
               </button>
               <input ref="forumUploadInput" class="hidden-file" type="file" accept="image/*" multiple @change="onForumImages">
-              <button @click="forumUploadInput?.click()">图片</button>
+              <button @click="toggleForumImagePicker">{{ forumLibraryOpen ? '收起图片' : '图片' }}</button>
               <button :disabled="forumPosting || (selectedForum === '主论坛' && !activeForumRoleCard) || (!forumText && !uploadedForumImages.length)" @click="postForumMessage">{{ forumPosting ? '改写中' : '发送' }}</button>
             </div>
             <div v-if="rolePickerOpen && selectedForum === '主论坛'" class="compose-role-pop">
@@ -194,8 +194,8 @@
                   <label v-if="wikiSubmitType !== '新建分类'">条目名称<input v-model.trim="wikiSubmitEntryName" placeholder="要增加或修订的条目名"></label>
                 </div>
                 <label class="wiki-content-label">正文内容<textarea v-model.trim="wikiSubmitContent" rows="6" placeholder="写条目正文、修订内容、设定说明等。照片可在下方一起上传，不需要单独开上传入口。"></textarea></label>
-                <div class="wiki-photo-row"><input ref="wikiUploadInput" class="hidden-file" type="file" accept="image/*" multiple @change="onWikiImages"><button class="back-note" @click="wikiUploadInput?.click()">添加照片</button><span>{{ uploadedWikiImages.length ? `已添加 ${uploadedWikiImages.length} 张照片` : '可选：上传条目配图 / 证明图' }}</span></div>
-                <div v-if="imageLibrary.length" class="local-image-library wiki-library"><b>本地图片库</b><button v-for="item in imageLibrary.slice(0, 12)" :key="item.url" @click="useLibraryImage(uploadedWikiImages, item.url)"><img :src="item.url" alt=""><span>使用</span></button></div>
+                <div class="wiki-photo-row"><input ref="wikiUploadInput" class="hidden-file" type="file" accept="image/*" multiple @change="onWikiImages"><button class="back-note" @click="toggleWikiImagePicker">{{ wikiLibraryOpen ? '收起照片' : '添加照片' }}</button><span>{{ uploadedWikiImages.length ? `已添加 ${uploadedWikiImages.length} 张照片` : '可选：上传条目配图 / 证明图' }}</span></div>
+                <div v-if="wikiLibraryOpen" class="local-image-library wiki-library image-picker-drawer"><b>本地图片库</b><button class="library-upload-btn" @click="wikiUploadInput?.click()">＋ 上传</button><button v-for="item in imageLibrary.slice(0, 12)" :key="item.url" @click="useLibraryImage(uploadedWikiImages, item.url)"><img :src="item.url" alt=""><span>使用</span></button><small v-if="!imageLibrary.length">还没有本地图片，先上传一张。</small></div>
                 <div v-if="uploadedWikiImages.length" class="upload-preview wiki-preview"><span v-for="img in uploadedWikiImages" :key="img"><img :src="img" alt=""><button @click="removeUploadedImage(uploadedWikiImages, img)">×</button></span></div>
                 <button class="back-note primary" :disabled="!canSubmitWiki" @click="submitWikiChange">提交给管理员审核</button>
               </div>
@@ -219,19 +219,19 @@
                   <label v-if="wikiSubmitType !== '新建分类'">条目名称<input v-model.trim="wikiSubmitEntryName" placeholder="要增加或修订的条目名"></label>
                 </div>
                 <label class="wiki-content-label">正文内容<textarea v-model.trim="wikiSubmitContent" rows="6" placeholder="写条目正文、收容措施、特殊效果、发现地点等。照片可在下方一起上传。"></textarea></label>
-                <div class="wiki-photo-row"><input ref="wikiUploadInput" class="hidden-file" type="file" accept="image/*" multiple @change="onWikiImages"><button class="back-note" @click="wikiUploadInput?.click()">添加照片</button><span>{{ uploadedWikiImages.length ? `已添加 ${uploadedWikiImages.length} 张照片` : '可选：上传条目配图 / 证明图' }}</span></div>
-                <div v-if="imageLibrary.length" class="local-image-library wiki-library"><b>本地图片库</b><button v-for="item in imageLibrary.slice(0, 12)" :key="item.url" @click="useLibraryImage(uploadedWikiImages, item.url)"><img :src="item.url" alt=""><span>使用</span></button></div>
+                <div class="wiki-photo-row"><input ref="wikiUploadInput" class="hidden-file" type="file" accept="image/*" multiple @change="onWikiImages"><button class="back-note" @click="toggleWikiImagePicker">{{ wikiLibraryOpen ? '收起照片' : '添加照片' }}</button><span>{{ uploadedWikiImages.length ? `已添加 ${uploadedWikiImages.length} 张照片` : '可选：上传条目配图 / 证明图' }}</span></div>
+                <div v-if="wikiLibraryOpen" class="local-image-library wiki-library image-picker-drawer"><b>本地图片库</b><button class="library-upload-btn" @click="wikiUploadInput?.click()">＋ 上传</button><button v-for="item in imageLibrary.slice(0, 12)" :key="item.url" @click="useLibraryImage(uploadedWikiImages, item.url)"><img :src="item.url" alt=""><span>使用</span></button><small v-if="!imageLibrary.length">还没有本地图片，先上传一张。</small></div>
                 <div v-if="uploadedWikiImages.length" class="upload-preview wiki-preview"><span v-for="img in uploadedWikiImages" :key="img"><img :src="img" alt=""><button @click="removeUploadedImage(uploadedWikiImages, img)">×</button></span></div>
                 <button class="back-note primary" :disabled="!canSubmitWiki" @click="submitWikiChange">提交给管理员审核</button>
               </div>
               <section class="artifact-codex-grid">
-                <button v-for="entry in artifactGalleryEntries" :key="entry.uuid" class="artifact-codex-card" :class="artifactRiskOf(entry).value" @click="selectedArtifactEntry = entry">
+                <button v-for="entry in artifactGalleryEntries" :key="entry.uuid" class="artifact-codex-card" :class="artifactRiskOf(entry).value" @click="openArtifactDetail(entry)">
                   <img v-if="safeUrl(entry.image)" :src="safeUrl(entry.image)" alt="" loading="lazy"><i>{{ artifactRiskOf(entry).icon }}</i><b>{{ entry.name }}</b><p>{{ artifactSummary(entry) }}</p><small>{{ artifactRiskOf(entry).label }} · {{ entry.artifact_id || 'ARCHIVE' }}</small>
                 </button>
               </section>
               <div v-if="!artifactGalleryEntries.length" class="wiki-empty-tip">当前等级暂无伪物记录。</div>
             </main>
-            <div v-if="selectedArtifactEntry" class="form-dialog-mask artifact-modal-mask" @click.self="selectedArtifactEntry = null">
+            <div v-if="false && selectedArtifactEntry" class="form-dialog-mask artifact-modal-mask" @click.self="selectedArtifactEntry = null">
               <section class="form-dialog-card artifact-modal-card">
                 <header><span class="ritual-label">ARTIFACT FILE</span><h2>{{ selectedArtifactEntry.name }}</h2><p><b :class="['artifact-risk-pill', artifactRiskOf(selectedArtifactEntry).value]">{{ artifactRiskOf(selectedArtifactEntry).icon }} {{ artifactRiskOf(selectedArtifactEntry).label }}</b></p></header>
                 <div class="artifact-modal-body"><img v-if="safeUrl(selectedArtifactEntry.image)" class="artifact-modal-image" :src="safeUrl(selectedArtifactEntry.image)" alt=""><div v-else class="artifact-modal-seal">{{ selectedArtifactEntry.name.slice(0, 2) }}</div><p v-for="line in artifactLines(selectedArtifactEntry)" :key="line">{{ line }}</p></div>
@@ -264,24 +264,39 @@
               <label v-if="wikiSubmitType !== '新建分类'">条目名称<input v-model.trim="wikiSubmitEntryName" placeholder="要增加或修订的条目名"></label>
             </div>
             <label class="wiki-content-label">正文内容<textarea v-model.trim="wikiSubmitContent" rows="6" placeholder="写条目正文、收容措施、特殊效果、发现地点等。照片可在下方一起上传。"></textarea></label>
-            <div class="wiki-photo-row"><input ref="wikiUploadInput" class="hidden-file" type="file" accept="image/*" multiple @change="onWikiImages"><button class="back-note" @click="wikiUploadInput?.click()">添加照片</button><span>{{ uploadedWikiImages.length ? `已添加 ${uploadedWikiImages.length} 张照片` : '可选：上传条目配图 / 证明图' }}</span></div>
+            <div class="wiki-photo-row"><input ref="wikiUploadInput" class="hidden-file" type="file" accept="image/*" multiple @change="onWikiImages"><button class="back-note" @click="toggleWikiImagePicker">{{ wikiLibraryOpen ? '收起照片' : '添加照片' }}</button><span>{{ uploadedWikiImages.length ? `已添加 ${uploadedWikiImages.length} 张照片` : '可选：上传条目配图 / 证明图' }}</span></div>
+            <div v-if="wikiLibraryOpen" class="local-image-library wiki-library image-picker-drawer"><b>本地图片库</b><button class="library-upload-btn" @click="wikiUploadInput?.click()">＋ 上传</button><button v-for="item in imageLibrary.slice(0, 12)" :key="item.url" @click="useLibraryImage(uploadedWikiImages, item.url)"><img :src="item.url" alt=""><span>使用</span></button><small v-if="!imageLibrary.length">还没有本地图片，先上传一张。</small></div>
             <div v-if="uploadedWikiImages.length" class="upload-preview wiki-preview"><span v-for="img in uploadedWikiImages" :key="img"><img :src="img" alt=""><button @click="removeUploadedImage(uploadedWikiImages, img)">×</button></span></div>
             <button class="back-note primary" :disabled="!canSubmitWiki" @click="submitWikiChange">提交给管理员审核</button>
           </div>
           <section class="artifact-codex-grid standalone-codex-grid">
-            <button v-for="entry in artifactGalleryEntries" :key="entry.uuid" class="artifact-codex-card" :class="artifactRiskOf(entry).value" @click="selectedArtifactEntry = entry">
+            <button v-for="entry in artifactGalleryEntries" :key="entry.uuid" class="artifact-codex-card" :class="artifactRiskOf(entry).value" @click="openArtifactDetail(entry)">
               <img v-if="safeUrl(entry.image)" :src="safeUrl(entry.image)" alt="" loading="lazy"><i>{{ artifactRiskOf(entry).icon }}</i><b>{{ entry.name }}</b><p>{{ artifactSummary(entry) }}</p><small>{{ artifactRiskOf(entry).label }} · {{ entry.artifact_id || 'ARCHIVE' }}</small>
             </button>
           </section>
           <div v-if="!artifactGalleryEntries.length" class="wiki-empty-tip">当前等级暂无伪物记录。</div>
         </main>
-        <div v-if="selectedArtifactEntry" class="form-dialog-mask artifact-modal-mask" @click.self="selectedArtifactEntry = null">
+        <div v-if="false && selectedArtifactEntry" class="form-dialog-mask artifact-modal-mask" @click.self="selectedArtifactEntry = null">
           <section class="form-dialog-card artifact-modal-card standalone-artifact-modal">
             <header><span class="ritual-label">ARTIFACT FILE</span><h2>{{ selectedArtifactEntry.name }}</h2><p><b :class="['artifact-risk-pill', artifactRiskOf(selectedArtifactEntry).value]">{{ artifactRiskOf(selectedArtifactEntry).icon }} {{ artifactRiskOf(selectedArtifactEntry).label }}</b></p></header>
             <div class="artifact-modal-body"><img v-if="safeUrl(selectedArtifactEntry.image)" class="artifact-modal-image" :src="safeUrl(selectedArtifactEntry.image)" alt=""><div v-else class="artifact-modal-seal">{{ selectedArtifactEntry.name.slice(0, 2) }}</div><p v-for="line in artifactLines(selectedArtifactEntry)" :key="line">{{ line }}</p></div>
             <footer><button class="back-note" @click="openEntry(selectedArtifactEntry.uuid); selectedArtifactEntry = null">打开 Wiki 词条</button><button class="back-note primary" @click="selectedArtifactEntry = null">返回图鉴</button></footer>
           </section>
         </div>
+      </section>
+
+      <section v-else-if="view === 'artifactDetail' && selectedArtifactEntry" key="artifactDetail" class="artifact-detail-theater">
+        <div class="page-actions codex-page-actions"><button class="back-note primary" @click="openArtifactCodex">← 返回图鉴</button><button class="back-note" @click="openEntry(selectedArtifactEntry.uuid)">打开 Wiki 词条</button><button class="back-note" @click="openForum">返回论坛</button></div>
+        <article class="artifact-detail-page" :class="artifactRiskOf(selectedArtifactEntry).value">
+          <header class="artifact-detail-hero">
+            <div><span class="ritual-label">ARTIFACT FILE / {{ selectedArtifactEntry.artifact_id || 'ARCHIVE' }}</span><h1>{{ selectedArtifactEntry.name }}</h1><p><b :class="['artifact-risk-pill', artifactRiskOf(selectedArtifactEntry).value]">{{ artifactRiskOf(selectedArtifactEntry).icon }} {{ artifactRiskOf(selectedArtifactEntry).label }}</b></p></div>
+            <img v-if="safeUrl(selectedArtifactEntry.image)" class="artifact-detail-image" :src="safeUrl(selectedArtifactEntry.image)" alt=""><div v-else class="artifact-modal-seal artifact-detail-seal">{{ selectedArtifactEntry.name.slice(0, 2) }}</div>
+          </header>
+          <section class="artifact-detail-layout">
+            <aside class="artifact-detail-nav"><b>小分类</b><button v-for="level in artifactRiskLevels" :key="level.value" :class="{ active: selectedArtifactRisk === level.value }" @click="selectedArtifactRisk = level.value; openArtifactCodex()"><span>{{ level.icon }}</span>{{ level.label }}<em>{{ artifactRiskCount(level.value) }}</em></button></aside>
+            <main class="artifact-detail-content"><h2>收容档案</h2><p v-for="line in artifactLines(selectedArtifactEntry)" :key="line">{{ line }}</p></main>
+          </section>
+        </article>
       </section>
 
       <section v-else-if="view === 'explore'" key="explore" class="forum-theater">
@@ -625,6 +640,8 @@ const selectedWikiSubsection = ref('')
 const selectedArtifactCategory = ref('')
 const selectedArtifactRisk = ref('all')
 const selectedArtifactEntry = ref(null)
+const forumLibraryOpen = ref(false)
+const wikiLibraryOpen = ref(false)
 const wikiSubmitOpen = ref(false)
 const wikiSubmitType = ref('新增词条')
 const wikiSubmitGroup = ref('世界信息')
@@ -920,7 +937,7 @@ async function submitWikiChange() {
   const payload = { target: category, group: wikiSubmitGroup.value, category, entry_name: entryName, type: wikiSubmitType.value, content: wikiSubmitContent.value, images: uploadedWikiImages.value }
   try {
     await api('/api/wiki/submissions', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify(payload) })
-    wikiSubmitContent.value = ''; wikiSubmitEntryName.value = ''; uploadedWikiImages.value = []; wikiSubmitOpen.value = false
+    wikiSubmitContent.value = ''; wikiSubmitEntryName.value = ''; uploadedWikiImages.value = []; wikiLibraryOpen.value = false; wikiSubmitOpen.value = false
     await loadForumMeta(true); showMsg('已提交给管理员审核', 'ok')
   } catch (e) { showMsg(`提交失败：${e.message}`) }
 }
@@ -931,6 +948,7 @@ function openWikiEditor(type = '新增词条', category = selectedWikiCategory.v
   wikiSubmitEntryName.value = ''
   wikiSubmitContent.value = ''
   uploadedWikiImages.value = []
+  wikiLibraryOpen.value = false
   wikiSubmitOpen.value = true
 }
 function openArtifactEditor() {
@@ -1338,8 +1356,10 @@ async function handleImageFiles(files, target) {
   }
   if (!uploadTasks.value.some(t => t.status === 'uploading')) showMsg('图片上传完成，可在页面预览或从本地图片库复用', 'ok')
 }
-function onForumImages(e) { handleImageFiles(e.target.files, uploadedForumImages); e.target.value = '' }
-function onWikiImages(e) { handleImageFiles(e.target.files, uploadedWikiImages); e.target.value = '' }
+function onForumImages(e) { handleImageFiles(e.target.files, uploadedForumImages); e.target.value = ''; forumLibraryOpen.value = true }
+function onWikiImages(e) { handleImageFiles(e.target.files, uploadedWikiImages); e.target.value = ''; wikiLibraryOpen.value = true }
+function toggleForumImagePicker() { forumLibraryOpen.value = !forumLibraryOpen.value }
+function toggleWikiImagePicker() { wikiLibraryOpen.value = !wikiLibraryOpen.value }
 function removeUploadedImage(target, url) {
   if (Array.isArray(target)) {
     const idx = target.indexOf(url)
@@ -1404,7 +1424,7 @@ async function postForumMessage() {
   try {
     const payload = { channel: selectedForum.value, content: forumText.value, images: uploadedForumImages.value, role_card_id: selectedForum.value === '主论坛' ? Number(selectedRoleCardId.value) : 0 }
     const res = await api('/api/forum/posts', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify(payload) })
-    forumText.value = ''; uploadedForumImages.value = []
+    forumText.value = ''; uploadedForumImages.value = []; forumLibraryOpen.value = false
     await Promise.all([loadForumPosts(true), loadMembers(true)])
     showMsg(res?.ooc_warning || (res?.exp_gained ? `已发送，获得 ${res.exp_gained} 点感悟` : '已发送'), res?.ooc_warning ? 'error' : 'ok')
   } catch (e) { showMsg(`发送失败：${e.message}`) } finally { forumPosting.value = false }
@@ -1512,9 +1532,10 @@ function confirmPendingUpload() {
   return window.confirm('还有图片上传任务未完成，切换页面可能导致上传结果没有加入当前编辑内容。确定要离开吗？')
 }
 function navigate(nextView) { if (!confirmPendingUpload()) return; view.value = nextView; currentEntry.value = null; window.scrollTo({ top: 0, behavior: 'instant' }) }
-function openForum() { navigate('forum'); globalQuery.value = ''; serverResults.value = []; loadMembers(); loadForumMeta(); loadForumPosts() }
-function openArchive() { navigate('archive'); currentCat.value = ''; catQuery.value = ''; selectedWikiGroup.value = ''; selectedWikiSubsection.value = ''; selectedWikiCategory.value = ''; selectedArtifactCategory.value = ''; selectedArtifactRisk.value = 'all'; selectedArtifactEntry.value = null; wikiSubmitOpen.value = false; loadMembers(); loadWikiArchive(); loadForumMeta() }
-function openArtifactCodex() { navigate('artifactCodex'); selectedWikiGroup.value = ''; selectedArtifactCategory.value = '伪物档案'; selectedArtifactRisk.value = 'all'; selectedArtifactEntry.value = null; wikiSubmitOpen.value = false; loadWikiArchive(); window.scrollTo({ top: 0, behavior: 'instant' }) }
+function openForum() { navigate('forum'); globalQuery.value = ''; serverResults.value = []; loadMembers(); loadForumMeta(); loadForumPosts(); forumLibraryOpen.value = false; wikiLibraryOpen.value = false }
+function openArchive() { navigate('archive'); currentCat.value = ''; catQuery.value = ''; selectedWikiGroup.value = ''; selectedWikiSubsection.value = ''; selectedWikiCategory.value = ''; selectedArtifactCategory.value = ''; selectedArtifactRisk.value = 'all'; selectedArtifactEntry.value = null; wikiSubmitOpen.value = false; forumLibraryOpen.value = false; wikiLibraryOpen.value = false; loadMembers(); loadWikiArchive(); loadForumMeta() }
+function openArtifactCodex() { navigate('artifactCodex'); selectedWikiGroup.value = ''; selectedArtifactCategory.value = '伪物档案'; selectedArtifactEntry.value = null; wikiSubmitOpen.value = false; loadWikiArchive(); window.scrollTo({ top: 0, behavior: 'instant' }) }
+function openArtifactDetail(entry) { if (!entry) return; selectedArtifactEntry.value = entry; view.value = 'artifactDetail'; window.scrollTo({ top: 0, behavior: 'instant' }) }
 function enterWikiGroup(group) { selectedWikiGroup.value = group; selectedWikiSubsection.value = ''; selectedWikiCategory.value = ''; selectedArtifactCategory.value = group === '伪物档案' ? '伪物档案' : ''; selectedArtifactRisk.value = 'all'; selectedArtifactEntry.value = null; wikiSubmitOpen.value = false; window.scrollTo(0, 0) }
 function leaveWikiLevel() { if (selectedWikiGroup.value === '世界信息') { if (selectedWikiCategory.value) { selectedWikiCategory.value = ''; wikiSubmitOpen.value = false; return } if (selectedWikiSubsection.value) { selectedWikiSubsection.value = ''; return } selectedWikiGroup.value = ''; return } if (selectedWikiGroup.value === '伪物档案') { if (selectedArtifactCategory.value) { selectedArtifactCategory.value = ''; wikiSubmitOpen.value = false; return } selectedWikiGroup.value = '' } }
 function openExplore() { navigate('explore'); loadIdentityCards(); loadExploreRuns() }
