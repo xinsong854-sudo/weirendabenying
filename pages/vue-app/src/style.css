@@ -66,3 +66,9 @@
 .progress-track i{display:block;height:100%;width:100%;border-radius:inherit;background:linear-gradient(90deg,#a8894a,#68343c);animation:welcomeBar 1.4s ease-in-out infinite}
 @keyframes welcomeBar{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
 @media(max-width:480px){.login-stage{padding-left:20px;padding-right:20px}.login-brand-name{font-size:26px}.login-panel{margin-top:28px}.login-btn{height:50px;font-size:16px}.agree{font-size:11px}}
+
+/* 隔离 page_phone_login 库的 DOM，防止全局样式干扰 */
+[data-page-phone-login-root] .field{flex-direction:row!important}
+[data-page-phone-login-root] input{border:0!important;padding:0!important;background:transparent!important;border-radius:0!important}
+[data-page-phone-login-root] button{border:0!important;border-radius:18px!important}
+[data-page-phone-login-root] .prefix{color:#222!important;font-size:17px!important}
