@@ -1,5 +1,5 @@
 <template>
-  <section v-if="!session.me" class="login-scene login-1999">
+  <section v-if="!session.me && !welcomeLoading" class="login-scene login-1999">
     <div class="login-ornament left">1999</div>
     <div class="login-ornament right">FILE</div>
     <div class="login-disclaimer"><span>隐私说明：手机号用于身份验证、安全防护与关联捏Ta已有资产；不会用于营销或分享给第三方，验证码验证完成后即时失效。</span><span aria-hidden="true">隐私说明：手机号用于身份验证、安全防护与关联捏Ta已有资产；不会用于营销或分享给第三方，验证码验证完成后即时失效。</span></div>
@@ -32,7 +32,7 @@
     </div>
   </section>
 
-  <section v-else class="labyrinth-app">
+  <section v-else-if="session.me && welcomeReady" class="labyrinth-app">
     <div v-if="message" class="global-toast" :class="messageType">{{ message }}</div>
     <div v-if="uploadTasks.length" class="upload-task-panel">
       <div class="upload-task-head"><b>图片上传任务</b><span>{{ uploadInProgress ? '上传中，请勿关闭页面' : '上传完成' }}</span></div>
@@ -506,6 +506,9 @@ const logging = ref(false)
 const timer = ref(0)
 const liveUserCount = ref(37)
 let liveUserTimer = null
+let forumRealtimeTimer = null
+let forumRealtimeBusy = false
+let forumRealtimeTick = 0
 const view = ref('forum')
 const currentCat = ref('')
 const currentEntry = ref(null)
@@ -575,18 +578,24 @@ const captchaCells = ref([])
 const captchaSelected = ref([])
 const captchaError = ref('')
 const welcomeLoading = ref(false)
+const welcomeReady = ref(false)
 const welcomeText = ref('■■■■■■■■■■■■')
 const pendingLoginToken = ref('')
+let pendingLoginPreload = null
+let pendingLoginPreloadError = null
 const captchaNietaUrl = 'https://oss.talesofai.cn/sts/49c915e649254f55a7ea399ad3b6efd1/2ee7bcbe-7fa3-41ba-beeb-294f1f23f3b9.jpg'
 const captchaPotatoUrl = 'https://oss.talesofai.cn/picture/db88fc7a-71fc-4b91-991d-7ec97e4ea94c.webp'
 const pseudoHumanLevels = ['模仿外表', '学习行为', '理解情感', '体验矛盾', '建立羁绊', '精通人性']
 const savedFrame = localStorage.getItem('NIETA_AVATAR_FRAME')
-const avatarFrame = ref(['none', 'roach', 'moonrise'].includes(savedFrame) ? savedFrame : 'roach')
+const avatarFrameIds = ['none', 'roach', 'moonrise', 'nieta-academy', 'nieta-3rd-anniversary']
+const avatarFrame = ref(avatarFrameIds.includes(savedFrame) ? savedFrame : 'roach')
 const session = reactive({ me: null, role: 'member', token: '' })
 const formDialog = reactive({ open: false, title: '', desc: '', fields: [], values: {}, confirmText: '确认', cancelText: '取消', resolve: null })
 const legalDialog = reactive({ open: false, title: '', desc: '', lines: [] })
 const avatarFrames = [
   { id: 'none', name: '无头像框', url: '', type: 'none' },
+  { id: 'nieta-academy', name: '捏Ta学院头像框', url: 'https://oss.talesofai.cn/fe_assets/mng/57/3fbc172e0e97799aded57bf6c1e96315.png', type: 'frame', source: 'nieta', badge_uuid: '5a7f2534-7a13-4fdb-9eb2-5ea4784a0a66' },
+  { id: 'nieta-3rd-anniversary', name: '捏Ta三周年纪念头像框', url: 'https://oss.talesofai.cn/fe_assets/mng/57/433ecb291c5cda6f11c9952b2148b3d1.png', type: 'frame', source: 'nieta', badge_uuid: 'f2d8dc8c-0af3-4fb1-8f6a-b55e076a285a' },
   { id: 'roach', name: '乱爬蟑螂', url: 'https://oss.talesofai.cn/sts/49c915e649254f55a7ea399ad3b6efd1/53710f82-1ad8-4863-98ee-4d7bed45f215.png', type: 'roach' },
   { id: 'moonrise', name: '月升', url: 'https://oss.talesofai.cn/sts/49c915e649254f55a7ea399ad3b6efd1/5e22d7db-3abd-4861-864e-725538d3794b.png', type: 'frame' }
 ]
@@ -1134,17 +1143,35 @@ function startWelcomeDecode() {
 }
 async function finishHumanCaptcha() {
   humanCaptchaOpen.value = false
+  welcomeReady.value = false
   welcomeText.value = '■■■■■■■■■■■■'
   welcomeLoading.value = true
   const token = pendingLoginToken.value
   pendingLoginToken.value = ''
   if (token && !session.me) {
     logging.value = true
-    try { await useToken(token, false) } catch (e) { welcomeLoading.value = false; showMsg(`登录失败：${e.message}`); return } finally { logging.value = false }
+    try {
+      if (pendingLoginPreload) {
+        await pendingLoginPreload
+        if (pendingLoginPreloadError) throw pendingLoginPreloadError
+      } else {
+        await useToken(token, false, false)
+      }
+    } catch (e) {
+      welcomeLoading.value = false
+      pendingLoginPreload = null
+      pendingLoginPreloadError = null
+      showMsg(`登录失败：${e.message}`)
+      return
+    } finally {
+      logging.value = false
+    }
   }
+  pendingLoginPreload = null
+  pendingLoginPreloadError = null
   if (session.me?.uuid) sessionStorage.setItem(`WEIREN_HUMAN_CHECK_${session.me.uuid}`, 'ok')
   const finalText = startWelcomeDecode()
-  setTimeout(() => { welcomeLoading.value = false; showMsg(finalText, 'ok') }, 1700)
+  setTimeout(() => { welcomeReady.value = true; welcomeLoading.value = false; showMsg(finalText, 'ok') }, 1700)
 }
 function fileToBase64(file, task) {
   return new Promise((resolve, reject) => {
@@ -1200,21 +1227,21 @@ async function handleImageFiles(files, target) {
 function onForumImages(e) { handleImageFiles(e.target.files, uploadedForumImages); e.target.value = '' }
 function onWikiImages(e) { handleImageFiles(e.target.files, uploadedWikiImages); e.target.value = '' }
 function removeUploadedImage(target, url) { target.value = target.value.filter(x => x !== url) }
-async function loadForumPosts(force = false) {
+async function loadForumPosts(force = false, silent = false) {
   const channel = selectedForum.value
   if (!force && forumFresh(channel) && forumPosts.value.length) return
   const seq = ++forumSeq.value
-  forumLoading.value = true
+  if (!silent) forumLoading.value = true
   try {
-    const rows = await api(`/api/forum/posts?channel=${encodeURIComponent(channel)}`)
-    if (seq === forumSeq.value) {
+    const rows = await api(`/api/forum/posts?channel=${encodeURIComponent(channel)}`, { timeout: silent ? 8000 : 20000 })
+    if (seq === forumSeq.value && channel === selectedForum.value) {
       forumPosts.value = Array.isArray(rows) ? rows.reverse() : []
       markForum(channel)
     }
   } catch (e) {
-    if (seq === forumSeq.value) forumPosts.value = []
+    if (seq === forumSeq.value && !silent) forumPosts.value = []
   } finally {
-    if (seq === forumSeq.value) forumLoading.value = false
+    if (seq === forumSeq.value && !silent) forumLoading.value = false
   }
 }
 async function postForumMessage() {
@@ -1283,11 +1310,14 @@ async function login() {
     const data = await api('/api/proxy/verify-code', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone_num: p, code: c }) })
     if (!data?.token) throw new Error('未获取到令牌')
     pendingLoginToken.value = data.token
+    pendingLoginPreloadError = null
+    pendingLoginPreload = useToken(data.token, false, false).catch(e => { pendingLoginPreloadError = e; return null })
     prepareHumanCaptcha()
-    showMsg('请完成伪人验证', 'muted')
+    showMsg('请完成伪人验证，正在预加载账号数据...', 'muted')
   } catch (e) { showMsg(`登录失败：${e.message}`) } finally { logging.value = false }
 }
-async function useToken(token, requireCaptcha = false) {
+async function useToken(token, requireCaptcha = false, markReady = true) {
+  welcomeReady.value = false
   const me = await api(`${API}/v1/user/`, { headers: { 'x-token': token } })
   if (!me?.uuid) throw new Error('令牌无效')
   // Token 本地保存：仅写入用户浏览器 localStorage，不上传后端持久化。
@@ -1295,7 +1325,7 @@ async function useToken(token, requireCaptcha = false) {
   const verified = await api('/api/verify', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': token }, body: JSON.stringify(me) }).catch(() => null)
   const role = await api(`/api/members/role?uuid=${encodeURIComponent(me.uuid)}`)
   session.role = role?.role || verified?.role || 'member'
-  avatarFrame.value = ['none', 'roach', 'moonrise'].includes(role?.avatar_frame) ? role.avatar_frame : (['none', 'roach', 'moonrise'].includes(verified?.avatar_frame) ? verified.avatar_frame : 'none')
+  avatarFrame.value = avatarFrameIds.includes(role?.avatar_frame) ? role.avatar_frame : (avatarFrameIds.includes(verified?.avatar_frame) ? verified.avatar_frame : 'none')
   signatureText.value = role?.signature ?? verified?.signature ?? ''
   localStorage.setItem('NIETA_AVATAR_FRAME', avatarFrame.value)
   await loadMembers(true)
@@ -1304,6 +1334,7 @@ async function useToken(token, requireCaptcha = false) {
   await loadForumPosts(true)
   await loadIdentityCards(true)
   if (requireCaptcha) prepareHumanCaptcha()
+  else if (markReady) welcomeReady.value = true
 }
 async function loadMembers(force = false) {
   if (!force && cacheFresh('members') && members.value.length) return
@@ -1361,19 +1392,52 @@ function tickLiveUsers() {
   liveUserCount.value = Math.max(24, Math.min(52, base + wave + jitter))
 }
 
+async function tickForumRealtime() {
+  if (forumRealtimeBusy) return
+  if (document.hidden || !session.me || !welcomeReady.value || view.value !== 'forum') return
+  if (['活动颁布', '成员'].includes(selectedForum.value)) return
+  forumRealtimeBusy = true
+  try {
+    await loadForumPosts(true, true)
+    forumRealtimeTick += 1
+    if (forumRealtimeTick % 6 === 0) loadMembers(true)
+  } finally {
+    forumRealtimeBusy = false
+  }
+}
+
 function beforeUnloadUploadGuard(e) {
   if (!uploadInProgress.value) return
   e.preventDefault()
   e.returnValue = '还有图片上传任务未完成，确定要离开吗？'
 }
-onBeforeUnmount(() => { clearInterval(identityCardProgressTimer); clearInterval(liveUserTimer); window.removeEventListener('beforeunload', beforeUnloadUploadGuard) })
+onBeforeUnmount(() => { clearInterval(identityCardProgressTimer); clearInterval(liveUserTimer); clearInterval(forumRealtimeTimer); document.removeEventListener('visibilitychange', tickForumRealtime); window.removeEventListener('beforeunload', beforeUnloadUploadGuard) })
 
 onMounted(async () => {
   window.addEventListener('beforeunload', beforeUnloadUploadGuard)
   tickLiveUsers()
   liveUserTimer = setInterval(tickLiveUsers, 4500)
+  forumRealtimeTimer = setInterval(tickForumRealtime, 2500)
+  document.addEventListener('visibilitychange', tickForumRealtime)
   await loadWikiArchive()
   const saved = localStorage.getItem(TOKEN_KEY)
-  if (saved) { logging.value = true; showMsg('检测到已保存的登录状态', 'muted'); try { await useToken(saved, false) } catch { localStorage.removeItem(TOKEN_KEY); showMsg('登录状态已过期，请重新登录') } finally { logging.value = false } }
+  if (saved) {
+    logging.value = true
+    welcomeReady.value = false
+    welcomeText.value = '■■■■■■■■■■■■'
+    welcomeLoading.value = true
+    try {
+      await useToken(saved, false)
+      const finalText = startWelcomeDecode()
+      setTimeout(() => { welcomeLoading.value = false; showMsg(finalText, 'ok') }, 1700)
+    } catch {
+      welcomeLoading.value = false
+      welcomeReady.value = false
+      localStorage.removeItem(TOKEN_KEY)
+      showMsg('登录状态已过期，请重新登录')
+    } finally {
+      logging.value = false
+    }
+  }
 })
 </script>

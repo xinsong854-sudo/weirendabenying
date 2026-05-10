@@ -1,0 +1,24 @@
+[
+  {
+    "id": "nieta-academy",
+    "badge_uuid": "5a7f2534-7a13-4fdb-9eb2-5ea4784a0a66",
+    "name": "捏Ta学院头像框",
+    "description": "传闻古老的捏Ta大陆上有一座神秘的学院...",
+    "status_on_source_account": "INACTIVE",
+    "sort_index": 0,
+    "avatar_frame_url": "https://oss.talesofai.cn/fe_assets/mng/57/3fbc172e0e97799aded57bf6c1e96315.png",
+    "avatar_frame_gif_url": "",
+    "source": "nieta:/v1/badge/me/badges?type=AVATAR_FRAME"
+  },
+  {
+    "id": "nieta-3rd-anniversary",
+    "badge_uuid": "f2d8dc8c-0af3-4fb1-8f6a-b55e076a285a",
+    "name": "捏Ta三周年纪念头像框",
+    "description": "捏Ta三周年纪念头像框",
+    "status_on_source_account": "ACTIVE",
+    "sort_index": 100,
+    "avatar_frame_url": "https://oss.talesofai.cn/fe_assets/mng/57/433ecb291c5cda6f11c9952b2148b3d1.png",
+    "avatar_frame_gif_url": "",
+    "source": "nieta:/v1/badge/me/badges?type=AVATAR_FRAME"
+  }
+]
