@@ -1061,6 +1061,7 @@ function resetIdentityDraft() {
 }
 function extractNietaShortUrl(text = '') { const m = String(text || '').match(/https?:\/\/t\.nieta\.art\/[a-zA-Z0-9]+/); return m ? m[0] : '' }
 function extractUuidFromText(text = '') { const s = String(text || ''); const direct = s.match(/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/); if (direct) return direct[0]; try { return new URL(s).searchParams.get('uuid') || '' } catch { return '' } }
+function extractCreatorUuidFromText(text = '') { const s = String(text || ''); const m = s.match(/[?&#](?:user_uuid|owner_uuid|creator_uuid|author_uuid)=([0-9a-fA-F-]{32,36})/) || s.match(/\/(?:user|creator|author)\/([0-9a-fA-F-]{32,36})/); return m ? m[1] : '' }
 function originalUrlText(data) {
   if (typeof data === 'string') return data
   if (!data || typeof data !== 'object') return ''
@@ -1081,12 +1082,15 @@ async function resolveIdentityInput(raw) {
     const proxied = await api('/api/neta/original-url', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ short_url: shortUrl }) })
     longUrl = proxied?.url || proxied?.original_url || proxied?.long_url || proxied?.data || proxied
   }
-  const uuid = extractUuidFromText(originalUrlText(longUrl))
+  const longText = originalUrlText(longUrl)
+  const uuid = extractUuidFromText(longText)
+  const creatorUuid = extractCreatorUuidFromText(longText)
+  if (creatorUuid) identityParsedUuid.value = `${uuid || '未找到角色UUID'} · 创作者 ${creatorUuid}`
   if (!uuid) throw new Error('短链已解析，但未找到角色 UUID')
-  identityParsedUuid.value = uuid
-  return uuid
+  identityParsedUuid.value = creatorUuid ? `${uuid} · 创作者 ${creatorUuid}` : uuid
+  return { uuid, creatorUuid, longUrl: longText }
 }
-function onIdentityPaste() { setTimeout(async () => { try { const uuid = await resolveIdentityInput(identityCardLink.value); if (extractUuidFromText(uuid)) identityParsedUuid.value = uuid } catch {} }, 120) }
+function onIdentityPaste() { setTimeout(async () => { try { const parsed = await resolveIdentityInput(identityCardLink.value); const uuid = typeof parsed === 'object' ? parsed.uuid : parsed; if (extractUuidFromText(uuid)) identityParsedUuid.value = typeof parsed === 'object' && parsed.creatorUuid ? `${uuid} · 创作者 ${parsed.creatorUuid}` : uuid } catch {} }, 120) }
 async function generateIdentityCard() {
   if (!session.token) { showMsg('请先登录'); return }
   if (!identityCardLink.value) { showMsg('请粘贴角色链接 / UUID / 角色名'); return }
@@ -1095,11 +1099,12 @@ async function generateIdentityCard() {
   resetIdentityDraft()
   startIdentityProgress()
   try {
-    const resolvedLink = await resolveIdentityInput(identityCardLink.value)
+    const parsedInput = await resolveIdentityInput(identityCardLink.value)
+    const resolvedLink = typeof parsedInput === 'object' ? parsedInput.uuid : parsedInput
     const data = await api('/api/coc/character-card', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-token': session.token },
-      body: JSON.stringify({ link: resolvedLink }),
+      body: JSON.stringify({ link: resolvedLink, creator_uuid: typeof parsedInput === 'object' ? parsedInput.creatorUuid : '' }),
       timeout: 90000
     })
     identityCardResult.value = data.card

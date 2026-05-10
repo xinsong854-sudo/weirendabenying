@@ -490,16 +490,6 @@ def get_user_by_token(token):
             raise ValueError("令牌无效")
         return user
     except Exception as e:
-        # Neta 用户接口偶发超时时，不把底层 HTTPSConnectionPool 长错误直接抛给前端。
-        # 若 token 是 JWT 且本地已见过该用户，则用本地成员资料兜底，避免身份卡导入被 /v1/user 临时超时卡死。
-        subject = token_subject(token)
-        uuid = subject[5:] if subject.startswith("user:") else ""
-        if uuid:
-            db = get_db()
-            row = db.execute("SELECT uuid,name,avatar,role FROM members WHERE uuid=?", [uuid]).fetchone()
-            db.close()
-            if row:
-                return {"uuid": row["uuid"], "nick_name": row["name"], "name": row["name"], "avatar_url": row["avatar"], "role": row["role"]}
         msg = str(e)
         if "ConnectTimeout" in msg or "Read timed out" in msg or "Max retries exceeded" in msg:
             raise ValueError("捏Ta用户接口连接超时，请稍后重试")
@@ -563,6 +553,18 @@ def resolve_nieta_short_url(short_url):
             return data.get(key)
     raise ValueError("短链已解析，但返回格式无法识别")
 
+def apply_creator_uuid_from_text(profile, text):
+    raw = unquote(str(text or ""))
+    for pat in (
+        r"[?&#](?:user_uuid|owner_uuid|creator_uuid|author_uuid)=([0-9a-fA-F-]{32,36})",
+        r"/(?:user|creator|author)/([0-9a-fA-F-]{32,36})",
+    ):
+        m = re.search(pat, raw)
+        if m and not profile.get("creator_uuid"):
+            profile["creator_uuid"] = m.group(1)
+            break
+    return profile
+
 def fetch_neta_character_profile(user_token, link):
     raw = str(link or "")
     if "t.nieta.art" in raw:
@@ -578,7 +580,8 @@ def fetch_neta_character_profile(user_token, link):
         r = requests.get(f"{API}/v2/travel/parent/{uuid}/profile", headers=headers, timeout=15)
         if r.ok:
             p = r.json() or {}
-            if p.get("uuid"): return p
+            if p.get("uuid"):
+                return apply_creator_uuid_from_text(p, raw)
         if r.status_code not in (400, 404): r.raise_for_status()
     q = keyword or uuid
     if not q: raise ValueError("缺少角色链接、UUID 或角色名")
@@ -590,21 +593,30 @@ def fetch_neta_character_profile(user_token, link):
     if not items: raise ValueError(f"未搜索到角色：{q}")
     item = next((x for x in items if uuid and x.get("uuid") == uuid), items[0])
     cfg = item.get("config") or {}; char_info = cfg.get("char_info") or {}; creator = item.get("creator") or {}
-    return {**item, "oc_bio": {"name": item.get("name") or item.get("short_name"), "description": char_info.get("background") if char_info.get("background") != "not_available" else (cfg.get("travel_preview") or item.get("name") or ""), "persona": char_info.get("tone") if char_info.get("tone") != "not_available" else "", "interests": char_info.get("toneeg") if char_info.get("toneeg") != "not_available" else ""}, "avatar_img": cfg.get("avatar_img") or "", "owner_profile": {"uuid": creator.get("uuid"), "nick_name": creator.get("nick_name")}, "owner_uuid": creator.get("uuid") or "", "hashtags": item.get("hashtags") or item.get("tags") or []}
+    profile = {**item, "oc_bio": {"name": item.get("name") or item.get("short_name"), "description": char_info.get("background") if char_info.get("background") != "not_available" else (cfg.get("travel_preview") or item.get("name") or ""), "persona": char_info.get("tone") if char_info.get("tone") != "not_available" else "", "interests": char_info.get("toneeg") if char_info.get("toneeg") != "not_available" else ""}, "avatar_img": cfg.get("avatar_img") or "", "owner_profile": {"uuid": creator.get("uuid"), "nick_name": creator.get("nick_name")}, "owner_uuid": creator.get("uuid") or "", "creator_uuid": creator.get("uuid") or "", "hashtags": item.get("hashtags") or item.get("tags") or []}
+    return apply_creator_uuid_from_text(profile, raw)
 
 def validate_character_for_user(profile, user):
-    # 站内身份卡允许导入公开角色；如果资料里明确带有伪人大本营标签/创作者字段则校验更严格。
-    tags = profile.get("hashtags") or profile.get("tags") or []
-    tag_text = " ".join([str(x) for x in tags])
-    if tag_text and "伪人大本营" not in tag_text:
-        raise ValueError("分享角色必须带有“伪人大本营”标签")
-    uid = str(user.get("uuid") or "")
-    owner_uuid = str((profile.get("owner_profile") or {}).get("uuid") or profile.get("owner_uuid") or "")
-    user_id = profile.get("user_id")
-    if tag_text and owner_uuid and owner_uuid != uid:
-        raise ValueError("只能使用你本人创作的角色")
-    if tag_text and user_id is not None and str(user_id) != str(user.get("id")):
-        raise ValueError("只能使用你本人创作的角色")
+    # 身份卡导入只做“创作者 UUID == 当前登录用户 UUID”的硬校验。
+    # 短链解析出来的长链接 / profile 内通常带 creator/owner 字段；不要用本地成员资料兜底，也不要放过无法判定归属的角色。
+    uid = str(user.get("uuid") or "").strip()
+    creator = profile.get("creator") or profile.get("owner_profile") or profile.get("user") or {}
+    candidate_ids = [
+        profile.get("owner_uuid"),
+        profile.get("creator_uuid"),
+        profile.get("user_uuid"),
+        creator.get("uuid") if isinstance(creator, dict) else "",
+        (profile.get("owner") or {}).get("uuid") if isinstance(profile.get("owner"), dict) else "",
+    ]
+    creator_uuid = next((str(x).strip() for x in candidate_ids if str(x or "").strip()), "")
+    user_id = profile.get("user_id") or profile.get("creator_id")
+    if creator_uuid:
+        if creator_uuid != uid:
+            raise ValueError("只能导入你本人创作的角色")
+        return
+    if user_id is not None and str(user_id) == str(user.get("id")):
+        return
+    raise ValueError("无法确认角色创作者 UUID，请使用本人创作角色的分享短链或 UUID")
 
 def generate_coc_card(profile):
     bio = profile.get("oc_bio") or {}
@@ -1383,6 +1395,8 @@ class Server(BaseHTTPRequestHandler):
                 if active_count >= 3:
                     self._json({"success": False, "error": "每人最多保存三张身份卡，请先删除旧卡"}, 400); return
                 profile = body.get("profile") if isinstance(body.get("profile"), dict) else fetch_neta_character_profile(user_token, link)
+                if body.get("creator_uuid"):
+                    profile["creator_uuid"] = clean_text(body.get("creator_uuid"), 80)
                 validate_character_for_user(profile, user)
                 card = generate_coc_card(profile)
                 saved = save_identity_card_for_user(user, card, profile)
