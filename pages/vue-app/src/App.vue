@@ -250,7 +250,8 @@
             </div>
             <div class="identity-summary-main">
               <b>{{ session.me.nick_name || session.me.name }}</b>
-              <div class="profile-tags"><b v-if="roleLabel(session.role)">{{ roleLabel(session.role) }}</b><i v-if="memberTitle(currentUserProfile)">{{ memberTitle(currentUserProfile) }}</i></div>
+              <div class="profile-tags"><b v-if="roleLabel(session.role)">{{ roleLabel(session.role) }}</b><i>{{ pseudoHumanLevel.label }}</i><i v-if="memberTitle(currentUserProfile)">{{ memberTitle(currentUserProfile) }}</i></div>
+              <p class="pseudo-level-note">{{ pseudoHumanLevel.note }}</p>
               <button v-if="!signatureEditing" class="summary-signature" @click="signatureEditing = true">{{ signatureText || '点击留下签名。' }}</button>
               <section v-else class="inline-signature-editor">
                 <label>个人签名</label>
@@ -382,6 +383,30 @@
       </section>
       </Transition>
     </main>
+
+    <div v-if="humanCaptchaOpen" class="captcha-mask">
+      <section class="pseudo-captcha-card labyrinth-window">
+        <div class="window-title">PSEUDO HUMAN CHECK</div>
+        <h2>我们需要确定你是伪人</h2>
+        <p>请从九宫格中找出<strong>不是土豆</strong>的特殊颜色目标。只有一个小捏，点多或不点都不算。</p>
+        <div class="captcha-grid">
+          <button v-for="cell in captchaCells" :key="cell.id" :class="{ selected: captchaSelected.includes(cell.id), target: cell.type === 'nieta' }" @click="toggleCaptchaCell(cell.id)">
+            <img :src="cell.src" alt="验证图块">
+          </button>
+        </div>
+        <p v-if="captchaError" class="captcha-error">{{ captchaError }}</p>
+        <button class="back-note primary" @click="submitHumanCaptcha">提交识别结果</button>
+      </section>
+    </div>
+
+    <div v-if="welcomeLoading" class="welcome-loading-mask">
+      <section class="welcome-loading-card">
+        <span>DATA SWITCHING</span>
+        <h2>欢迎你，{{ pseudoHumanLevel.label }}的{{ session.me?.nick_name || session.me?.name || '伪人' }}</h2>
+        <div class="progress-track"><i></i></div>
+        <p>正在同步论坛、Wiki、成员身份与伪人适应等级……</p>
+      </section>
+    </div>
 
     <div v-if="selectedMemberModal" class="profile-pop-mask" @click.self="closeMemberModal">
       <section class="profile-pop-card">
@@ -518,6 +543,14 @@ const IMAGE_LIBRARY_KEY = 'WEIREN_IMAGE_LIBRARY'
 const uploadTasks = ref([])
 const imageLibrary = ref(loadImageLibrary())
 const uploadInProgress = computed(() => uploadTasks.value.some(t => t.status === 'uploading'))
+const humanCaptchaOpen = ref(false)
+const captchaCells = ref([])
+const captchaSelected = ref([])
+const captchaError = ref('')
+const welcomeLoading = ref(false)
+const potatoFallback = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120"><rect width="120" height="120" rx="18" fill="#d8bc75"/><ellipse cx="60" cy="63" rx="38" ry="31" fill="#a9783f"/><circle cx="43" cy="54" r="4" fill="#6f4a29"/><circle cx="72" cy="70" r="3.5" fill="#6f4a29"/><circle cx="63" cy="48" r="3" fill="#6f4a29"/></svg>')
+const nietaFallback = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120"><rect width="120" height="120" rx="18" fill="#2b2142"/><circle cx="60" cy="56" r="34" fill="#f4e9ff"/><circle cx="48" cy="55" r="5" fill="#7b55d9"/><circle cx="72" cy="55" r="5" fill="#7b55d9"/><path d="M46 75Q60 86 74 75" stroke="#7b55d9" stroke-width="5" fill="none" stroke-linecap="round"/><path d="M35 30Q48 16 60 31Q72 16 85 30" stroke="#f0a3ff" stroke-width="8" fill="none" stroke-linecap="round"/></svg>')
+const pseudoHumanLevels = ['模仿外表', '学习行为', '理解情感', '体验矛盾', '建立羁绊', '精通人性']
 const savedFrame = localStorage.getItem('NIETA_AVATAR_FRAME')
 const avatarFrame = ref(['none', 'roach', 'moonrise'].includes(savedFrame) ? savedFrame : 'roach')
 const session = reactive({ me: null, role: 'member', token: '' })
@@ -652,6 +685,21 @@ const filteredMembers = computed(() => {
   return sortedMembers.value.filter(m => !q || `${m.name} ${memberTitle(m)}`.toLowerCase().includes(q))
 })
 const currentUserProfile = computed(() => members.value.find(m => m.uuid === session.me?.uuid) || { role: session.role, title: '', signature: signatureText.value })
+const pseudoHumanLevel = computed(() => {
+  const uuid = String(session.me?.uuid || '')
+  const seed = Array.from(uuid || 'pseudo').reduce((sum, ch) => sum + ch.charCodeAt(0), 0)
+  const bonus = Math.min(2, Math.floor((commentCounts.value?.[session.me?.uuid] || 0) / 8))
+  const idx = Math.min(5, (seed % 4) + bonus)
+  const notes = [
+    '已能维持基础外观拟态，建议继续观察人类日常。',
+    '开始学习论坛交流、发言节奏与成员互动。',
+    '可识别多数情绪线索，但仍需谨慎处理玩笑。',
+    '能够同时容纳冲突指令与自我怀疑。',
+    '已与大本营形成稳定关系链，具备归属反应。',
+    '高度拟人化个体，允许进入深层论坛记录。'
+  ]
+  return { index: idx + 1, label: pseudoHumanLevels[idx], note: notes[idx] }
+})
 const currentAvatarFrame = computed(() => avatarFrames.find(f => f.id === avatarFrame.value && f.url) || null)
 const identityCardPortrait = computed(() => identityCardResult.value?.portrait?.avatar_img || identityCardResult.value?.source_character?.avatar_img || identityCardProfile.value?.avatar_img || identityCardResult.value?.portrait?.header_img || identityCardProfile.value?.header_img || '')
 const avatarFrameClass = computed(() => currentAvatarFrame.value ? (currentAvatarFrame.value.type === 'roach' ? 'has-roach-frame avatar-frame-roach' : `avatar-frame-${currentAvatarFrame.value.id}`) : '')
@@ -1010,6 +1058,43 @@ function useLibraryImage(target, url) {
   if (!target.value.includes(url)) target.value.push(url)
   showMsg('已从本地图片库添加', 'ok')
 }
+function captchaImages() {
+  const potato = imageLibrary.value[0]?.url || potatoFallback
+  const nieta = imageLibrary.value[1]?.url || nietaFallback
+  return { potato, nieta }
+}
+function shuffleList(list) {
+  return [...list].sort(() => Math.random() - 0.5)
+}
+function prepareHumanCaptcha() {
+  const { potato, nieta } = captchaImages()
+  const cells = Array.from({ length: 8 }, (_, i) => ({ id: `p-${Date.now()}-${i}`, type: 'potato', src: potato }))
+  cells.push({ id: `n-${Date.now()}`, type: 'nieta', src: nieta })
+  captchaCells.value = shuffleList(cells)
+  captchaSelected.value = []
+  captchaError.value = ''
+  humanCaptchaOpen.value = true
+}
+function toggleCaptchaCell(id) {
+  captchaSelected.value = captchaSelected.value.includes(id) ? captchaSelected.value.filter(x => x !== id) : [...captchaSelected.value, id]
+}
+function submitHumanCaptcha() {
+  const selected = captchaCells.value.filter(c => captchaSelected.value.includes(c.id))
+  if (selected.length === 1 && selected[0].type === 'nieta') {
+    captchaError.value = '不要打地鼠捏'
+    setTimeout(() => finishHumanCaptcha(), 650)
+  } else {
+    const msg = '识别结果不稳定，请再试一次。只点一个小捏，不要点土豆。'
+    prepareHumanCaptcha()
+    captchaError.value = msg
+  }
+}
+function finishHumanCaptcha() {
+  humanCaptchaOpen.value = false
+  if (session.me?.uuid) sessionStorage.setItem(`WEIREN_HUMAN_CHECK_${session.me.uuid}`, 'ok')
+  welcomeLoading.value = true
+  setTimeout(() => { welcomeLoading.value = false; showMsg(`欢迎你，${pseudoHumanLevel.value.label}的${session.me?.nick_name || session.me?.name || '伪人'}`, 'ok') }, 1500)
+}
 function fileToBase64(file, task) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
@@ -1163,6 +1248,7 @@ async function useToken(token) {
   await loadForumMeta(true)
   await loadForumPosts(true)
   await loadIdentityCards(true)
+  if (!sessionStorage.getItem(`WEIREN_HUMAN_CHECK_${me.uuid}`)) prepareHumanCaptcha()
 }
 async function loadMembers(force = false) {
   if (!force && cacheFresh('members') && members.value.length) return
