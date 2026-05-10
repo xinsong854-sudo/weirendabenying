@@ -138,7 +138,20 @@ def init_db():
     )''')
     con.execute('''CREATE TABLE IF NOT EXISTS character_abilities(
         id INTEGER PRIMARY KEY AUTOINCREMENT, card_id INTEGER, user_uuid TEXT, name TEXT, source TEXT, scope TEXT,
-        effect TEXT, cost TEXT DEFAULT '', status TEXT DEFAULT 'active', created_at INTEGER DEFAULT (strftime('%s','now'))
+        effect TEXT, cost TEXT DEFAULT '', status TEXT DEFAULT 'active', created_at INTEGER DEFAULT (strftime('%s','now')),
+        cooldown_until INTEGER DEFAULT 0, last_used INTEGER DEFAULT 0
+    )''')
+    for ddl in [
+        "ALTER TABLE character_abilities ADD COLUMN cooldown_until INTEGER DEFAULT 0",
+        "ALTER TABLE character_abilities ADD COLUMN last_used INTEGER DEFAULT 0",
+    ]:
+        try: con.execute(ddl)
+        except sqlite3.OperationalError: pass
+    con.execute('''CREATE TABLE IF NOT EXISTS bounties(
+        id INTEGER PRIMARY KEY AUTOINCREMENT, channel TEXT DEFAULT '悬赏栏', title TEXT, risk TEXT, issuer TEXT,
+        description TEXT, requirements TEXT DEFAULT '', reward_json TEXT DEFAULT '{}', status TEXT DEFAULT 'open',
+        claimed_by TEXT DEFAULT '', claimed_card_id INTEGER DEFAULT 0, submitted_by TEXT DEFAULT '', submission TEXT DEFAULT '',
+        created_at INTEGER DEFAULT (strftime('%s','now')), updated_at INTEGER DEFAULT (strftime('%s','now'))
     )''')
     con.execute('''CREATE TABLE IF NOT EXISTS explore_runs(
         id INTEGER PRIMARY KEY AUTOINCREMENT, user_uuid TEXT, card_id INTEGER, card_name TEXT, artifact_id INTEGER,
@@ -435,6 +448,43 @@ def generate_daily_news(channel):
     return {'date': today, 'channel': channel, 'title': f'{channel} 当日简报', 'items': fallback}
 
 
+def bounty_row(r):
+    d = dict(r)
+    try: d['reward'] = json.loads(d.get('reward_json') or '{}')
+    except Exception: d['reward'] = {}
+    d.pop('reward_json', None)
+    return d
+
+
+def generate_bounty(channel='悬赏栏'):
+    if llm_enabled():
+        try:
+            prompt = f"""你是《伪人大本营》悬赏栏管理员。基于世界观生成一条可完成的论坛悬赏。只返回 JSON：{{"title":"标题","risk":"safe/caution/danger/hazard","issuer":"委托方","description":"描述","requirements":"领取要求","reward":{{"benzhen":数字,"artifact":true/false,"ability":"能力名或空"}}}}。要求悬赏适合频道：{channel}，不要过强，不要破坏世界观。"""
+            data=parse_llm_json(llm_chat([{'role':'user','content':prompt}],temperature=.8,model=LLM_FAST_MODEL,timeout=25))
+            rw=data.get('reward') if isinstance(data.get('reward'),dict) else {}
+            return {'title':clean(data.get('title') or '未命名悬赏',120),'risk':clean(data.get('risk') or 'caution',20),'issuer':clean(data.get('issuer') or '匿名委托人',120),'description':clean(data.get('description'),1200),'requirements':clean(data.get('requirements'),500),'reward':{'benzhen':int(rw.get('benzhen') or 20),'artifact':bool(rw.get('artifact', True)),'ability':clean(rw.get('ability'),80)}}
+        except Exception:
+            pass
+    return {'title':'调查门缝里的倒影','risk':'caution','issuer':'黎守外勤小组','description':'有居民称午夜后电子屏边缘会出现“比本人慢半拍的倒影”。请携带身份卡记录一次目击，并提交不少于三句调查结果。','requirements':'建议携带可发帖身份卡；禁止单独进入未知门后。','reward':{'benzhen':24,'artifact':True,'ability':'危险预感'}}
+
+
+def grant_bounty_rewards(con, bounty, user_uuid, card_id):
+    reward={}
+    try: reward=json.loads(bounty['reward_json'] or '{}')
+    except Exception: reward={}
+    benzhen=int(reward.get('benzhen') or 20)
+    con.execute('UPDATE members SET benzhen=COALESCE(benzhen,0)+? WHERE uuid=?',[benzhen,user_uuid])
+    artifact=None
+    if reward.get('artifact'):
+        artifact=artifact_row(add_artifact(con,user_uuid,generated_artifact({'card_name':'悬赏结算','bounty':bounty['title']}),'悬赏结算',card_id))
+    ability=clean(reward.get('ability'),80)
+    if ability and card_id:
+        con.execute('INSERT INTO character_abilities(card_id,user_uuid,name,source,scope,effect,cost,cooldown_until) VALUES(?,?,?,?,?,?,?,0)',[card_id,user_uuid,ability,'悬赏结算','forum,rpg','可在论坛发言中触发对应异常表现，并在跑团中获得一次轻微加值。','冷却 24h'])
+    if card_id:
+        con.execute('INSERT INTO identity_card_logs(card_id,user_uuid,event_type,content,delta_json) VALUES(?,?,?,?,?)',[card_id,user_uuid,'bounty_settled',f'完成悬赏《{bounty["title"]}》，获得 {benzhen} 本真' + (f'，能力「{ability}」' if ability else ''),json.dumps({'benzhen':benzhen,'ability':ability},ensure_ascii=False)])
+    return {'benzhen':benzhen,'artifact':artifact,'ability':ability}
+
+
 def generate_npc_comment(channel, topic=''):
     npc = choose_wiki_character()
     name = npc['name']
@@ -523,6 +573,11 @@ class Server(BaseHTTPRequestHandler):
                 if risk: rows=con.execute("SELECT * FROM codex_entries WHERE status='approved' AND risk=? ORDER BY approved_at DESC,created_at DESC",[risk]).fetchall()
                 else: rows=con.execute("SELECT * FROM codex_entries WHERE status='approved' ORDER BY approved_at DESC,created_at DESC").fetchall()
                 con.close(); return self.send_json([codex_row(r) for r in rows])
+            if p.path == '/api/abilities':
+                u=self.user(); card_id=int(parse_qs(p.query).get('card_id',['0'])[0] or 0); con=db()
+                rows=con.execute("SELECT * FROM character_abilities WHERE user_uuid=? AND status='active' AND (?=0 OR card_id=?) ORDER BY created_at DESC",[u['uuid'],card_id,card_id]).fetchall(); con.close(); return self.send_json([dict(r) for r in rows])
+            if p.path == '/api/bounties':
+                con=db(); rows=con.execute('SELECT * FROM bounties ORDER BY CASE status WHEN \'open\' THEN 0 WHEN \'claimed\' THEN 1 WHEN \'submitted\' THEN 2 ELSE 3 END, updated_at DESC,id DESC LIMIT 80').fetchall(); con.close(); return self.send_json([bounty_row(r) for r in rows])
             if p.path == '/api/inventory':
                 u=self.user(); con=db(); rows=con.execute('SELECT * FROM inventory_artifacts WHERE user_uuid=? ORDER BY created_at DESC,id DESC',[u['uuid']]).fetchall(); bal=con.execute('SELECT COALESCE(benzhen,0) AS benzhen FROM members WHERE uuid=?',[u['uuid']]).fetchone(); con.close(); return self.send_json({'benzhen':int(bal['benzhen'] if bal else 0),'items':[artifact_row(r) for r in rows]})
             if p.path == '/api/explore/runs':
@@ -619,12 +674,30 @@ class Server(BaseHTTPRequestHandler):
                         an=random.choice(['门缝听觉','反文阅读','危险预感','伪物共鸣'])
                         con.execute('INSERT INTO character_abilities(card_id,user_uuid,name,source,scope,effect,cost) VALUES(?,?,?,?,?,?,?)',[card_id,u['uuid'],an,'里界探索','forum,rpg,codex','可在论坛发言中体现异常感知，并在探索中获得一次轻微加值。','冷却 24h / 可能增加污染'])
                 con.execute('UPDATE members SET benzhen=COALESCE(benzhen,0)+? WHERE uuid=?',[reward,u['uuid']]); con.execute('INSERT INTO explore_runs(user_uuid,card_id,card_name,artifact_id,area,danger,dice,result,reward,artifact_json) VALUES(?,?,?,?,?,?,?,?,?,?)',[u['uuid'],card_id,card['source_name'] if card else '',artifact_id,area,danger,dice,result,reward,json.dumps(drop or {},ensure_ascii=False)]); bal=con.execute('SELECT COALESCE(benzhen,0) AS benzhen FROM members WHERE uuid=?',[u['uuid']]).fetchone(); con.commit(); con.close(); return self.send_json({'ok':True,'result':result,'reward':reward,'artifact':drop,'benzhen':int(bal['benzhen'] if bal else 0)})
+            if p.path == '/api/bounties/generate':
+                u=self.user(); channel=clean(body.get('channel') or '悬赏栏',80); b=generate_bounty(channel); con=db(); con.execute('INSERT INTO bounties(channel,title,risk,issuer,description,requirements,reward_json,status,updated_at) VALUES(?,?,?,?,?,?,?,?,?)',[channel,b['title'],b['risk'],b['issuer'],b['description'],b['requirements'],json.dumps(b['reward'],ensure_ascii=False),'open',int(time.time())]); r=con.execute('SELECT * FROM bounties WHERE id=last_insert_rowid()').fetchone(); con.commit(); con.close(); return self.send_json({'ok':True,'bounty':bounty_row(r)})
+            if p.path == '/api/bounties/claim':
+                u=self.user(); bid=int(body.get('id') or 0); card_id=int(body.get('card_id') or 0); con=db(); card=con.execute("SELECT id FROM identity_cards WHERE id=? AND user_uuid=? AND status='active'",[card_id,u['uuid']]).fetchone()
+                if not card: con.close(); return self.send_json({'error':'需要选择可用身份卡'},400)
+                con.execute("UPDATE bounties SET status='claimed',claimed_by=?,claimed_card_id=?,updated_at=? WHERE id=? AND status='open'",[u['uuid'],card_id,int(time.time()),bid]); ok=con.total_changes; con.commit(); con.close(); return self.send_json({'ok':bool(ok)})
+            if p.path == '/api/bounties/submit':
+                u=self.user(); bid=int(body.get('id') or 0); text=clean(body.get('submission'),2000); con=db(); con.execute("UPDATE bounties SET status='submitted',submitted_by=?,submission=?,updated_at=? WHERE id=? AND claimed_by=? AND status='claimed'",[u['uuid'],text,int(time.time()),bid,u['uuid']]); ok=con.total_changes; con.commit(); con.close(); return self.send_json({'ok':bool(ok)})
+            if p.path == '/api/bounties/settle':
+                u=self.user(); bid=int(body.get('id') or 0); approve=bool(body.get('approved',True)); con=db(); role=con.execute('SELECT role FROM members WHERE uuid=?',[u['uuid']]).fetchone()
+                if not role or role['role'] not in ('chief','deputy','admin'): con.close(); return self.send_json({'error':'权限不足'},403)
+                b=con.execute('SELECT * FROM bounties WHERE id=?',[bid]).fetchone()
+                if not b or b['status']!='submitted': con.close(); return self.send_json({'error':'悬赏不可结算'},400)
+                rewards={}
+                if approve: rewards=grant_bounty_rewards(con,b,b['claimed_by'],b['claimed_card_id']); status='settled'
+                else: status='rejected'
+                con.execute('UPDATE bounties SET status=?,updated_at=? WHERE id=?',[status,int(time.time()),bid]); con.commit(); con.close(); return self.send_json({'ok':True,'status':status,'rewards':rewards})
             if p.path == '/api/forum/npc-comment':
                 u=self.user(); channel=clean(body.get('channel') or '主论坛',80); topic=clean(body.get('topic'),300)
                 if channel == '主论坛': return self.send_json({'error':'主论坛不自动刷新人机评论'},400)
                 npc=generate_npc_comment(channel, topic); con=db(); con.execute('INSERT INTO forum_posts(channel,user_uuid,user_name,user_avatar,content,images_json) VALUES(?,?,?,?,?,?)',[channel,'npc:'+clean(npc['name'],80),clean(npc['name'],120),clean(npc.get('avatar'),500),clean(npc['content'],800),'[]']); con.commit(); con.close(); return self.send_json({'ok':True,'npc':npc})
             if p.path == '/api/forum/posts':
                 u = self.user(); channel=clean(body.get('channel') or '主论坛',80); content=clean(body.get('content'),2000); images=body.get('images') if isinstance(body.get('images'),list) else []
+                ability_id=int(body.get('ability_id') or 0); artifact_effect_id=int(body.get('artifact_effect_id') or 0); hidden=clean(body.get('hidden_text'),800); effect_type=clean(body.get('effect_type'),40)
                 role_id = int(body.get('role_card_id') or 0)
                 post_name, post_avatar = u['nick_name'], u['avatar_url']
                 con=db()
@@ -633,6 +706,17 @@ class Server(BaseHTTPRequestHandler):
                     if not rr: con.close(); return self.send_json({'error':'角色卡不存在或不属于当前用户'},403)
                     post_name, post_avatar = rr['source_name'], rr['avatar_img']
                     content = rewrite_for_role_card(content, rr)
+                effects=[]; now=int(time.time())
+                if ability_id:
+                    ab=con.execute("SELECT * FROM character_abilities WHERE id=? AND user_uuid=? AND status='active'",[ability_id,u['uuid']]).fetchone()
+                    if ab and int(ab['cooldown_until'] or 0) <= now:
+                        effects.append(f"【能力：{ab['name']}】"); con.execute('UPDATE character_abilities SET last_used=?,cooldown_until=? WHERE id=?',[now,now+24*3600,ability_id])
+                if artifact_effect_id:
+                    ar=con.execute("SELECT * FROM inventory_artifacts WHERE id=? AND user_uuid=? AND status='owned'",[artifact_effect_id,u['uuid']]).fetchone()
+                    if ar: effects.append(f"【伪物共鸣：{ar['name']}】")
+                if effect_type == 'echo': effects.append('【残响评论】')
+                if hidden: content += f"\n\n[灵视可见]{hidden}[/灵视可见]"
+                if effects: content = ' '.join(effects) + '\n' + content
                 if not content and not images: con.close(); return self.send_json({'error':'缺少内容'},400)
                 con.execute('INSERT INTO forum_posts(channel,user_uuid,user_name,user_avatar,content,images_json) VALUES(?,?,?,?,?,?)',[channel,u['uuid'],post_name,post_avatar,content,json.dumps(images[:9],ensure_ascii=False)]); con.execute('UPDATE members SET online=1,last_seen=? WHERE uuid=?',[int(time.time()),u['uuid']]); con.commit(); con.close(); return self.send_json({'ok':True})
             if p.path == '/api/identity-cards':
