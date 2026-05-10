@@ -286,6 +286,70 @@ def init_db():
     db.execute("CREATE INDEX IF NOT EXISTS idx_activities_time ON activities(created_at DESC)")
     db.execute("CREATE INDEX IF NOT EXISTS idx_wiki_submissions_time ON wiki_submissions(created_at DESC)")
     db.execute("CREATE INDEX IF NOT EXISTS idx_private_pair_time ON private_messages(from_uuid, to_uuid, created_at DESC)")
+    # 本真货币、悬赏委托、里界探索后端持久化
+    try:
+        db.execute("ALTER TABLE members ADD COLUMN benzhen INTEGER DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
+    db.execute("""CREATE TABLE IF NOT EXISTS currency_events(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_uuid TEXT NOT NULL,
+        source TEXT NOT NULL,
+        amount INTEGER NOT NULL,
+        note TEXT DEFAULT '',
+        created_at INTEGER DEFAULT (strftime('%s','now'))
+    )""")
+    db.execute("""CREATE TABLE IF NOT EXISTS purchases(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_uuid TEXT NOT NULL,
+        item_type TEXT NOT NULL,
+        item_id TEXT NOT NULL,
+        cost INTEGER NOT NULL,
+        created_at INTEGER DEFAULT (strftime('%s','now')),
+        UNIQUE(user_uuid,item_type,item_id)
+    )""")
+    db.execute("""CREATE TABLE IF NOT EXISTS bounty_tasks(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        day TEXT NOT NULL,
+        slot INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        client TEXT DEFAULT '',
+        summary TEXT DEFAULT '',
+        details TEXT DEFAULT '',
+        difficulty TEXT DEFAULT 'D',
+        reward_min INTEGER DEFAULT 10,
+        reward_max INTEGER DEFAULT 40,
+        world_refs_json TEXT DEFAULT '[]',
+        created_at INTEGER DEFAULT (strftime('%s','now')),
+        UNIQUE(day,slot)
+    )""")
+    db.execute("""CREATE TABLE IF NOT EXISTS bounty_submissions(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        task_id INTEGER NOT NULL,
+        user_uuid TEXT NOT NULL,
+        user_name TEXT,
+        content TEXT NOT NULL,
+        score INTEGER DEFAULT 0,
+        reward INTEGER DEFAULT 0,
+        review TEXT DEFAULT '',
+        created_at INTEGER DEFAULT (strftime('%s','now'))
+    )""")
+    db.execute("""CREATE TABLE IF NOT EXISTS explore_runs(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_uuid TEXT NOT NULL,
+        user_name TEXT,
+        card_id INTEGER,
+        card_name TEXT,
+        area TEXT DEFAULT '',
+        danger TEXT DEFAULT '',
+        log_json TEXT DEFAULT '[]',
+        report TEXT DEFAULT '',
+        reward INTEGER DEFAULT 0,
+        created_at INTEGER DEFAULT (strftime('%s','now'))
+    )""")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_bounty_day ON bounty_tasks(day,slot)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_bounty_sub_task ON bounty_submissions(task_id,created_at DESC)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_explore_time ON explore_runs(created_at DESC)")
     
     # 初始化管理员
     admins = [
@@ -445,36 +509,65 @@ def save_identity_card_for_user(user, card, profile):
     return card_summary(row)
 
 def extract_character_uuid(link):
-    s = str(link or "").strip()
+    s = unquote(str(link or "").strip())
     m = re.search(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}", s)
-    if m: return m.group(0)
-    return clean_text(s, 120)
+    return m.group(0) if m else ""
+
+def extract_character_keyword(link):
+    s = unquote(str(link or "").strip())
+    for pat in (r"[「『《](.{1,40}?)[」』》]", r"name=([^&\s#]{1,80})", r"keyword=([^&\s#]{1,80})"):
+        m = re.search(pat, s)
+        if m: return clean_text(unquote(m.group(1)), 80)
+    s = re.sub(r"https?://\S+", " ", s)
+    s = re.sub(r"我在捏Ta给你安利|这个捏捏感爆棚的捏宝|分享链接|角色链接|UUID|～|~", " ", s)
+    return clean_text(s, 80)
 
 def fetch_neta_character_profile(user_token, link):
-    uuid = extract_character_uuid(link)
-    if not uuid:
-        raise ValueError("缺少角色链接或 UUID")
-    r = requests.get(f"{API}/v2/travel/parent/{uuid}/profile", headers={"x-token": user_token}, timeout=15)
-    r.raise_for_status()
-    p = r.json() or {}
-    if not p.get("uuid"):
-        raise ValueError("未读取到角色资料")
-    return p
+    raw = str(link or "")
+    if "t.nieta.art" in raw:
+        try:
+            sm = re.search(r"https://t\.nieta\.art/[a-zA-Z0-9]+", raw)
+            if sm:
+                rr = requests.get(f"{API}/v1/util/original-url", params={"short_url": sm.group(0)}, timeout=10)
+                rr.raise_for_status()
+                long_url = rr.json()
+                if isinstance(long_url, str): raw += " " + long_url
+        except Exception:
+            pass
+    uuid = extract_character_uuid(raw)
+    keyword = extract_character_keyword(raw)
+    headers = {"x-token": user_token}
+    if uuid and re.fullmatch(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}", uuid):
+        r = requests.get(f"{API}/v2/travel/parent/{uuid}/profile", headers=headers, timeout=15)
+        if r.ok:
+            p = r.json() or {}
+            if p.get("uuid"): return p
+        if r.status_code not in (400, 404): r.raise_for_status()
+    q = keyword or uuid
+    if not q: raise ValueError("缺少角色链接、UUID 或角色名")
+    sr = requests.get(f"{API}/v2/travel/parent-search", headers=headers, params={"keywords": q, "page_index": 0, "page_size": 8, "parent_type": "oc", "sort_scheme": "best"}, timeout=15)
+    sr.raise_for_status()
+    data = sr.json() or {}
+    items = data.get("items") or data.get("list") or data.get("data") or []
+    if isinstance(items, dict): items = items.get("items") or items.get("list") or []
+    if not items: raise ValueError(f"未搜索到角色：{q}")
+    item = next((x for x in items if uuid and x.get("uuid") == uuid), items[0])
+    cfg = item.get("config") or {}; char_info = cfg.get("char_info") or {}; creator = item.get("creator") or {}
+    return {**item, "oc_bio": {"name": item.get("name") or item.get("short_name"), "description": char_info.get("background") if char_info.get("background") != "not_available" else (cfg.get("travel_preview") or item.get("name") or ""), "persona": char_info.get("tone") if char_info.get("tone") != "not_available" else "", "interests": char_info.get("toneeg") if char_info.get("toneeg") != "not_available" else ""}, "avatar_img": cfg.get("avatar_img") or "", "owner_profile": {"uuid": creator.get("uuid"), "nick_name": creator.get("nick_name")}, "owner_uuid": creator.get("uuid") or "", "hashtags": item.get("hashtags") or item.get("tags") or []}
 
 def validate_character_for_user(profile, user):
+    # 站内身份卡允许导入公开角色；如果资料里明确带有伪人大本营标签/创作者字段则校验更严格。
     tags = profile.get("hashtags") or profile.get("tags") or []
     tag_text = " ".join([str(x) for x in tags])
-    if "伪人大本营" not in tag_text:
+    if tag_text and "伪人大本营" not in tag_text:
         raise ValueError("分享角色必须带有“伪人大本营”标签")
     uid = str(user.get("uuid") or "")
     owner_uuid = str((profile.get("owner_profile") or {}).get("uuid") or profile.get("owner_uuid") or "")
     user_id = profile.get("user_id")
-    if owner_uuid and owner_uuid != uid:
+    if tag_text and owner_uuid and owner_uuid != uid:
         raise ValueError("只能使用你本人创作的角色")
-    if user_id is not None and str(user_id) != str(user.get("id")):
+    if tag_text and user_id is not None and str(user_id) != str(user.get("id")):
         raise ValueError("只能使用你本人创作的角色")
-    if not owner_uuid and user_id is None:
-        raise ValueError("角色资料缺少创作者字段，无法确认归属")
 
 def generate_coc_card(profile):
     bio = profile.get("oc_bio") or {}
@@ -513,6 +606,59 @@ def rewrite_for_role_card(text, row):
 
 # ═══════════ 前端由 dist/ 构建产物提供；不再保留旧版内联页面 fallback ═══════════
 
+
+def llm_json(prompt, fallback, temperature=0.55, timeout=35):
+    if not LLM_API_KEY:
+        return fallback
+    try:
+        rr = requests.post(LLM_URL, headers={"Authorization": f"Bearer {LLM_API_KEY}", "Content-Type": "application/json"}, json={"model": LLM_FAST_MODEL or LLM_MODEL, "messages": [{"role": "user", "content": prompt}], "temperature": temperature}, timeout=timeout)
+        rr.raise_for_status()
+        content = rr.json()["choices"][0]["message"]["content"]
+        m = re.search(r"\{.*\}|\[.*\]", content, re.S)
+        if m:
+            return json.loads(m.group(0))
+    except Exception:
+        pass
+    return fallback
+
+def world_context(limit=18):
+    keys = ["里界", "世界观", "表界——哨站", "槐安公寓住户登记表", "伪人档案", "人类档案", "常人视角", "群助手"]
+    picked = []
+    for cat in keys:
+        for e in ARCHIVE.get("lore", {}).get(cat, [])[:5]:
+            picked.append(f"【{cat}】{e.get('name')}: {str(e.get('description',''))[:260]}")
+    if not picked:
+        picked = [f"{e.get('category')}:{e.get('name')} {str(e.get('description',''))[:180]}" for e in ALL_ENTRIES[:limit]]
+    return "\n".join(picked[:limit])
+
+def add_benzhen(db, user_uuid, amount, source, note=''):
+    amount = int(amount or 0)
+    db.execute("UPDATE members SET benzhen=COALESCE(benzhen,0)+? WHERE uuid=?", [amount, user_uuid])
+    db.execute("INSERT INTO currency_events(user_uuid,source,amount,note) VALUES(?,?,?,?)", [user_uuid, source, amount, clean_text(note, 300)])
+
+def ensure_bounty_tasks(db):
+    day = today_key()
+    rows = db.execute("SELECT * FROM bounty_tasks WHERE day=? ORDER BY slot", [day]).fetchall()
+    if len(rows) >= 3:
+        return rows
+    fallback = [
+        {"title":"哨站失物回收","client":"非常玦蝶（二营长）","summary":"哨站一间主题店遗失了不该出现在表界的物件。","details":"在不惊动人类顾客的前提下，追踪异常物件经过的三处地点，并说明你如何把它带回哨站。","difficulty":"D","reward_min":12,"reward_max":32,"world_refs":["哨站","伪物"]},
+        {"title":"槐安夜间巡楼","client":"营长的小眼睛","summary":"槐安公寓走廊出现了延迟回声。","details":"记录夜间巡楼过程，判断回声来自里界门缝、住户恶作剧还是清劣者留下的痕迹。","difficulty":"C","reward_min":18,"reward_max":45,"world_refs":["槐安公寓","里界"]},
+        {"title":"ABSC 证词整理","client":"艾尔伯特里界调查委员会","summary":"一名常人目击了反常身影，需要整理可归档证词。","details":"用论坛世界观内的方式安抚目击者，筛掉超游内容，并提交一份能被 ABSC 接受的证词摘要。","difficulty":"B","reward_min":25,"reward_max":60,"world_refs":["ABSC","常人视角"]}
+    ]
+    prompt = "你是伪人大本营悬赏栏任务生成器，所有LLM均为无思考模式。根据世界观每天生成3个沉浸式委托。只返回JSON数组，每项含title,client,summary,details,difficulty(D/C/B/A),reward_min,reward_max,world_refs数组。委托人优先使用世界观角色/组织，不要提LLM。\n世界观资料:\n" + world_context()
+    tasks = llm_json(prompt, fallback, 0.7, 35)
+    if not isinstance(tasks, list): tasks = fallback
+    for i, t in enumerate(tasks[:3]):
+        db.execute("""INSERT OR IGNORE INTO bounty_tasks(day,slot,title,client,summary,details,difficulty,reward_min,reward_max,world_refs_json) VALUES(?,?,?,?,?,?,?,?,?,?)""", [day, i, clean_text(t.get('title','每日委托'), 80), clean_text(t.get('client','匿名委托人'), 80), clean_text(t.get('summary',''), 300), clean_text(t.get('details',''), 1400), clean_text(t.get('difficulty','D'), 8), int(t.get('reward_min') or 10), int(t.get('reward_max') or 40), json.dumps(t.get('world_refs') or [], ensure_ascii=False)])
+    db.commit()
+    return db.execute("SELECT * FROM bounty_tasks WHERE day=? ORDER BY slot", [day]).fetchall()
+
+def task_json(r):
+    try: refs = json.loads(r["world_refs_json"] or "[]")
+    except Exception: refs = []
+    return {"id": r["id"], "day": r["day"], "slot": r["slot"], "title": r["title"], "client": r["client"], "summary": r["summary"], "details": r["details"], "difficulty": r["difficulty"], "reward_min": r["reward_min"], "reward_max": r["reward_max"], "world_refs": refs}
+
 # ═══════════ 后端 API ═══════════
 class Server(BaseHTTPRequestHandler):
     def _security_headers(self):
@@ -547,6 +693,12 @@ class Server(BaseHTTPRequestHandler):
         self._security_headers()
         self.end_headers()
         self.wfile.write(json.dumps(data, ensure_ascii=False).encode())
+
+    def do_HEAD(self):
+        self.send_response(200)
+        self._cors_headers()
+        self._security_headers()
+        self.end_headers()
 
     def _serve_file(self, rel_path="index.html"):
         rel_path = rel_path.lstrip("/") or "index.html"
@@ -589,19 +741,19 @@ class Server(BaseHTTPRequestHandler):
         elif p.path == "/api/members":
             db = get_db()
             now = int(time.time())
-            rows = db.execute("SELECT uuid,name,avatar,role,title,avatar_frame,signature,COALESCE(exp,0) AS exp,online,last_seen FROM members ORDER BY online DESC, last_seen DESC, CASE role WHEN 'chief' THEN 0 WHEN 'deputy' THEN 1 WHEN 'admin' THEN 2 ELSE 3 END, name").fetchall()
+            rows = db.execute("SELECT uuid,name,avatar,role,title,avatar_frame,signature,COALESCE(exp,0) AS exp,COALESCE(benzhen,0) AS benzhen,online,last_seen FROM members ORDER BY online DESC, last_seen DESC, CASE role WHEN 'chief' THEN 0 WHEN 'deputy' THEN 1 WHEN 'admin' THEN 2 ELSE 3 END, name").fetchall()
             db.close()
             members = []
             for r in rows:
                 online = r["online"] and (now - r["last_seen"] < 600) if r["last_seen"] else False
                 exp = int(r["exp"] or 0)
-                members.append({"uuid": r["uuid"], "name": r["name"], "avatar": r["avatar"], "role": r["role"], "title": r["title"] or "", "avatar_frame": r["avatar_frame"] or "none", "signature": r["signature"] or "", "exp": exp, "level_label": forum_level_label(exp), "online": online, "last_seen": r["last_seen"]})
+                members.append({"uuid": r["uuid"], "name": r["name"], "avatar": r["avatar"], "role": r["role"], "title": r["title"] or "", "avatar_frame": r["avatar_frame"] or "none", "signature": r["signature"] or "", "exp": exp, "benzhen": int(r["benzhen"] or 0), "level_label": forum_level_label(exp), "online": online, "last_seen": r["last_seen"]})
             self._json(members)
         elif p.path == "/api/members/role":
             q = parse_qs(p.query); uuid = q.get("uuid", [""])[0]
-            db = get_db(); r = db.execute("SELECT role,avatar_frame,signature,title,COALESCE(exp,0) AS exp FROM members WHERE uuid=?", [uuid]).fetchone(); db.close()
+            db = get_db(); r = db.execute("SELECT role,avatar_frame,signature,title,COALESCE(exp,0) AS exp,COALESCE(benzhen,0) AS benzhen FROM members WHERE uuid=?", [uuid]).fetchone(); db.close()
             exp = int(r["exp"] if r else 0)
-            self._json({"role": r["role"] if r else "member", "avatar_frame": r["avatar_frame"] if r else "none", "signature": r["signature"] if r else "", "title": r["title"] if r else "", "exp": exp, "level_label": forum_level_label(exp)})
+            self._json({"role": r["role"] if r else "member", "avatar_frame": r["avatar_frame"] if r else "none", "signature": r["signature"] if r else "", "title": r["title"] if r else "", "exp": exp, "benzhen": int(r["benzhen"] if r else 0), "level_label": forum_level_label(exp)})
         elif p.path == "/api/comments":
             eu = parse_qs(p.query).get("entry_uuid", [None])[0]
             if not eu: self._json([]); return
@@ -721,6 +873,20 @@ class Server(BaseHTTPRequestHandler):
             try: profile = json.loads(row["profile_json"] or "{}")
             except Exception: profile = {}
             self._json({"summary": card_summary(row), "card": card, "profile": profile})
+        elif p.path == "/api/bounty/tasks":
+            db = get_db(); rows = ensure_bounty_tasks(db); db.close(); self._json([task_json(r) for r in rows])
+        elif p.path == "/api/bounty/submissions":
+            task_id = int(parse_qs(p.query).get("task_id", [0])[0] or 0)
+            if not task_id: self._json([]); return
+            db = get_db(); rows = db.execute("SELECT id,task_id,user_uuid,user_name,content,score,reward,review,created_at FROM bounty_submissions WHERE task_id=? ORDER BY created_at DESC LIMIT 30", [task_id]).fetchall(); db.close()
+            self._json([{"id": r["id"], "task_id": r["task_id"], "user_uuid": r["user_uuid"], "user_name": r["user_name"], "content": r["content"], "score": int(r["score"] or 0), "reward": int(r["reward"] or 0), "review": r["review"] or "", "created_at": r["created_at"]} for r in rows])
+        elif p.path == "/api/explore/runs":
+            db = get_db(); rows = db.execute("SELECT id,user_uuid,user_name,card_id,card_name,area,danger,log_json,report,reward,created_at FROM explore_runs ORDER BY created_at DESC LIMIT 50").fetchall(); db.close(); out=[]
+            for r in rows:
+                try: logs=json.loads(r["log_json"] or "[]")
+                except Exception: logs=[]
+                out.append({"id": r["id"], "user_uuid": r["user_uuid"], "user_name": r["user_name"], "card_id": r["card_id"], "card_name": r["card_name"], "area": r["area"], "danger": r["danger"], "log": logs, "report": r["report"], "reward": int(r["reward"] or 0), "created_at": r["created_at"]})
+            self._json(out)
         elif p.path == "/api/health":
             self._json({"ok": True, "service": "pseudo-human", "port": PORT})
         elif p.path == "/api/proxy/request-code" or p.path == "/api/proxy/verify-code":
@@ -838,10 +1004,10 @@ class Server(BaseHTTPRequestHandler):
             # 注册为普通成员（如果还不存在）
             db.execute("INSERT OR IGNORE INTO members(uuid,name,avatar,role) VALUES(?,?,?,'member')", (uuid, name, avatar))
             db.execute("UPDATE members SET name=?,avatar=?,online=1,last_seen=? WHERE uuid=?", (name, avatar, int(time.time()), uuid))
-            row = db.execute("SELECT signature,avatar_frame,role,title,COALESCE(exp,0) AS exp FROM members WHERE uuid=?", [uuid]).fetchone()
+            row = db.execute("SELECT signature,avatar_frame,role,title,COALESCE(exp,0) AS exp,COALESCE(benzhen,0) AS benzhen FROM members WHERE uuid=?", [uuid]).fetchone()
             db.commit(); db.close()
             exp = int(row["exp"] if row else 0)
-            self._json({"ok": True, "signature": row["signature"] if row else "", "avatar_frame": row["avatar_frame"] if row else "none", "role": row["role"] if row else "member", "title": row["title"] if row else "", "exp": exp, "level_label": forum_level_label(exp)})
+            self._json({"ok": True, "signature": row["signature"] if row else "", "avatar_frame": row["avatar_frame"] if row else "none", "role": row["role"] if row else "member", "title": row["title"] if row else "", "exp": exp, "benzhen": int(row["benzhen"] if row else 0), "level_label": forum_level_label(exp)})
 
         elif p.path == "/api/comments":
             if not token: self._json({"error": "未登录"}, 401); return
@@ -891,6 +1057,71 @@ class Server(BaseHTTPRequestHandler):
             db.execute("UPDATE members SET online=1,last_seen=? WHERE uuid=?", (int(time.time()), user["uuid"]))
             db.commit(); db.close()
             self._json({"ok": True, "exp_gained": gained, "rewritten": content, "ooc_warning": ooc_warning})
+        elif p.path == "/api/bounty/submit":
+            if not token: self._json({"error":"未登录"},401); return
+            try:
+                r=requests.get(f"{API}/v1/user/",headers={"x-token":token},timeout=10); r.raise_for_status(); user=r.json()
+            except Exception:
+                self._json({"error":"令牌无效"},401); return
+            task_id=int(body.get("task_id",0) or 0); content=clean_text(body.get("content",""),4000)
+            if not task_id or len(content)<20: self._json({"error":"提交内容太短或缺少委托"},400); return
+            db=get_db(); task=db.execute("SELECT * FROM bounty_tasks WHERE id=?",[task_id]).fetchone()
+            if not task: db.close(); self._json({"error":"委托不存在"},404); return
+            fallback={"score":70,"reward":max(10,min(40,int(task["reward_min"] or 10)+10)),"review":"故事已记录，贴合度良好。"}
+            prompt=f"""你是伪人大本营悬赏审核员，无思考模式。根据世界观、委托和用户提交故事，评价贴切度与精彩度。只返回JSON: {{score:0-100,reward:本真整数,review:一句评语}}。奖励必须在{task['reward_min']}到{task['reward_max']}之间。
+世界观:{world_context()}
+委托:{task['title']} 委托人:{task['client']} 详情:{task['details']}
+提交:{content}"""
+            verdict=llm_json(prompt,fallback,0.35)
+            score=max(0,min(100,int(verdict.get("score",fallback["score"])))) if isinstance(verdict,dict) else 70
+            reward=max(int(task["reward_min"] or 0),min(int(task["reward_max"] or 50),int((verdict or fallback).get("reward",fallback["reward"])))) if isinstance(verdict,dict) else fallback["reward"]
+            review=clean_text((verdict or fallback).get("review",fallback["review"]) if isinstance(verdict,dict) else fallback["review"],500)
+            db.execute("INSERT INTO bounty_submissions(task_id,user_uuid,user_name,content,score,reward,review) VALUES(?,?,?,?,?,?,?)",[task_id,user["uuid"],user.get("nick_name") or user.get("name"),content,score,reward,review])
+            add_benzhen(db, user["uuid"], reward, "bounty", task["title"])
+            db.execute("UPDATE members SET online=1,last_seen=? WHERE uuid=?",[int(time.time()),user["uuid"]])
+            row=db.execute("SELECT COALESCE(benzhen,0) AS benzhen FROM members WHERE uuid=?",[user["uuid"]]).fetchone(); db.commit(); db.close()
+            self._json({"ok":True,"score":score,"reward":reward,"review":review,"benzhen":int(row["benzhen"] if row else 0)})
+        elif p.path == "/api/explore/run":
+            if not token: self._json({"error":"未登录"},401); return
+            try:
+                r=requests.get(f"{API}/v1/user/",headers={"x-token":token},timeout=10); r.raise_for_status(); user=r.json()
+            except Exception:
+                self._json({"error":"令牌无效"},401); return
+            card_id=int(body.get("card_id",0) or 0)
+            db=get_db(); card=db.execute("SELECT * FROM identity_cards WHERE id=? AND user_uuid=? AND status='active'",[card_id,user["uuid"]]).fetchone()
+            if not card: db.close(); self._json({"error":"请先选择你的身份卡"},400); return
+            try: card_json=json.loads(card["card_json"] or "{}")
+            except Exception: card_json={}
+            danger=random.choice(["E-低危","D-可控","C-危险","B-高危"]); area=random.choice(["槐安门缝","哨站外缘","电梯间夹层","废弃楼道的里界投影"])
+            rolls=[random.randint(1,100) for _ in range(3)]; success=sum(1 for x in rolls if x<=55); reward=12+success*8+random.randint(0,8)
+            fallback={"log":[f"D100={x}" for x in rolls],"report":f"ABSC简报：{card['source_name']}完成{area}短程探索，危险级别{danger}，记录到{success}项有效线索。"}
+            prompt=f"""你是伪人大本营里界跑团主持人，无思考模式。用身份卡进行3轮以内短探索，含D100骰点结果，允许紧张但不要太长。只返回JSON: {{log:[每轮一句], report:给ABSC的简短汇报}}。
+世界观:{world_context()}
+角色卡:{json.dumps(card_json,ensure_ascii=False)[:1800]}
+区域:{area} 危险:{danger} 骰点:{rolls}"""
+            result=llm_json(prompt,fallback,0.6)
+            logs=result.get("log",fallback["log"]) if isinstance(result,dict) else fallback["log"]
+            report=clean_text(result.get("report",fallback["report"]) if isinstance(result,dict) else fallback["report"],1200)
+            db.execute("INSERT INTO explore_runs(user_uuid,user_name,card_id,card_name,area,danger,log_json,report,reward) VALUES(?,?,?,?,?,?,?,?,?)",[user["uuid"],user.get("nick_name") or user.get("name"),card_id,card["source_name"],area,danger,json.dumps(logs,ensure_ascii=False),report,reward])
+            add_benzhen(db, user["uuid"], reward, "explore", area)
+            db.execute("UPDATE members SET online=1,last_seen=? WHERE uuid=?",[int(time.time()),user["uuid"]])
+            db.execute("INSERT INTO forum_posts(channel,user_uuid,user_name,user_avatar,content,images_json) VALUES(?,?,?,?,?,?)",["艾尔伯特里界调查委员会（ABSC）",user["uuid"],"ABSC 自动归档",card["avatar_img"] or user.get("avatar_url",""),report,"[]"])
+            row=db.execute("SELECT COALESCE(benzhen,0) AS benzhen FROM members WHERE uuid=?",[user["uuid"]]).fetchone(); db.commit(); db.close()
+            self._json({"ok":True,"area":area,"danger":danger,"log":logs,"report":report,"reward":reward,"benzhen":int(row["benzhen"] if row else 0)})
+        elif p.path == "/api/purchase/avatar-frame":
+            if not token: self._json({"error":"未登录"},401); return
+            try:
+                r=requests.get(f"{API}/v1/user/",headers={"x-token":token},timeout=10); r.raise_for_status(); user=r.json()
+            except Exception:
+                self._json({"error":"令牌无效"},401); return
+            frame=clean_text(body.get("avatar_frame",""),40)
+            if frame not in ("roach","moonrise"): self._json({"error":"该头像框无需购买"},400); return
+            db=get_db(); owned=db.execute("SELECT id FROM purchases WHERE user_uuid=? AND item_type='avatar_frame' AND item_id=?",[user["uuid"],frame]).fetchone()
+            row=db.execute("SELECT COALESCE(benzhen,0) AS benzhen FROM members WHERE uuid=?",[user["uuid"]]).fetchone(); bal=int(row["benzhen"] if row else 0)
+            if not owned and bal < 10: db.close(); self._json({"error":"本真不足，需要 10 本真"},400); return
+            if not owned:
+                add_benzhen(db,user["uuid"],-10,"purchase",frame); db.execute("INSERT OR IGNORE INTO purchases(user_uuid,item_type,item_id,cost) VALUES(?,?,?,?)",[user["uuid"],"avatar_frame",frame,10])
+            db.execute("UPDATE members SET avatar_frame=? WHERE uuid=?",[frame,user["uuid"]]); row=db.execute("SELECT COALESCE(benzhen,0) AS benzhen FROM members WHERE uuid=?",[user["uuid"]]).fetchone(); db.commit(); db.close(); self._json({"ok":True,"avatar_frame":frame,"benzhen":int(row["benzhen"] if row else 0)})
         elif p.path == "/api/explore/daily":
             if not token: self._json({"error": "未登录"}, 401); return
             try:
@@ -899,11 +1130,13 @@ class Server(BaseHTTPRequestHandler):
                 self._json({"error": "令牌无效"}, 401); return
             db = get_db()
             gained = award_daily_exp(db, user["uuid"], "explore", 15)
+            benzhen_gain = 8 + random.randint(0, 10)
+            add_benzhen(db, user["uuid"], benzhen_gain, "daily_explore", "每日里界探索")
             db.execute("UPDATE members SET online=1,last_seen=? WHERE uuid=?", (int(time.time()), user["uuid"]))
-            row = db.execute("SELECT COALESCE(exp,0) AS exp FROM members WHERE uuid=?", [user["uuid"]]).fetchone()
+            row = db.execute("SELECT COALESCE(exp,0) AS exp,COALESCE(benzhen,0) AS benzhen FROM members WHERE uuid=?", [user["uuid"]]).fetchone()
             db.commit(); db.close()
             exp = int(row["exp"] if row else 0)
-            self._json({"ok": True, "exp_gained": gained, "exp": exp, "level_label": forum_level_label(exp)})
+            self._json({"ok": True, "exp_gained": gained, "benzhen_gained": benzhen_gain, "exp": exp, "benzhen": int(row["benzhen"] if row else 0), "level_label": forum_level_label(exp)})
         elif p.path == "/api/forum/revoke":
             if not token: self._json({"error": "未登录"}, 401); return
             try:
@@ -1059,8 +1292,16 @@ class Server(BaseHTTPRequestHandler):
             except Exception:
                 self._json({"error": "令牌无效"}, 401); return
             frame = str(body.get("avatar_frame", "none")).strip()
-            if frame not in ("none", "roach", "moonrise"): frame = "none"
-            db = get_db()
+            allowed_free = ("none", "nieta-academy", "nieta-3rd-anniversary")
+            if frame in ("roach", "moonrise"):
+                db = get_db(); owned = db.execute("SELECT id FROM purchases WHERE user_uuid=? AND item_type='avatar_frame' AND item_id=?", [user.get("uuid", ""), frame]).fetchone()
+                if not owned:
+                    db.close(); self._json({"error": "该头像框需要 10 本真购买"}, 400); return
+            elif frame not in allowed_free:
+                frame = "none"
+                db = get_db()
+            else:
+                db = get_db()
             db.execute("UPDATE members SET avatar_frame=? WHERE uuid=?", [frame, user.get("uuid", "")])
             db.commit(); db.close()
             self._json({"ok": True, "avatar_frame": frame})

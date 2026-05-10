@@ -28,11 +28,10 @@
       <button class="submit" :disabled="logging" @click="login">{{ logging ? '登录中...' : '踏入世间' }}</button>
       <div class="msg" :class="messageType">{{ message }}</div>
       <div class="foot">未注册手机号完成捏Ta官方验证码验证后，将进入捏Ta账号登录/注册流程。</div>
-      <nav class="site-legal-links" aria-label="站点信息"><button @click="openLegal('about')">关于我们</button><button @click="openLegal('privacy')">隐私政策</button><button @click="openLegal('contact')">联系我们</button><span class="site-verified-badge">Google 站点所有权已验证</span></nav>
     </div>
   </section>
 
-  <section v-else-if="session.me && welcomeReady" class="labyrinth-app">
+  <section v-else-if="session.me && (welcomeReady || (!welcomeLoading && !humanCaptchaOpen && !pendingLoginToken))" class="labyrinth-app">
     <div v-if="message" class="global-toast" :class="messageType">{{ message }}</div>
     <div v-if="uploadTasks.length" class="upload-task-panel">
       <div class="upload-task-head"><b>图片上传任务</b><span>{{ uploadInProgress ? '上传中，请勿关闭页面' : '上传完成' }}</span></div>
@@ -51,7 +50,7 @@
             </div>
             <div class="sub-channel-panel" v-if="selectedForumGroup !== '成员'">
               <div class="chat-brand"><span>FORUM</span><b>{{ selectedForumGroup }}</b><small>{{ currentForumGroup?.desc }}</small></div>
-              <button v-for="item in currentForumGroup?.items || []" :key="item.name" class="channel-row" :class="{ active: item.name === selectedForum, custom: item.custom }" :title="item.name" @click="selectedForum = item.name; loadForumPosts()"><span>{{ item.code }}</span><b>{{ item.short || item.name }}</b><i v-if="isAdmin && item.custom" class="branch-delete" title="删除分支" @click.stop="deleteForumBranch(item)">×</i></button>
+              <button v-for="item in currentForumGroup?.items || []" :key="item.name" class="channel-row" :class="{ active: item.name === selectedForum, custom: item.custom }" :title="item.name" @click="selectedForum = item.name; item.name === '悬赏栏目' ? loadBountyTasks() : loadForumPosts()"><span>{{ item.code }}</span><b>{{ item.short || item.name }}</b><i v-if="isAdmin && item.custom" class="branch-delete" title="删除分支" @click.stop="deleteForumBranch(item)">×</i></button>
               <button v-if="isAdmin && selectedForumGroup === '地区分支'" class="channel-row create-branch-row" @click="createForumBranch"><span>＋</span><b>开新分支</b></button>
             </div>
           </aside>
@@ -80,6 +79,10 @@
                 <div class="private-compose"><input v-model.trim="privateText" type="text" :placeholder="`私聊 ${selectedMember.name}...`" @keydown.enter="sendPrivateMessage"><button :disabled="!privateText" @click="sendPrivateMessage">发送</button></div>
               </section>
             </div>
+            <div v-else-if="selectedForum === '悬赏栏目'" class="activity-board bounty-board">
+              <section><div class="activity-head"><h2>每日悬赏 · 本真委托</h2><button class="back-note" @click="loadBountyTasks(true)">刷新查看</button></div><article v-for="task in bountyTasks" :key="task.id" class="activity-card bounty-card" @click="openBountyTask(task)"><b>{{ task.title }}</b><span>{{ task.difficulty }} · {{ task.reward_min }}-{{ task.reward_max }} 本真</span><p>委托人：{{ task.client }}</p><p>{{ task.summary }}</p></article><div v-if="!bountyTasks.length" class="item muted">正在生成今日委托...</div></section>
+              <section v-if="selectedBountyTask" class="bounty-detail"><h2>{{ selectedBountyTask.title }}</h2><p><b>委托人：</b>{{ selectedBountyTask.client }}</p><p>{{ selectedBountyTask.details }}</p><textarea v-model.trim="bountySubmitText" rows="5" placeholder="写下你完成委托的过程、行动选择与故事细节..."></textarea><button class="back-note primary" :disabled="bountySubmitting || bountySubmitText.length < 20" @click="submitBounty">{{ bountySubmitting ? '审核中...' : '提交委托故事' }}</button><div v-if="bountyReview" class="item muted">{{ bountyReview }}</div><h3>其他人的提交</h3><article v-for="s in bountySubmissions" :key="s.id" class="activity-card past"><b>{{ s.user_name }} · {{ s.reward }} 本真</b><span>评分 {{ s.score }}</span><p>{{ s.content }}</p><small>{{ s.review }}</small></article></section>
+            </div>
             <div v-else-if="selectedForum === '活动颁布'" class="activity-board">
               <section><div class="activity-head"><h2>当前活动</h2><button v-if="isAdmin" class="back-note" @click="createActivity">＋ 新增活动</button></div><article v-for="event in currentActivities" :key="event.title" class="activity-card"><b>{{ event.title }}</b><span>{{ event.status }}</span><p>{{ event.desc }}</p><button v-if="isAdmin && event.custom" class="activity-delete" @click="deleteActivity(event)">删除活动</button></article></section>
               <section><h2>往期活动</h2><article v-for="event in pastActivities" :key="event.title" class="activity-card past"><b>{{ event.title }}</b><span>{{ event.status }}</span><p>{{ event.desc }}</p></article></section>
@@ -106,9 +109,9 @@
                 <b>主论坛需要角色卡</b><small>请先到个人中心导入带有“伪人大本营”标签、且由你本人创作的捏Ta角色。</small><button class="back-note primary" @click="openProfile">去导入角色</button>
               </template>
             </div>
-            <div v-if="!['活动颁布','成员'].includes(selectedForum) && uploadedForumImages.length" class="upload-preview"><span v-for="img in uploadedForumImages" :key="img"><img :src="img" alt=""><button @click="removeUploadedImage(uploadedForumImages, img)">×</button></span></div>
-            <div v-if="!['活动颁布','成员'].includes(selectedForum) && imageLibrary.length" class="local-image-library"><b>本地图片库</b><button v-for="item in imageLibrary.slice(0, 12)" :key="item.url" @click="useLibraryImage(uploadedForumImages, item.url)"><img :src="item.url" alt=""><span>使用</span></button></div>
-            <div v-if="!['活动颁布','成员'].includes(selectedForum)" class="chat-compose">
+            <div v-if="!['活动颁布','成员','悬赏栏目'].includes(selectedForum) && uploadedForumImages.length" class="upload-preview"><span v-for="img in uploadedForumImages" :key="img"><img :src="img" alt=""><button @click="removeUploadedImage(uploadedForumImages, img)">×</button></span></div>
+            <div v-if="!['活动颁布','成员','悬赏栏目'].includes(selectedForum) && imageLibrary.length" class="local-image-library"><b>本地图片库</b><button v-for="item in imageLibrary.slice(0, 12)" :key="item.url" @click="useLibraryImage(uploadedForumImages, item.url)"><img :src="item.url" alt=""><span>使用</span></button></div>
+            <div v-if="!['活动颁布','成员','悬赏栏目'].includes(selectedForum)" class="chat-compose">
               <img :src="safeUrl(activeForumRoleCard?.avatar_img || session.me.avatar_url)" alt="">
               <input v-model.trim="forumText" type="text" :disabled="selectedForum === '主论坛' && !activeForumRoleCard" :placeholder="selectedForum === '主论坛' ? (activeForumRoleCard ? `以「${activeForumRoleCard.investigator?.name || activeForumRoleCard.source_name}」的口吻发言...` : '请先选择角色卡') : `在「${selectedForum}」发布讨论...`" @keydown.enter="postForumMessage">
               <input ref="forumUploadInput" class="hidden-file" type="file" accept="image/*" multiple @change="onForumImages">
@@ -202,19 +205,10 @@
 
       <section v-else-if="view === 'explore'" key="explore" class="forum-theater">
         <div class="page-actions"><button class="back-note primary" @click="openForum">← 返回论坛</button></div>
-        <header class="archive-marquee">
-          <div>
-            <span class="ritual-label">INNER WORLD / EXPEDITION</span>
-            <h1>里界探索</h1>
-            <p>探索任务、异常坐标与调查报告入口。完整功能稍后开放。</p>
-          </div>
-        </header>
-        <div class="explore-exp-card"><b>每日里界探索</b><p>完成一次巡游记录，今日可获得 15 点感悟。</p><button class="back-note primary" @click="claimExploreExp">进行里界探索</button></div>
-        <div class="column-grid">
-          <article class="column-card"><h3>异常坐标</h3><p>记录里界地点、路线与危险等级。</p><small>待开放</small></article>
-          <article class="column-card"><h3>调查队</h3><p>组织成员探索小队，登记参与者与携带物资。</p><small>待开放</small></article>
-          <article class="column-card"><h3>报告归档</h3><p>探索结束后提交报告，管理员审核后并入 Wiki。</p><small>待开放</small></article>
-        </div>
+        <header class="archive-marquee"><div><span class="ritual-label">INNER WORLD / EXPEDITION</span><h1>里界探索</h1><p>选择身份卡进行短程跑团探索，系统会掷骰并生成 ABSC 简报，探索汇报会自动归档到 ABSC 专栏。</p></div></header>
+        <div class="explore-exp-card"><b>本真余额：{{ currentUserProfile.benzhen || 0 }}</b><p>危险级别参考里界记录；伪物道具使用待开放。</p><select v-model="selectedExploreCardId"><option value="">选择探索身份卡</option><option v-for="card in identityCards" :key="card.id" :value="String(card.id)">{{ card.investigator?.name || card.source_name }}</option></select><button class="back-note primary" :disabled="exploreRunning || !selectedExploreCardId" @click="runInnerExplore">{{ exploreRunning ? '探索中...' : '开始里界探索' }}</button></div>
+        <section v-if="exploreResult" class="comment-stage"><h3>{{ exploreResult.area }} · {{ exploreResult.danger }}</h3><p v-for="line in exploreResult.log" :key="line">{{ line }}</p><article class="entry-note"><h2>ABSC 自动汇报</h2><p>{{ exploreResult.report }}</p><footer>获得 {{ exploreResult.reward }} 本真</footer></article></section>
+        <div class="column-grid"><article v-for="run in exploreRuns" :key="run.id" class="column-card"><h3>{{ run.card_name }} · {{ run.area }}</h3><p>{{ run.report }}</p><small>{{ run.danger }} · {{ run.reward }} 本真</small></article></div>
       </section>
 
       <section v-else-if="view === 'category'" key="category" class="category-theater">
@@ -263,7 +257,7 @@
             <div class="identity-summary-main">
               <b>{{ session.me.nick_name || session.me.name }}</b>
               <div class="profile-tags"><b v-if="roleLabel(session.role)">{{ roleLabel(session.role) }}</b><i>{{ pseudoHumanLevel.label }}</i><i v-if="memberTitle(currentUserProfile)">{{ memberTitle(currentUserProfile) }}</i></div>
-              <p class="pseudo-level-note">{{ pseudoHumanLevel.note }} 当前感悟：{{ pseudoHumanLevel.exp }}</p>
+              <p class="pseudo-level-note">{{ pseudoHumanLevel.note }} 当前感悟：{{ pseudoHumanLevel.exp }} · 本真：{{ currentUserProfile.benzhen || 0 }}</p>
               <button v-if="!signatureEditing" class="summary-signature" @click="signatureEditing = true">{{ signatureText || '点击留下签名。' }}</button>
               <section v-else class="inline-signature-editor">
                 <label>个人签名</label>
@@ -440,8 +434,6 @@
       </section>
     </div>
 
-    <nav class="site-legal-links app-legal-links" aria-label="站点信息"><button @click="openLegal('about')">关于我们</button><button @click="openLegal('privacy')">隐私政策</button><button @click="openLegal('contact')">联系我们</button><span class="site-verified-badge">Google 站点所有权已验证</span></nav>
-
     <footer class="bottom-dock">
       <button :class="{ active: view === 'forum' }" @click="openForum">论坛</button>
       <button :class="{ active: view === 'archive' || view === 'category' || view === 'entry' }" @click="openArchive">Wiki</button>
@@ -449,16 +441,6 @@
       <button :class="{ active: view === 'profile' }" @click="openProfile">个人中心</button>
     </footer>
   </section>
-
-  <div v-if="legalDialog.open" class="form-dialog-mask" @click.self="legalDialog.open = false">
-    <section class="form-dialog-card legal-dialog-card">
-      <header><span class="ritual-label">SITE INFORMATION</span><h2>{{ legalDialog.title }}</h2><p>{{ legalDialog.desc }}</p></header>
-      <div class="legal-dialog-body">
-        <p v-for="line in legalDialog.lines" :key="line">{{ line }}</p>
-      </div>
-      <footer><button class="back-note primary" @click="legalDialog.open = false">我知道了</button></footer>
-    </section>
-  </div>
 
   <div v-if="humanCaptchaOpen" class="captcha-mask">
     <section class="pseudo-captcha-card labyrinth-window">
@@ -529,6 +511,16 @@ const forumText = ref('')
 const forumPosts = ref([])
 const customForumBranches = ref([])
 const customActivities = ref([])
+const bountyTasks = ref([])
+const selectedBountyTask = ref(null)
+const bountySubmissions = ref([])
+const bountySubmitText = ref('')
+const bountySubmitting = ref(false)
+const bountyReview = ref('')
+const selectedExploreCardId = ref('')
+const exploreRunning = ref(false)
+const exploreResult = ref(null)
+const exploreRuns = ref([])
 const forumLoading = ref(false)
 const forumPosting = ref(false)
 const forumSeq = ref(0)
@@ -588,10 +580,9 @@ const captchaPotatoUrl = 'https://oss.talesofai.cn/picture/db88fc7a-71fc-4b91-99
 const pseudoHumanLevels = ['模仿外表', '学习行为', '理解情感', '体验矛盾', '建立羁绊', '精通人性']
 const savedFrame = localStorage.getItem('NIETA_AVATAR_FRAME')
 const avatarFrameIds = ['none', 'roach', 'moonrise', 'nieta-academy', 'nieta-3rd-anniversary']
-const avatarFrame = ref(avatarFrameIds.includes(savedFrame) ? savedFrame : 'roach')
+const avatarFrame = ref(avatarFrameIds.includes(savedFrame) ? savedFrame : 'none')
 const session = reactive({ me: null, role: 'member', token: '' })
 const formDialog = reactive({ open: false, title: '', desc: '', fields: [], values: {}, confirmText: '确认', cancelText: '取消', resolve: null })
-const legalDialog = reactive({ open: false, title: '', desc: '', lines: [] })
 const avatarFrames = [
   { id: 'none', name: '无头像框', url: '', type: 'none' },
   { id: 'nieta-academy', name: '捏Ta学院头像框', url: 'https://oss.talesofai.cn/fe_assets/mng/57/3fbc172e0e97799aded57bf6c1e96315.png', type: 'frame', source: 'nieta', badge_uuid: '5a7f2534-7a13-4fdb-9eb2-5ea4784a0a66' },
@@ -723,7 +714,7 @@ const filteredMembers = computed(() => {
   const q = memberQuery.value.toLowerCase()
   return sortedMembers.value.filter(m => !q || `${m.name} ${memberTitle(m)}`.toLowerCase().includes(q))
 })
-const currentUserProfile = computed(() => members.value.find(m => m.uuid === session.me?.uuid) || { role: session.role, title: '', signature: signatureText.value, exp: 0, level_label: '模仿外表' })
+const currentUserProfile = computed(() => members.value.find(m => m.uuid === session.me?.uuid) || { role: session.role, title: '', signature: signatureText.value, exp: 0, benzhen: 0, level_label: '模仿外表' })
 const pseudoHumanLevel = computed(() => levelInfo(currentUserProfile.value?.exp || 0, currentUserProfile.value?.level_label))
 const currentAvatarFrame = computed(() => avatarFrames.find(f => f.id === avatarFrame.value && f.url) || null)
 const activeForumRoleCard = computed(() => identityCards.value.find(c => String(c.id) === String(selectedRoleCardId.value)) || null)
@@ -744,14 +735,6 @@ function levelInfo(exp = 0, label = '') {
 }
 function memberLevelLabel(member) { return member?.level_label || levelInfo(member?.exp || 0).label }
 
-function openLegal(type) {
-  const data = {
-    about: { title: '关于我们', desc: '伪人大本营站点说明', lines: ['伪人大本营是面向成员的社区前端页面，提供捏Ta账号登录、论坛交流、Wiki 浏览、身份卡展示与里界探索等功能。', '本站不提供软件下载，不诱导转账，不收集银行卡或支付信息。', '动态接口由当前 3000 后端提供，GitHub Pages 仅托管静态前端。', '本站已完成 Google Search Console 站点所有权验证，用于站点归属确认、搜索收录与安全问题通知。'] },
-    privacy: { title: '隐私政策', desc: '数据使用与保护说明', lines: ['手机号仅用于捏Ta官方验证码登录与身份验证。', '验证码验证完成后即时失效，不会在当前网站服务器留存。', '登录 token 仅保存在用户浏览器本地；后端只在每次请求中临时验证身份，不会持久化保存 token、手机号、验证码、IP 或设备指纹。', '用户主动提交的论坛发言、Wiki 投稿、签名、身份卡等站内内容会保存在后端，用于站点功能展示。', 'Google 站点所有权验证文件仅用于证明站点归属，不涉及用户个人信息。'] },
-    contact: { title: '联系我们', desc: '站点联系信息', lines: ['联系 QQ：1062624601', '如遇到账号登录、误拦截、内容删除或安全问题，可通过该联系方式反馈。'] }
-  }[type]
-  Object.assign(legalDialog, { open: true, ...data })
-}
 function openFormDialog(options) {
   formDialog.title = options.title || '操作'
   formDialog.desc = options.desc || ''
@@ -1031,10 +1014,10 @@ async function updateIdentityCardHp(delta) {
   await openIdentityCard(detail.summary.id)
   await loadIdentityCards(true)
 }
-function selectForumGroup(group) { selectedForumGroup.value = group.name; selectedForum.value = group.items?.[0]?.name || selectedForum.value; loadForumPosts() }
+function selectForumGroup(group) { selectedForumGroup.value = group.name; selectedForum.value = group.items?.[0]?.name || selectedForum.value; if (selectedForum.value === '悬赏栏目') loadBountyTasks(); else loadForumPosts() }
 async function revokeThread(id) { try { await api('/api/forum/revoke', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ id }) }); await loadForumPosts(true); showMsg('已撤销发言', 'muted') } catch (e) { showMsg(`撤销失败：${e.message}`) } }
 function selectAvatarFrame(id) { avatarFrame.value = id; showMsg('已选择头像框，点击确定后保存', 'muted') }
-async function saveAvatarFrame() { const id = avatarFrame.value; localStorage.setItem('NIETA_AVATAR_FRAME', id); try { await api('/api/members/avatar-frame', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ avatar_frame: id }) }); members.value = members.value.map(m => m.uuid === session.me?.uuid ? { ...m, avatar_frame: id } : m); if (selectedMember.value?.uuid === session.me?.uuid) selectedMember.value = { ...selectedMember.value, avatar_frame: id }; if (selectedMemberModal.value?.uuid === session.me?.uuid) selectedMemberModal.value = { ...selectedMemberModal.value, avatar_frame: id }; await loadMembers(true); await loadForumPosts(true) } catch (e) { showMsg(`头像框保存失败：${e.message}`); return } showMsg(id === 'none' ? '已取消头像框' : '头像框已保存', 'ok') }
+async function saveAvatarFrame() { const id = avatarFrame.value; localStorage.setItem('NIETA_AVATAR_FRAME', id); try { if (['roach','moonrise'].includes(id)) await api('/api/purchase/avatar-frame', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ avatar_frame: id }) }); else await api('/api/members/avatar-frame', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ avatar_frame: id }) }); members.value = members.value.map(m => m.uuid === session.me?.uuid ? { ...m, avatar_frame: id } : m); if (selectedMember.value?.uuid === session.me?.uuid) selectedMember.value = { ...selectedMember.value, avatar_frame: id }; if (selectedMemberModal.value?.uuid === session.me?.uuid) selectedMemberModal.value = { ...selectedMemberModal.value, avatar_frame: id }; await loadMembers(true); await loadForumPosts(true) } catch (e) { showMsg(`头像框保存失败：${e.message}`); return } showMsg(['roach','moonrise'].includes(id) ? '头像框已使用（首次会扣除 10 本真）' : (id === 'none' ? '已取消头像框' : '头像框已保存'), 'ok') }
 function openForumUser(thread) { const m = members.value.find(x => x.uuid === thread.user_uuid) || { uuid: thread.user_uuid, name: thread.user_name, avatar: thread.user_avatar, avatar_frame: thread.avatar_frame || 'none', online: false, last_seen: thread.created_at }; openMemberModal(m) }
 function safeUrl(url) { const s = String(url || '').trim(); return /^(https?:)?\/\//i.test(s) ? s : '' }
 async function readJson(res) { const text = await res.text(); try { return text ? JSON.parse(text) : null } catch { return { error: text.slice(0, 500) } } }
@@ -1227,6 +1210,36 @@ async function handleImageFiles(files, target) {
 function onForumImages(e) { handleImageFiles(e.target.files, uploadedForumImages); e.target.value = '' }
 function onWikiImages(e) { handleImageFiles(e.target.files, uploadedWikiImages); e.target.value = '' }
 function removeUploadedImage(target, url) { target.value = target.value.filter(x => x !== url) }
+async function loadBountyTasks(force = false) {
+  if (!force && bountyTasks.value.length) return
+  bountyTasks.value = await api('/api/bounty/tasks').catch(() => [])
+  if (!selectedBountyTask.value && bountyTasks.value.length) openBountyTask(bountyTasks.value[0])
+}
+async function openBountyTask(task) {
+  selectedBountyTask.value = task; bountyReview.value = ''; bountySubmitText.value = ''
+  bountySubmissions.value = await api(`/api/bounty/submissions?task_id=${encodeURIComponent(task.id)}`).catch(() => [])
+}
+async function submitBounty() {
+  if (!selectedBountyTask.value || !bountySubmitText.value) return
+  bountySubmitting.value = true
+  try {
+    const res = await api('/api/bounty/submit', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ task_id: selectedBountyTask.value.id, content: bountySubmitText.value }), timeout: 60000 })
+    bountyReview.value = `获得 ${res.reward} 本真 · 评分 ${res.score}：${res.review}`
+    bountySubmitText.value = ''
+    await Promise.all([openBountyTask(selectedBountyTask.value), loadMembers(true)])
+  } catch (e) { showMsg(`提交失败：${e.message}`) } finally { bountySubmitting.value = false }
+}
+async function loadExploreRuns() { exploreRuns.value = await api('/api/explore/runs').catch(() => []) }
+async function runInnerExplore() {
+  if (!selectedExploreCardId.value) return showMsg('请先选择身份卡')
+  exploreRunning.value = true
+  try {
+    const res = await api('/api/explore/run', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ card_id: Number(selectedExploreCardId.value) }), timeout: 70000 })
+    exploreResult.value = res
+    showMsg(`探索完成，获得 ${res.reward} 本真`, 'ok')
+    await Promise.all([loadExploreRuns(), loadMembers(true), loadForumPosts(true, true)])
+  } catch (e) { showMsg(`探索失败：${e.message}`) } finally { exploreRunning.value = false }
+}
 async function loadForumPosts(force = false, silent = false) {
   const channel = selectedForum.value
   if (!force && forumFresh(channel) && forumPosts.value.length) return
@@ -1367,7 +1380,7 @@ function openForum() { navigate('forum'); globalQuery.value = ''; serverResults.
 function openArchive() { navigate('archive'); currentCat.value = ''; catQuery.value = ''; selectedWikiGroup.value = ''; selectedWikiSubsection.value = ''; selectedWikiCategory.value = ''; selectedArtifactCategory.value = ''; wikiSubmitOpen.value = false; loadMembers(); loadWikiArchive(); loadForumMeta() }
 function enterWikiGroup(group) { selectedWikiGroup.value = group; selectedWikiSubsection.value = ''; selectedWikiCategory.value = ''; selectedArtifactCategory.value = ''; wikiSubmitOpen.value = false; window.scrollTo(0, 0) }
 function leaveWikiLevel() { if (selectedWikiGroup.value === '世界信息') { if (selectedWikiCategory.value) { selectedWikiCategory.value = ''; wikiSubmitOpen.value = false; return } if (selectedWikiSubsection.value) { selectedWikiSubsection.value = ''; return } selectedWikiGroup.value = ''; return } if (selectedWikiGroup.value === '伪物档案') { if (selectedArtifactCategory.value) { selectedArtifactCategory.value = ''; wikiSubmitOpen.value = false; return } selectedWikiGroup.value = '' } }
-function openExplore() { navigate('explore') }
+function openExplore() { navigate('explore'); loadIdentityCards(); loadExploreRuns() }
 async function claimExploreExp() {
   if (!session.token) { showMsg('请先登录后再探索'); return }
   try {
@@ -1423,18 +1436,21 @@ onMounted(async () => {
   const saved = localStorage.getItem(TOKEN_KEY)
   if (saved) {
     logging.value = true
-    welcomeReady.value = false
-    welcomeText.value = '■■■■■■■■■■■■'
-    welcomeLoading.value = true
+    welcomeReady.value = true
+    welcomeLoading.value = false
     try {
       await useToken(saved, false)
-      const finalText = startWelcomeDecode()
-      setTimeout(() => { welcomeLoading.value = false; showMsg(finalText, 'ok') }, 1700)
+      showMsg('已恢复登录状态', 'ok')
     } catch {
       welcomeLoading.value = false
-      welcomeReady.value = false
-      localStorage.removeItem(TOKEN_KEY)
-      showMsg('登录状态已过期，请重新登录')
+      if (!session.me) {
+        welcomeReady.value = false
+        localStorage.removeItem(TOKEN_KEY)
+        showMsg('登录状态已过期，请重新登录')
+      } else {
+        welcomeReady.value = true
+        showMsg('部分数据同步失败，已先进入页面', 'muted')
+      }
     } finally {
       logging.value = false
     }
