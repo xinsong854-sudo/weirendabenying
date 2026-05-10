@@ -1,29 +1,71 @@
 ---
 name: nieta-login
-description: 捏Ta 手机号验证码登录获取 token，并用 token 调用图库 API 获取作品图片直链。
+description: 捏Ta 手机号验证码登录获取 token，并用 token 调用图库 API 获取作品图片直链。前端通过 page_phone_login.js 库完成登录，后端 3000 端口提供 session 管理。
 ---
 
 # 捏Ta 登录与图库
 
 捏Ta（`talesofai.cn` / `nieta.art`）用户图库 API。通过手机号验证码登录获取 token，调用图库接口获取作品列表及图片直链。
 
-## 登录获取 Token
+## 前端登录（新版：page_phone_login.js）
 
-手机号 + 4位验证码登录，详见 `index.html` / `/workspace/pages/server.py` 中内置页面。
+前端使用 `page_phone_login.js` 库处理登录 UI 和 API 调用：
+
+```html
+<script src="https://claw-annuonie-pages.talesofai.com/phone-login/page-phone-login.js"></script>
+```
+
+库会自动创建全屏登录页面（白色背景 + 手机号/验证码输入框 + 用户协议 + 登录按钮），内部直接调用 `https://api.talesofai.cn` 的登录 API。
+
+### 前端 → 后端连接流程
+
+```
+1. page_phone_login() 完成登录 → 返回 token
+2. LoginView.vue 用 token 调 fetchNetaProfile → 获取用户信息
+3. POST /api/session/create → 后端 3000 端口创建 session
+4. 后端返回 { session, me, role, title, signature }
+5. 存 localStorage → emit('logged-in') → App.vue 切换到主界面
+```
+
+### 后端部署
+
+后端在 `pages/server.py`，端口 3000：
+
+```bash
+cd /workspace/pages && python3 server.py
+```
+
+后端同时提供：
+- 静态文件服务（`dist/` 目录）
+- API 路由（`/api/session/create`, `/api/members`, `/api/forum/posts` 等）
+- 捏Ta API 代理（`/api/proxy/request-code`, `/api/proxy/verify-code`）
+
+### 开发环境代理
+
+Vite 开发服务器需要代理 `/api` 到 3000 端口：
+
+```js
+// vite.config.js
+server: {
+  proxy: {
+    '/api': {
+      target: 'http://localhost:3000',
+      changeOrigin: true,
+      secure: false,
+    },
+  },
+},
+```
+
+### 登录获取 Token（旧版代理方式，已弃用）
+
+~~手机号 + 4位验证码登录，详见 `index.html` / `/workspace/pages/server.py` 中内置页面。~~
 
 | 前端调用 | 3000 后端代理到 | 说明 |
 |------|------|------|
-| `POST /api/proxy/request-code` | `POST /v1/user/request-verification-code` | body: `{ phone_num, captcha_validate }` |
+| `POST /api/proxy/request-code` | `POST /v1/user/request-verification-code` | body: `{ phone_num }` |
 | `POST /api/proxy/verify-code` | `POST /v1/user/verify-with-phone-num` | body: `{ phone_num, code }` |
 | `GET /api/health` | 本地健康检查 | 返回 `{ ok: true, service, port }` |
-
-说明：浏览器端建议走 3000 后端代理，避免 CORS/Origin 限制；发送验证码前需要极验 `captcha_validate`。后端代理需带 `Origin: https://app.nieta.art`、`Referer: https://app.nieta.art/`、`Content-Type: application/json`，并把非 JSON 上游错误包装为 JSON 返回，方便前端展示。
-
-登录成功返回 `token`，响应示例：
-
-```json
-{ "token": "eyJ...", "refresh_token": "...", "expires_in": ..., "refresh_expires_in": ... }
-```
 
 ## 图库 API
 
@@ -101,6 +143,7 @@ curl -s -H "x-token: <TOKEN>" \
 ```
 
 返回：
+
 ```json
 {
   "upload_url": "http://talesofai.oss-cn-shanghai.aliyuncs.com/upload/<user_uuid>/<file_uuid>.png?...",
