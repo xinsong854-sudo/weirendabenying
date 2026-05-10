@@ -587,7 +587,7 @@ def fetch_neta_character_profile(user_token, link):
             pass
     uuid = extract_character_uuid(raw)
     keyword = extract_character_keyword(raw)
-    headers = {"x-token": user_token, "Origin": "https://app.nieta.art", "Referer": "https://app.nieta.art/", "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124 Safari/537.36", "Accept": "application/json"}
+    headers = {"Authorization": f"Bearer {user_token}", "x-token": user_token, "Origin": "https://app.nieta.art", "Referer": "https://app.nieta.art/", "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124 Safari/537.36", "Accept": "application/json"}
     if uuid and re.fullmatch(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}", uuid):
         r = requests.get(f"{API}/v2/travel/parent/{uuid}/profile", headers=headers, timeout=15)
         if r.ok:
