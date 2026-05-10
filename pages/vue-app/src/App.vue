@@ -2,7 +2,7 @@
   <section v-if="!session.me" class="login-scene login-1999">
     <div class="login-ornament left">1999</div>
     <div class="login-ornament right">FILE</div>
-    <div class="login-disclaimer"><span>隐私说明：手机号与验证码仅用于捏Ta官方登录；本站不保存手机号、验证码、Token 或 IP。</span><span aria-hidden="true">隐私说明：手机号与验证码仅用于捏Ta官方登录；本站不保存手机号、验证码、Token 或 IP。</span></div>
+    <div class="login-disclaimer"><span>隐私说明：手机号用于身份验证、安全防护与关联捏Ta已有资产；不会用于营销或分享给第三方，验证码验证完成后即时失效。</span><span aria-hidden="true">隐私说明：手机号用于身份验证、安全防护与关联捏Ta已有资产；不会用于营销或分享给第三方，验证码验证完成后即时失效。</span></div>
     <div class="login-stage-copy">
       <span>REVERSE ARCHIVE / 1999</span>
       <h1>伪人大本营</h1>
@@ -15,8 +15,12 @@
       <h1>捏Ta账号登录</h1>
       <p class="tagline">使用捏Ta官方验证码登录，仅用于确认成员身份</p>
       <details class="login-why">
-        <summary>为什么需要登录？</summary>
-        <p>本站使用捏Ta账号体系识别成员身份。手机号与验证码只会用于请求捏Ta官方登录接口；本站不保存手机号、验证码、Token 或 IP。</p>
+        <summary>我们为何需要你的手机号？</summary>
+        <ul>
+          <li><b>身份验证：</b>仅用于验证你是“捏Ta”平台的用户，以关联你的已有资产。</li>
+          <li><b>安全防护：</b>防止恶意注册与机器人攻击。</li>
+          <li><b>数据保护：</b>你的手机号仅作为登录凭证，我们不会用于营销或分享给第三方。验证码在验证完成后即时失效，不会在当前网站服务器留存。</li>
+        </ul>
       </details>
       <div class="field"><span class="prefix">+86</span><input v-model.trim="phone" type="tel" inputmode="numeric" maxlength="11" placeholder="输入捏Ta绑定手机号" autocomplete="tel"></div>
       <div class="field"><input v-model.trim="code" type="text" inputmode="numeric" maxlength="4" placeholder="验证码" autocomplete="one-time-code"><button class="code-btn" :disabled="sending || timer > 0" @click="sendCode">{{ timer > 0 ? `${timer}s` : '获取验证码' }}</button></div>
