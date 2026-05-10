@@ -168,7 +168,7 @@
           <section v-if="!selectedWikiGroup" class="wiki-drill-panel wiki-root-panel">
             <header class="drill-head"><div><span class="ritual-label">SELECT ARCHIVE VOLUME</span><h2>选择档案卷宗</h2><p>Wiki 首页只保留两个主入口。进入后会切换到下一层页面，不再显示另一个主栏目。</p></div></header>
             <div class="drill-grid wiki-root-grid">
-              <button v-for="group in wikiGroups" :key="group.name" @click="enterWikiGroup(group.name)"><b>{{ group.short }}</b><small>{{ group.desc }}</small><i>进入卷宗</i></button>
+              <button v-for="group in wikiGroups" :key="group.name" @click="group.name === '伪物档案' ? openArtifactCodex() : enterWikiGroup(group.name)"><b>{{ group.short }}</b><small>{{ group.desc }}</small><i>{{ group.name === '伪物档案' ? '打开独立图鉴' : '进入卷宗' }}</i></button>
             </div>
           </section>
 
@@ -238,6 +238,48 @@
                 <footer><button class="back-note" @click="openEntry(selectedArtifactEntry.uuid); selectedArtifactEntry = null">打开 Wiki 词条</button><button class="back-note primary" @click="selectedArtifactEntry = null">返回图鉴</button></footer>
               </section>
             </div>
+          </section>
+        </div>
+      </section>
+
+      <section v-else-if="view === 'artifactCodex'" key="artifactCodex" class="artifact-page-theater">
+        <div class="page-actions codex-page-actions"><button class="back-note primary" @click="openArchive">← 返回 Wiki</button><button class="back-note" @click="openForum">返回论坛</button></div>
+        <header class="artifact-page-hero">
+          <span class="ritual-label">PSEUDO-ARTIFACT CODEX / STANDALONE ARCHIVE</span>
+          <h1>伪物图鉴</h1>
+          <p>按危险等级整理里界异常物品；点击卡片查看收容档案。图片完整展示，不再裁切。</p>
+          <button class="back-note primary" @click="openArtifactEditor">提交图鉴 / 修订档案</button>
+        </header>
+        <main class="artifact-codex-body standalone-codex-body">
+          <nav class="artifact-risk-tabs" aria-label="伪物危险等级筛选">
+            <button v-for="level in artifactRiskLevels" :key="level.value" :class="['risk-tab', level.value, { active: selectedArtifactRisk === level.value }]" @click="selectedArtifactRisk = level.value"><b>{{ level.icon }}</b><span>{{ level.label }}</span><em>{{ artifactRiskCount(level.value) }}</em></button>
+          </nav>
+          <div class="artifact-warning codex-warning"><b>内部图鉴 / {{ selectedArtifactRisk === 'all' ? '全部伪物' : artifactRiskLevels.find(x => x.value === selectedArtifactRisk)?.label }}</b><span>伪物资料需管理员审核后公开；未标注等级的条目会归入“待定”。</span></div>
+          <div v-if="wikiSubmitOpen" class="wiki-submit-panel wiki-editor-panel artifact-editor-panel">
+            <div class="wiki-editor-title"><b>Wiki 编辑申请</b><p>审核通过后会直接写入伪物档案；建议在正文开头标注 🟩SAFE / 🟨CAUTION / 🟧DANGER / 🟥HAZARD。</p></div>
+            <div class="wiki-form-grid">
+              <label>编辑类型<select v-model="wikiSubmitType"><option value="新增词条">新增词条</option><option value="修订词条">修订词条</option><option value="新建分类">新建分类</option></select></label>
+              <label>大分类 / 归属<select v-model="wikiSubmitGroup"><option value="世界信息">世界信息</option><option value="伪物档案">伪物档案</option></select></label>
+              <label>分类名称<input v-model.trim="wikiSubmitCategory" list="wiki-category-list-artifact-page" placeholder="选择或输入分类名"><datalist id="wiki-category-list-artifact-page"><option v-for="name in wikiSubmissionTargets" :key="name" :value="name"></option></datalist></label>
+              <label v-if="wikiSubmitType !== '新建分类'">条目名称<input v-model.trim="wikiSubmitEntryName" placeholder="要增加或修订的条目名"></label>
+            </div>
+            <label class="wiki-content-label">正文内容<textarea v-model.trim="wikiSubmitContent" rows="6" placeholder="写条目正文、收容措施、特殊效果、发现地点等。照片可在下方一起上传。"></textarea></label>
+            <div class="wiki-photo-row"><input ref="wikiUploadInput" class="hidden-file" type="file" accept="image/*" multiple @change="onWikiImages"><button class="back-note" @click="wikiUploadInput?.click()">添加照片</button><span>{{ uploadedWikiImages.length ? `已添加 ${uploadedWikiImages.length} 张照片` : '可选：上传条目配图 / 证明图' }}</span></div>
+            <div v-if="uploadedWikiImages.length" class="upload-preview wiki-preview"><span v-for="img in uploadedWikiImages" :key="img"><img :src="img" alt=""><button @click="removeUploadedImage(uploadedWikiImages, img)">×</button></span></div>
+            <button class="back-note primary" :disabled="!canSubmitWiki" @click="submitWikiChange">提交给管理员审核</button>
+          </div>
+          <section class="artifact-codex-grid standalone-codex-grid">
+            <button v-for="entry in artifactGalleryEntries" :key="entry.uuid" class="artifact-codex-card" :class="artifactRiskOf(entry).value" @click="selectedArtifactEntry = entry">
+              <img v-if="safeUrl(entry.image)" :src="safeUrl(entry.image)" alt="" loading="lazy"><i>{{ artifactRiskOf(entry).icon }}</i><b>{{ entry.name }}</b><p>{{ artifactSummary(entry) }}</p><small>{{ artifactRiskOf(entry).label }} · {{ entry.artifact_id || 'ARCHIVE' }}</small>
+            </button>
+          </section>
+          <div v-if="!artifactGalleryEntries.length" class="wiki-empty-tip">当前等级暂无伪物记录。</div>
+        </main>
+        <div v-if="selectedArtifactEntry" class="form-dialog-mask artifact-modal-mask" @click.self="selectedArtifactEntry = null">
+          <section class="form-dialog-card artifact-modal-card standalone-artifact-modal">
+            <header><span class="ritual-label">ARTIFACT FILE</span><h2>{{ selectedArtifactEntry.name }}</h2><p><b :class="['artifact-risk-pill', artifactRiskOf(selectedArtifactEntry).value]">{{ artifactRiskOf(selectedArtifactEntry).icon }} {{ artifactRiskOf(selectedArtifactEntry).label }}</b></p></header>
+            <div class="artifact-modal-body"><img v-if="safeUrl(selectedArtifactEntry.image)" class="artifact-modal-image" :src="safeUrl(selectedArtifactEntry.image)" alt=""><div v-else class="artifact-modal-seal">{{ selectedArtifactEntry.name.slice(0, 2) }}</div><p v-for="line in artifactLines(selectedArtifactEntry)" :key="line">{{ line }}</p></div>
+            <footer><button class="back-note" @click="openEntry(selectedArtifactEntry.uuid); selectedArtifactEntry = null">打开 Wiki 词条</button><button class="back-note primary" @click="selectedArtifactEntry = null">返回图鉴</button></footer>
           </section>
         </div>
       </section>
@@ -480,7 +522,7 @@
 
     <footer class="bottom-dock">
       <button :class="{ active: view === 'forum' }" @click="openForum">论坛</button>
-      <button :class="{ active: view === 'archive' || view === 'category' || view === 'entry' }" @click="openArchive">Wiki</button>
+      <button :class="{ active: view === 'archive' || view === 'category' || view === 'entry' || view === 'artifactCodex' }" @click="openArchive">Wiki</button>
       <button :class="{ active: view === 'explore' }" @click="openExplore">里界探索</button>
       <button :class="{ active: view === 'profile' }" @click="openProfile">个人中心</button>
     </footer>
@@ -1472,6 +1514,7 @@ function confirmPendingUpload() {
 function navigate(nextView) { if (!confirmPendingUpload()) return; view.value = nextView; currentEntry.value = null; window.scrollTo({ top: 0, behavior: 'instant' }) }
 function openForum() { navigate('forum'); globalQuery.value = ''; serverResults.value = []; loadMembers(); loadForumMeta(); loadForumPosts() }
 function openArchive() { navigate('archive'); currentCat.value = ''; catQuery.value = ''; selectedWikiGroup.value = ''; selectedWikiSubsection.value = ''; selectedWikiCategory.value = ''; selectedArtifactCategory.value = ''; selectedArtifactRisk.value = 'all'; selectedArtifactEntry.value = null; wikiSubmitOpen.value = false; loadMembers(); loadWikiArchive(); loadForumMeta() }
+function openArtifactCodex() { navigate('artifactCodex'); selectedWikiGroup.value = ''; selectedArtifactCategory.value = '伪物档案'; selectedArtifactRisk.value = 'all'; selectedArtifactEntry.value = null; wikiSubmitOpen.value = false; loadWikiArchive(); window.scrollTo({ top: 0, behavior: 'instant' }) }
 function enterWikiGroup(group) { selectedWikiGroup.value = group; selectedWikiSubsection.value = ''; selectedWikiCategory.value = ''; selectedArtifactCategory.value = group === '伪物档案' ? '伪物档案' : ''; selectedArtifactRisk.value = 'all'; selectedArtifactEntry.value = null; wikiSubmitOpen.value = false; window.scrollTo(0, 0) }
 function leaveWikiLevel() { if (selectedWikiGroup.value === '世界信息') { if (selectedWikiCategory.value) { selectedWikiCategory.value = ''; wikiSubmitOpen.value = false; return } if (selectedWikiSubsection.value) { selectedWikiSubsection.value = ''; return } selectedWikiGroup.value = ''; return } if (selectedWikiGroup.value === '伪物档案') { if (selectedArtifactCategory.value) { selectedArtifactCategory.value = ''; wikiSubmitOpen.value = false; return } selectedWikiGroup.value = '' } }
 function openExplore() { navigate('explore'); loadIdentityCards(); loadExploreRuns() }
