@@ -482,12 +482,28 @@ sync_entries_to_db()
 def get_user_by_token(token):
     if not token:
         raise ValueError("未登录")
-    r = requests.get(f"{API}/v1/user/", headers={"x-token": token}, timeout=10)
-    r.raise_for_status()
-    user = r.json()
-    if not user.get("uuid"):
-        raise ValueError("令牌无效")
-    return user
+    try:
+        r = requests.get(f"{API}/v1/user/", headers={"x-token": token}, timeout=15)
+        r.raise_for_status()
+        user = r.json()
+        if not user.get("uuid"):
+            raise ValueError("令牌无效")
+        return user
+    except Exception as e:
+        # Neta 用户接口偶发超时时，不把底层 HTTPSConnectionPool 长错误直接抛给前端。
+        # 若 token 是 JWT 且本地已见过该用户，则用本地成员资料兜底，避免身份卡导入被 /v1/user 临时超时卡死。
+        subject = token_subject(token)
+        uuid = subject[5:] if subject.startswith("user:") else ""
+        if uuid:
+            db = get_db()
+            row = db.execute("SELECT uuid,name,avatar,role FROM members WHERE uuid=?", [uuid]).fetchone()
+            db.close()
+            if row:
+                return {"uuid": row["uuid"], "nick_name": row["name"], "name": row["name"], "avatar_url": row["avatar"], "role": row["role"]}
+        msg = str(e)
+        if "ConnectTimeout" in msg or "Read timed out" in msg or "Max retries exceeded" in msg:
+            raise ValueError("捏Ta用户接口连接超时，请稍后重试")
+        raise
 
 def card_summary(row):
     try: card = json.loads(row["card_json"] or "{}")
@@ -521,16 +537,38 @@ def extract_character_keyword(link):
     s = re.sub(r"我在捏Ta给你安利|这个捏捏感爆棚的捏宝|分享链接|角色链接|UUID|～|~", " ", s)
     return clean_text(s, 80)
 
+def extract_nieta_short_url(text):
+    m = re.search(r"https?://t\.nieta\.art/[a-zA-Z0-9]+", str(text or ""))
+    return m.group(0) if m else ""
+
+def resolve_nieta_short_url(short_url):
+    short = extract_nieta_short_url(short_url)
+    if not short:
+        raise ValueError("未找到捏Ta短链")
+    rr = requests.get(f"{API}/v1/util/original-url", params={"short_url": short}, timeout=10)
+    try:
+        data = rr.json()
+    except Exception:
+        data = rr.text
+    if not rr.ok:
+        if isinstance(data, dict):
+            msg = data.get("detail") or data.get("error") or data.get("message") or rr.reason
+        else:
+            msg = str(data or rr.reason)
+        raise ValueError(clean_text(msg or "短链解析失败", 180))
+    if isinstance(data, str):
+        return data
+    for key in ("url", "original_url", "long_url", "data"):
+        if isinstance(data, dict) and isinstance(data.get(key), str):
+            return data.get(key)
+    raise ValueError("短链已解析，但返回格式无法识别")
+
 def fetch_neta_character_profile(user_token, link):
     raw = str(link or "")
     if "t.nieta.art" in raw:
         try:
-            sm = re.search(r"https://t\.nieta\.art/[a-zA-Z0-9]+", raw)
-            if sm:
-                rr = requests.get(f"{API}/v1/util/original-url", params={"short_url": sm.group(0)}, timeout=10)
-                rr.raise_for_status()
-                long_url = rr.json()
-                if isinstance(long_url, str): raw += " " + long_url
+            long_url = resolve_nieta_short_url(raw)
+            raw += " " + long_url
         except Exception:
             pass
     uuid = extract_character_uuid(raw)
@@ -1319,6 +1357,13 @@ class Server(BaseHTTPRequestHandler):
             db.execute("UPDATE members SET name=?, avatar=?, signature=?, online=1, last_seen=? WHERE uuid=?", [name, avatar, signature, int(time.time()), uuid])
             db.commit(); db.close()
             self._json({"ok": True, "signature": signature})
+        elif p.path == "/api/neta/original-url":
+            try:
+                short_url = body.get("short_url") or body.get("url") or body.get("link") or ""
+                long_url = resolve_nieta_short_url(short_url)
+                self._json({"ok": True, "url": long_url, "uuid": extract_character_uuid(long_url)})
+            except Exception as e:
+                self._json({"ok": False, "error": str(e)}, 400)
         elif p.path == "/api/neta/character-profile":
             user_token = token or str(body.get("token", ""))
             link = body.get("link") or body.get("uuid") or body.get("name") or ""
