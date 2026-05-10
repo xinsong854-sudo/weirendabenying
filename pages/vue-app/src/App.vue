@@ -65,13 +65,13 @@
                 <div class="friend-list">
                   <button v-for="m in filteredMembers" :key="m.uuid" class="friend-row" :class="{ online: m.online, active: selectedMember?.uuid === m.uuid }" @click="selectMember(m)">
                     <span class="friend-avatar" @click.stop.prevent="openMemberModal(m)"><span class="framed-avatar" :class="avatarFrameClassFor(m)"><img class="avatar-base" v-if="safeUrl(m.avatar)" :src="safeUrl(m.avatar)" alt="" loading="lazy" referrerpolicy="no-referrer"><b v-else>{{ initials(m.name) }}</b><img v-if="avatarFrameFor(m)?.type === 'frame'" class="avatar-frame" :src="avatarFrameFor(m).url" alt=""><span v-if="avatarFrameFor(m)?.type === 'roach'" class="roach-orbit" aria-hidden="true"><img :src="avatarFrameFor(m).url" alt=""></span></span></span>
-                    <span><b>{{ m.name }} <i v-if="['chief','deputy','admin'].includes(m.role)" class="verify-v">V</i></b><small>{{ memberLevelLabel(m) }} · {{ m.exp || 0 }} EXP</small><small v-if="memberTitle(m)">{{ memberTitle(m) }}</small></span>
+                    <span><b>{{ m.name }} <i v-if="['chief','deputy','admin'].includes(m.role)" class="verify-v">V</i></b><small>{{ memberLevelLabel(m) }} · 感悟 {{ m.exp || 0 }}</small><small v-if="memberTitle(m)">{{ memberTitle(m) }}</small></span>
                     <em>{{ m.online ? '在线' : timeAgo(m.last_seen) }}</em>
                   </button>
                 </div>
               </aside>
               <section v-if="selectedMember" class="friend-detail-pane">
-                  <header class="friend-detail-head"><button class="detail-avatar" @click.stop.prevent="openMemberModal(selectedMember)"><span class="framed-avatar" :class="avatarFrameClassFor(selectedMember)"><img class="avatar-base" v-if="safeUrl(selectedMember.avatar)" :src="safeUrl(selectedMember.avatar)" alt="" referrerpolicy="no-referrer"><b v-else>{{ initials(selectedMember.name) }}</b><img v-if="avatarFrameFor(selectedMember)?.type === 'frame'" class="avatar-frame" :src="avatarFrameFor(selectedMember).url" alt=""><span v-if="avatarFrameFor(selectedMember)?.type === 'roach'" class="roach-orbit" aria-hidden="true"><img :src="avatarFrameFor(selectedMember).url" alt=""></span></span></button><div><h2>{{ selectedMember.name }} <span v-if="profileBadge(selectedMember.role)" class="profile-role-badge">{{ profileBadge(selectedMember.role) }}</span><span v-if="['chief','deputy','admin'].includes(selectedMember.role)" class="verify-v">V</span></h2><p v-if="memberTitle(selectedMember)" class="pop-title-badge">{{ memberTitle(selectedMember) }}</p><small>{{ selectedMember.online ? '在线' : timeAgo(selectedMember.last_seen) }} · {{ memberLevelLabel(selectedMember) }} · {{ selectedMember.exp || 0 }} EXP</small><blockquote v-if="selectedMember.signature" class="pop-signature">{{ selectedMember.signature }}</blockquote></div><div class="detail-actions"><button class="title-auth-btn" @click="openPrivatePane(selectedMember)">私聊</button><button v-if="isAdmin" class="title-auth-btn" @click="authorizeTitle(selectedMember)">授权称号</button></div></header>
+                  <header class="friend-detail-head"><button class="detail-avatar" @click.stop.prevent="openMemberModal(selectedMember)"><span class="framed-avatar" :class="avatarFrameClassFor(selectedMember)"><img class="avatar-base" v-if="safeUrl(selectedMember.avatar)" :src="safeUrl(selectedMember.avatar)" alt="" referrerpolicy="no-referrer"><b v-else>{{ initials(selectedMember.name) }}</b><img v-if="avatarFrameFor(selectedMember)?.type === 'frame'" class="avatar-frame" :src="avatarFrameFor(selectedMember).url" alt=""><span v-if="avatarFrameFor(selectedMember)?.type === 'roach'" class="roach-orbit" aria-hidden="true"><img :src="avatarFrameFor(selectedMember).url" alt=""></span></span></button><div><h2>{{ selectedMember.name }} <span v-if="profileBadge(selectedMember.role)" class="profile-role-badge">{{ profileBadge(selectedMember.role) }}</span><span v-if="['chief','deputy','admin'].includes(selectedMember.role)" class="verify-v">V</span></h2><p v-if="memberTitle(selectedMember)" class="pop-title-badge">{{ memberTitle(selectedMember) }}</p><small>{{ selectedMember.online ? '在线' : timeAgo(selectedMember.last_seen) }} · {{ memberLevelLabel(selectedMember) }} · 感悟 {{ selectedMember.exp || 0 }}</small><blockquote v-if="selectedMember.signature" class="pop-signature">{{ selectedMember.signature }}</blockquote></div><div class="detail-actions"><button class="title-auth-btn" @click="openPrivatePane(selectedMember)">私聊</button><button v-if="isAdmin" class="title-auth-btn" @click="authorizeTitle(selectedMember)">授权称号</button></div></header>
               </section>
               <section v-if="selectedMember && selectedMemberTool === '私聊'" class="private-side-pane private-drawer">
                 <header><b>私聊 · {{ selectedMember.name }}</b><button @click="selectedMemberTool = '资料'">收起</button></header>
@@ -198,7 +198,7 @@
             <p>探索任务、异常坐标与调查报告入口。完整功能稍后开放。</p>
           </div>
         </header>
-        <div class="explore-exp-card"><b>每日里界探索</b><p>完成一次巡游记录，今日可获得 15 EXP。</p><button class="back-note primary" @click="claimExploreExp">进行里界探索</button></div>
+        <div class="explore-exp-card"><b>每日里界探索</b><p>完成一次巡游记录，今日可获得 15 点感悟。</p><button class="back-note primary" @click="claimExploreExp">进行里界探索</button></div>
         <div class="column-grid">
           <article class="column-card"><h3>异常坐标</h3><p>记录里界地点、路线与危险等级。</p><small>待开放</small></article>
           <article class="column-card"><h3>调查队</h3><p>组织成员探索小队，登记参与者与携带物资。</p><small>待开放</small></article>
@@ -252,7 +252,7 @@
             <div class="identity-summary-main">
               <b>{{ session.me.nick_name || session.me.name }}</b>
               <div class="profile-tags"><b v-if="roleLabel(session.role)">{{ roleLabel(session.role) }}</b><i>{{ pseudoHumanLevel.label }}</i><i v-if="memberTitle(currentUserProfile)">{{ memberTitle(currentUserProfile) }}</i></div>
-              <p class="pseudo-level-note">{{ pseudoHumanLevel.note }} 当前经验：{{ pseudoHumanLevel.exp }} EXP</p>
+              <p class="pseudo-level-note">{{ pseudoHumanLevel.note }} 当前感悟：{{ pseudoHumanLevel.exp }}</p>
               <button v-if="!signatureEditing" class="summary-signature" @click="signatureEditing = true">{{ signatureText || '点击留下签名。' }}</button>
               <section v-else class="inline-signature-editor">
                 <label>个人签名</label>
@@ -415,7 +415,7 @@
         <div class="profile-pop-top"><span>USER PROFILE</span><i>{{ selectedMemberModal.online ? 'ONLINE' : 'OFFLINE' }}</i></div>
         <div class="profile-pop-avatar framed-avatar" :class="avatarFrameClassFor(selectedMemberModal)"><img v-if="safeUrl(selectedMemberModal.avatar)" class="avatar-base" :src="safeUrl(selectedMemberModal.avatar)" alt="" referrerpolicy="no-referrer"><b v-else>{{ initials(selectedMemberModal.name) }}</b><img v-if="avatarFrameFor(selectedMemberModal)?.type === 'frame'" class="avatar-frame" :src="avatarFrameFor(selectedMemberModal).url" alt=""><span v-if="avatarFrameFor(selectedMemberModal)?.type === 'roach'" class="roach-orbit" aria-hidden="true"><img :src="avatarFrameFor(selectedMemberModal).url" alt=""></span></div>
         <h2>{{ selectedMemberModal.name }} <span v-if="profileBadge(selectedMemberModal.role)" class="profile-role-badge">{{ profileBadge(selectedMemberModal.role) }}</span><span v-if="['chief','deputy','admin'].includes(selectedMemberModal.role)" class="verify-v">V</span></h2>
-        <p class="pop-title-badge">{{ memberLevelLabel(selectedMemberModal) }} · {{ selectedMemberModal.exp || 0 }} EXP</p>
+        <p class="pop-title-badge">{{ memberLevelLabel(selectedMemberModal) }} · 感悟 {{ selectedMemberModal.exp || 0 }}</p>
         <p v-if="memberTitle(selectedMemberModal)" class="pop-title-badge">{{ memberTitle(selectedMemberModal) }}</p>
         <blockquote class="pop-signature"><b>签名</b><span>{{ selectedMemberModal.signature || '这个人还没有留下签名。' }}</span></blockquote>
         <div v-if="selectedMemberCards.length" class="pop-card-list">
@@ -551,8 +551,8 @@ const captchaSelected = ref([])
 const captchaError = ref('')
 const welcomeLoading = ref(false)
 const welcomeText = ref('■■■■■■■■■■■■')
-const captchaPotatoUrl = 'https://oss.talesofai.cn/upload/b91c3751186d4f649576686168347900/2f83b558-cd25-4b81-86be-423d829363e4.jpg'
-const captchaNietaUrl = 'https://oss.talesofai.cn/picture/db88fc7a-71fc-4b91-991d-7ec97e4ea94c.webp'
+const captchaNietaUrl = 'https://oss.talesofai.cn/sts/49c915e649254f55a7ea399ad3b6efd1/2ee7bcbe-7fa3-41ba-beeb-294f1f23f3b9.jpg'
+const captchaPotatoUrl = 'https://oss.talesofai.cn/picture/db88fc7a-71fc-4b91-991d-7ec97e4ea94c.webp'
 const pseudoHumanLevels = ['模仿外表', '学习行为', '理解情感', '体验矛盾', '建立羁绊', '精通人性']
 const savedFrame = localStorage.getItem('NIETA_AVATAR_FRAME')
 const avatarFrame = ref(['none', 'roach', 'moonrise'].includes(savedFrame) ? savedFrame : 'roach')
@@ -1182,7 +1182,7 @@ async function postForumMessage() {
     const res = await api('/api/forum/posts', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ channel: selectedForum.value, content: forumText.value, images: uploadedForumImages.value }) })
     forumText.value = ''; uploadedForumImages.value = []
     await Promise.all([loadForumPosts(true), loadMembers(true)])
-    showMsg(res?.exp_gained ? `已发送，获得 ${res.exp_gained} EXP` : '已发送', 'ok')
+    showMsg(res?.exp_gained ? `已发送，获得 ${res.exp_gained} 点感悟` : '已发送', 'ok')
   } catch (e) { showMsg(`发送失败：${e.message}`) } finally { forumPosting.value = false }
 }
 
@@ -1294,7 +1294,7 @@ async function claimExploreExp() {
   try {
     const res = await api('/api/explore/daily', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: '{}' })
     await loadMembers(true)
-    showMsg(res?.exp_gained ? `里界探索完成，获得 ${res.exp_gained} EXP` : '今日已完成里界探索，明天再来。', res?.exp_gained ? 'ok' : 'muted')
+    showMsg(res?.exp_gained ? `里界探索完成，获得 ${res.exp_gained} 点感悟` : '今日已完成里界探索，明天再来。', res?.exp_gained ? 'ok' : 'muted')
   } catch (e) { showMsg(`探索失败：${e.message}`) }
 }
 function openCategory(cat) { currentCat.value = cat; catQuery.value = ''; navigate('category') }
