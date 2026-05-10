@@ -799,6 +799,13 @@ class Server(BaseHTTPRequestHandler):
             else:
                 self.send_response(503); self.send_header("Content-Type", "text/plain; charset=utf-8"); self._security_headers(); self.end_headers()
                 self.wfile.write("Frontend build missing. Run npm run build in pages/vue-app.".encode())
+        elif p.path == "/api/neta/original-url":
+            try:
+                short_url = parse_qs(p.query).get("short_url", [""])[0] or parse_qs(p.query).get("url", [""])[0] or parse_qs(p.query).get("link", [""])[0]
+                long_url = resolve_nieta_short_url(short_url)
+                self._json({"ok": True, "url": long_url, "uuid": extract_character_uuid(long_url)})
+            except Exception as e:
+                self._json({"ok": False, "error": str(e)}, 400)
         elif p.path == "/api/members":
             db = get_db()
             now = int(time.time())

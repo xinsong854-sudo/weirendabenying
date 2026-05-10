@@ -1061,7 +1061,7 @@ function resetIdentityDraft() {
 }
 function extractNietaShortUrl(text = '') { const m = String(text || '').match(/https?:\/\/t\.nieta\.art\/[a-zA-Z0-9]+/); return m ? m[0] : '' }
 function extractUuidFromText(text = '') { const s = String(text || ''); const direct = s.match(/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/); if (direct) return direct[0]; try { return new URL(s).searchParams.get('uuid') || '' } catch { return '' } }
-function extractCreatorUuidFromText(text = '') { const s = String(text || ''); const m = s.match(/[?&#](?:user_uuid|owner_uuid|creator_uuid|author_uuid)=([0-9a-fA-F-]{32,36})/) || s.match(/\/(?:user|creator|author)\/([0-9a-fA-F-]{32,36})/); return m ? m[1] : '' }
+function extractCreatorUuidFromText(text = '') { const s = String(text || ''); const m = s.match(/[?&#](?:user_uuid|owner_uuid|creator_uuid|author_uuid|from_user)=([0-9a-fA-F-]{32,36})/) || s.match(/\/(?:user|creator|author)\/([0-9a-fA-F-]{32,36})/); return m ? m[1] : '' }
 function originalUrlText(data) {
   if (typeof data === 'string') return data
   if (!data || typeof data !== 'object') return ''
@@ -1074,14 +1074,14 @@ async function resolveIdentityInput(raw) {
   const shortUrl = extractNietaShortUrl(text)
   if (!shortUrl) return text
   // 和可成功的 UUID 提取器保持同一解析链路：先只解析短链，再把 uuid 交给身份卡生成。
-  let longUrl
+    let longUrl
   try {
-    longUrl = await api(`${API}/v1/util/original-url?short_url=${encodeURIComponent(shortUrl)}`)
+    longUrl = await api('/api/neta/original-url', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ short_url: shortUrl }) })
   } catch (e) {
-    // GitHub Pages/CORS 或上游偶发限制时，走本站后端代理同一个接口。
-    const proxied = await api('/api/neta/original-url', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ short_url: shortUrl }) })
-    longUrl = proxied?.url || proxied?.original_url || proxied?.long_url || proxied?.data || proxied
+    // 后端代理不可用时，再退回直连官方解析器。
+    longUrl = await api(`${API}/v1/util/original-url?short_url=${encodeURIComponent(shortUrl)}`)
   }
+  longUrl = longUrl?.url || longUrl?.original_url || longUrl?.long_url || longUrl?.data || longUrl
   const longText = originalUrlText(longUrl)
   const uuid = extractUuidFromText(longText)
   const creatorUuid = extractCreatorUuidFromText(longText)
