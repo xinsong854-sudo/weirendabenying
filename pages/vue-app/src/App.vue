@@ -17,7 +17,7 @@
       <CardsView v-else-if="view==='cards'" :session="session" />
       <MembersView v-else-if="view==='members'" />
       <WikiView v-else-if="view==='wiki'" :session="session" />
-      <CodexView v-else-if="view==='codex'" />
+      <CodexView v-else-if="view==='codex'" :session="session" />
       <ExploreView v-else-if="view==='explore'" :session="session" />
       <InventoryView v-else-if="view==='inventory'" :session="session" />
       <ProfileView v-else :session="session" :user="me" @updated="onProfileUpdated" />
