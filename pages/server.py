@@ -624,7 +624,7 @@ def validate_character_for_user(profile, user):
     user_id = profile.get("user_id") or profile.get("creator_id")
     if creator_uuid:
         if creator_uuid != uid:
-            raise ValueError("只能导入你本人创作的角色")
+            raise ValueError("你不是Ta，你扮演不了Ta")
         return
     if user_id is not None and str(user_id) == str(user.get("id")):
         return
