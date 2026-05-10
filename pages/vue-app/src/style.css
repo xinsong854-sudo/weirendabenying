@@ -239,7 +239,6 @@ input,textarea,select{outline:none}input:focus,textarea:focus,select:focus{borde
 
 /* mobile forum full-screen rescue: keep main forum from becoming a tiny card */
 @media(max-width:900px){
-  .labyrinth-app,.stage-main{height:100svh!important;min-height:100svh!important;overflow:hidden!important}
   .chat-forum{
     position:fixed!important;
     left:0!important;right:0!important;top:0!important;
