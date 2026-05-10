@@ -13,8 +13,58 @@ SESSION_TTL = 7 * 24 * 3600
 SESSIONS = {}
 
 
+def load_env_file(path):
+    if not os.path.isfile(path):
+        return
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith('#') or '=' not in line:
+                    continue
+                k, v = line.split('=', 1)
+                k = k.strip(); v = v.strip().strip('\"').strip("'")
+                if k and k not in os.environ:
+                    os.environ[k] = v
+    except Exception:
+        pass
+
+
+load_env_file(os.path.join(BASE_DIR, '.env'))
+load_env_file(os.path.join(os.path.dirname(BASE_DIR), '.env'))
+load_env_file(os.path.join(os.path.dirname(BASE_DIR), 'dtags-backend', '.env'))
+
+LLM_URL = os.environ.get('LLM_URL') or os.environ.get('OPENAI_BASE_URL') or 'https://litellm.talesofai.cn/v1/chat/completions'
+LLM_API_KEY = os.environ.get('LLM_API_KEY') or os.environ.get('OPENAI_API_KEY') or os.environ.get('LITELLM_API_KEY') or ''
+LLM_MODEL = os.environ.get('LLM_MODEL') or 'qwen3.5-plus-no-think'
+LLM_FAST_MODEL = os.environ.get('LLM_FAST_MODEL') or LLM_MODEL
+
+
 def clean(v, limit=2000):
     return re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', '', str(v or '')).strip()[:limit]
+
+
+def llm_enabled():
+    return bool(LLM_URL and LLM_API_KEY)
+
+
+def llm_chat(messages, temperature=0.7, model=None, timeout=35):
+    if not llm_enabled():
+        return ''
+    import requests
+    headers = {'Content-Type': 'application/json', 'Authorization': f'Bearer {LLM_API_KEY}'}
+    payload = {'model': model or LLM_MODEL, 'messages': messages, 'temperature': temperature}
+    r = requests.post(LLM_URL, headers=headers, json=payload, timeout=timeout)
+    r.raise_for_status()
+    data = r.json()
+    return clean(((data.get('choices') or [{}])[0].get('message') or {}).get('content') or '', 12000)
+
+
+def parse_llm_json(text):
+    raw = str(text or '').strip()
+    raw = re.sub(r'^```(?:json)?\s*|\s*```$', '', raw, flags=re.I | re.S).strip()
+    m = re.search(r'\{.*\}', raw, re.S)
+    return json.loads(m.group(0) if m else raw)
 
 
 def db():
@@ -199,6 +249,28 @@ def make_card(profile):
     }
 
 
+def rewrite_for_role_card(text, row):
+    original = clean(text, 2000)
+    try: card = json.loads(row['card_json'] or '{}')
+    except Exception: card = {}
+    name = clean(row['source_name'] or (card.get('investigator') or {}).get('name') or '角色', 120)
+    persona = json.dumps(card.get('roleplay') or card, ensure_ascii=False)[:1800]
+    rewritten, ooc = original, ''
+    if llm_enabled():
+        try:
+            prompt = f'你是论坛角色扮演改写器。用户不是在和角色对话，而是必须成为角色发言。请把用户原文改写成角色【{name}】会说的话，保留核心意思，第一人称按角色口癖调整。若原文明显超游、提及现实系统/模型/后台/玩家信息且难以角色化，返回 OOC 警告。只返回 JSON: {{"text":"改写后","ooc_warning":"没有则空"}}\n角色资料：{persona}\n用户原文：{original}'
+            data = parse_llm_json(llm_chat([{'role':'user','content':prompt}], temperature=0.35, model=LLM_FAST_MODEL, timeout=25))
+            rewritten = clean(data.get('text') or original, 2000)
+            ooc = clean(data.get('ooc_warning') or '', 300)
+        except Exception:
+            pass
+    if name in ('营长','安诺涅') or '营长' in name:
+        rewritten = re.sub(r'(?<![我你他她它])我(?!们)', '我们', rewritten)
+    if not ooc and re.search(r'后台|模型|LLM|prompt|玩家|现实中|系统', original, re.I):
+        ooc = 'OOC 警告：该发言含明显超游信息，已尽量角色化处理。'
+    return rewritten + (f'\n\n【{ooc}】' if ooc else '')
+
+
 def json_response(handler, data, status=200):
     raw = json.dumps(data, ensure_ascii=False).encode()
     handler.send_response(status)
@@ -272,6 +344,27 @@ def codex_row(r):
 def generated_artifact(context=None):
     import random
     context = context or {}
+    if llm_enabled():
+        try:
+            prompt = '''你是《伪人大本营》的伪物档案生成器。基于世界观：里界、门、黎守、哨站、公寓、伪物侵蚀，生成一件不破坏平衡的伪物。只返回 JSON，不要解释。字段：key,name,risk,rarity,description,effect,forum_usage,origin。risk 只能是 safe/caution/danger/hazard，rarity 只能是 common/uncommon/rare/legendary。效果必须有代价，不能无限复活、无限复制、直接杀死玩家。'''
+            content = llm_chat([{'role':'system','content':prompt},{'role':'user','content':json.dumps(context,ensure_ascii=False)}], temperature=0.85, model=LLM_MODEL, timeout=35)
+            data = parse_llm_json(content)
+            item = {
+                'key': clean(data.get('key') or ('llm-' + secrets.token_hex(6)), 80),
+                'name': clean(data.get('name') or '未命名伪物', 80),
+                'risk': clean(data.get('risk') or 'unknown', 20),
+                'rarity': clean(data.get('rarity') or 'common', 20),
+                'description': clean(data.get('description'), 1800),
+                'effect': clean(data.get('effect'), 1200),
+                'forum_usage': clean(data.get('forum_usage'), 800),
+                'origin': clean(data.get('origin'), 200),
+            }
+            if item['risk'] not in ('safe','caution','danger','hazard'): item['risk'] = 'unknown'
+            if item['rarity'] not in ('common','uncommon','rare','legendary'): item['rarity'] = 'common'
+            if item['name'] and item['description'] and item['effect']:
+                return item
+        except Exception:
+            pass
     areas = ['槐安公寓夹层','非常电影院后台','桃花堂暗柜','天风阁封门楼层','旧哨站走廊','风暴海雨幕','错位花园温室','白墟边境','渡鱼二手图书馆']
     forms = ['小票','钥匙','旧相机','纽扣','玻璃杯','纸伞','耳机','打火机','门牌','折纸鸟','空白证件','发条鱼']
     quirks = ['总是慢三秒','只在雨声里说话','会记住上一个持有者的体温','照不出正面','把影子折成两半','闻起来像旧书','写下不存在的地址','会替你礼貌道歉','在谎言附近发热','看久了会眨眼']
@@ -332,6 +425,7 @@ class Server(BaseHTTPRequestHandler):
             return self.serve_file(self.path)
         try:
             if p.path == '/api/health': return self.send_json({'ok': True})
+            if p.path == '/api/llm/status': return self.send_json({'enabled': llm_enabled(), 'url': bool(LLM_URL), 'model': LLM_MODEL, 'fast_model': LLM_FAST_MODEL})
             if p.path == '/api/session': return self.send_json({'ok': True, 'me': self.user()})
             if p.path == '/api/knight/resolve':
                 q = parse_qs(p.query).get('uuid', [''])[0] or parse_qs(p.query).get('url', [''])[0]
@@ -387,11 +481,15 @@ class Server(BaseHTTPRequestHandler):
             if p.path == '/api/proxy/request-code':
                 import requests
                 r=requests.post('https://api.talesofai.cn/v1/user/request-verification-code', json=body, timeout=15, headers={'Accept':'application/json','Content-Type':'application/json','Origin':'https://app.nieta.art','Referer':'https://app.nieta.art/','User-Agent':'Mozilla/5.0'})
-                return self.send_json(r.json() if r.text else {}, r.status_code)
+                try: data=r.json()
+                except Exception: data={'error': r.text[:500] or r.reason}
+                return self.send_json(data, r.status_code)
             if p.path == '/api/proxy/verify-code':
                 import requests
                 r=requests.post('https://api.talesofai.cn/v1/user/verify-with-phone-num', json=body, timeout=15, headers={'Accept':'application/json','Content-Type':'application/json','Origin':'https://app.nieta.art','Referer':'https://app.nieta.art/','User-Agent':'Mozilla/5.0'})
-                return self.send_json(r.json() if r.text else {}, r.status_code)
+                try: data=r.json()
+                except Exception: data={'error': r.text[:500] or r.reason}
+                return self.send_json(data, r.status_code)
             if p.path == '/api/session/create':
                 user = body.get('user') if isinstance(body.get('user'), dict) else {}
                 if not user.get('uuid'): return self.send_json({'error':'缺少用户 UUID'},400)
@@ -458,9 +556,10 @@ class Server(BaseHTTPRequestHandler):
                 post_name, post_avatar = u['nick_name'], u['avatar_url']
                 con=db()
                 if role_id:
-                    rr=con.execute("SELECT source_name,avatar_img FROM identity_cards WHERE id=? AND user_uuid=? AND status='active'",[role_id,u['uuid']]).fetchone()
+                    rr=con.execute("SELECT source_name,avatar_img,card_json FROM identity_cards WHERE id=? AND user_uuid=? AND status='active'",[role_id,u['uuid']]).fetchone()
                     if not rr: con.close(); return self.send_json({'error':'角色卡不存在或不属于当前用户'},403)
                     post_name, post_avatar = rr['source_name'], rr['avatar_img']
+                    content = rewrite_for_role_card(content, rr)
                 if not content and not images: con.close(); return self.send_json({'error':'缺少内容'},400)
                 con.execute('INSERT INTO forum_posts(channel,user_uuid,user_name,user_avatar,content,images_json) VALUES(?,?,?,?,?,?)',[channel,u['uuid'],post_name,post_avatar,content,json.dumps(images[:9],ensure_ascii=False)]); con.execute('UPDATE members SET online=1,last_seen=? WHERE uuid=?',[int(time.time()),u['uuid']]); con.commit(); con.close(); return self.send_json({'ok':True})
             if p.path == '/api/identity-cards':
