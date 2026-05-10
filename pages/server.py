@@ -264,8 +264,15 @@ class Server(BaseHTTPRequestHandler):
                 return self.send_json({'ok': True, 'session': sess, 'me': u, 'role': row['role'] if row else 'member', 'title': row['title'] if row else '', 'signature': row['signature'] if row else ''})
             if p.path == '/api/forum/posts':
                 u = self.user(); channel=clean(body.get('channel') or '主论坛',80); content=clean(body.get('content'),2000); images=body.get('images') if isinstance(body.get('images'),list) else []
-                if not content and not images: return self.send_json({'error':'缺少内容'},400)
-                con=db(); con.execute('INSERT INTO forum_posts(channel,user_uuid,user_name,user_avatar,content,images_json) VALUES(?,?,?,?,?,?)',[channel,u['uuid'],u['nick_name'],u['avatar_url'],content,json.dumps(images[:9],ensure_ascii=False)]); con.execute('UPDATE members SET online=1,last_seen=? WHERE uuid=?',[int(time.time()),u['uuid']]); con.commit(); con.close(); return self.send_json({'ok':True})
+                role_id = int(body.get('role_card_id') or 0)
+                post_name, post_avatar = u['nick_name'], u['avatar_url']
+                con=db()
+                if role_id:
+                    rr=con.execute("SELECT source_name,avatar_img FROM identity_cards WHERE id=? AND user_uuid=? AND status='active'",[role_id,u['uuid']]).fetchone()
+                    if not rr: con.close(); return self.send_json({'error':'角色卡不存在或不属于当前用户'},403)
+                    post_name, post_avatar = rr['source_name'], rr['avatar_img']
+                if not content and not images: con.close(); return self.send_json({'error':'缺少内容'},400)
+                con.execute('INSERT INTO forum_posts(channel,user_uuid,user_name,user_avatar,content,images_json) VALUES(?,?,?,?,?,?)',[channel,u['uuid'],post_name,post_avatar,content,json.dumps(images[:9],ensure_ascii=False)]); con.execute('UPDATE members SET online=1,last_seen=? WHERE uuid=?',[int(time.time()),u['uuid']]); con.commit(); con.close(); return self.send_json({'ok':True})
             if p.path == '/api/identity-cards':
                 u=self.user(); profile=body.get('profile') if isinstance(body.get('profile'),dict) else {}; creator=clean(profile.get('creator_uuid') or profile.get('owner_uuid') or profile.get('from_user'),80)
                 if creator and creator != clean(u.get('creator_uuid') or u.get('uuid'),80): return self.send_json({'error':'你不是Ta，你扮演不了Ta'},403)
