@@ -562,6 +562,7 @@ const API = 'https://api.talesofai.cn'
 const archive = reactive(JSON.parse(JSON.stringify(archiveSeed)))
 const TOKEN_KEY = 'NIETA_ACCESS_TOKEN'
 const SESSION_CACHE_KEY = 'WEIREN_SESSION_ME'
+const SITE_SESSION_KEY = 'WEIREN_SITE_SESSION'
 // 隐私约定：Neta 登录 Token 为本地调用凭证，只保存在用户浏览器本地 localStorage。
 // 后端请求会临时携带 x-token 用于验证身份/代理 Neta API，但后端不落库存储 Token。
 // 后端只保存用户主动同步的站内数据：签名、论坛发言、评论、Wiki 投稿、身份卡/车卡等。
@@ -1497,7 +1498,7 @@ function restoreCachedSession(token) {
     const cached = JSON.parse(localStorage.getItem(SESSION_CACHE_KEY) || '{}')
     if (cached?.me?.uuid && cached?.token === token) {
       session.me = cached.me
-      session.token = token
+      session.token = localStorage.getItem(SITE_SESSION_KEY) || token
       session.role = cached.role || 'member'
       avatarFrame.value = avatarFrameIds.includes(cached.avatar_frame) ? cached.avatar_frame : 'none'
       signatureText.value = cached.signature || ''
@@ -1518,8 +1519,9 @@ async function useToken(token, requireCaptcha = false, markReady = true) {
   const me = verified?.me || await api(`${API}/v1/user/`, { headers: { 'x-token': token } })
   if (!me?.uuid) throw new Error('令牌无效')
   if (verified?.me) cacheSession(verified, token)
-  // Token 本地保存：仅写入用户浏览器 localStorage，不上传后端持久化。
-  session.me = me; session.token = token; localStorage.setItem(TOKEN_KEY, token)
+  if (verified?.session) localStorage.setItem(SITE_SESSION_KEY, verified.session)
+  // Token 本地保存：仅写入用户浏览器 localStorage；后续站内请求优先使用本站 session。
+  session.me = me; session.token = verified?.session || token; localStorage.setItem(TOKEN_KEY, token)
   session.role = verified?.role || 'member'
   avatarFrame.value = avatarFrameIds.includes(verified?.avatar_frame) ? verified.avatar_frame : 'none'
   signatureText.value = verified?.signature ?? ''
@@ -1575,7 +1577,7 @@ function openCategory(cat) { currentCat.value = cat; catQuery.value = ''; naviga
 async function openEntry(uuid, fromGlobal = false) { if (!confirmPendingUpload()) return; const entry = allEntries.value.find(e => e.uuid === uuid); if (!entry) return; currentEntry.value = entry; currentCat.value = entry.category; view.value = 'entry'; if (fromGlobal) globalQuery.value = ''; window.scrollTo({ top: 0, behavior: 'instant' }); await loadComments(uuid) }
 async function loadComments(uuid) { comments.value = await api(`/api/comments?entry_uuid=${encodeURIComponent(uuid)}`).catch(() => []); commentCounts.value = { ...commentCounts.value, [uuid]: comments.value.length } }
 async function postComment() { if (!currentEntry.value || !commentText.value) return; posting.value = true; try { await api('/api/comments', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ entry_uuid: currentEntry.value.uuid, content: commentText.value }) }); commentText.value = ''; await loadComments(currentEntry.value.uuid) } finally { posting.value = false } }
-function logout() { localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(SESSION_CACHE_KEY); session.me = null; session.token = ''; session.role = 'member'; view.value = 'forum' }
+function logout() { localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(SESSION_CACHE_KEY); localStorage.removeItem(SITE_SESSION_KEY); session.me = null; session.token = ''; session.role = 'member'; view.value = 'forum' }
 function badgeMark(d = '') { return ['🟥', '🟧', '🟨', '🟩', '⬜'].find(x => d.includes(x)) || '' }
 function badgeClass(d = '') { const m = badgeMark(d); return { '🟥': 'b-red', '🟧': 'b-orange', '🟨': 'b-yellow', '🟩': 'b-green', '⬜': 'b-gray' }[m] || 'b-gray' }
 function timeAgo(ts) { if (!ts) return ''; const d = Date.now() / 1000 - Number(ts); if (d < 0) return '在线'; if (d < 60) return '刚刚在线'; if (d < 3600) return `${Math.floor(d / 60)}分钟前`; if (d < 86400) return `${Math.floor(d / 3600)}小时前`; return `${Math.floor(d / 86400)}天前` }
@@ -1629,6 +1631,7 @@ onMounted(async () => {
         welcomeReady.value = false
         localStorage.removeItem(TOKEN_KEY)
         localStorage.removeItem(SESSION_CACHE_KEY)
+        localStorage.removeItem(SITE_SESSION_KEY)
         showMsg('登录状态已过期，请重新登录')
       } else {
         welcomeReady.value = true

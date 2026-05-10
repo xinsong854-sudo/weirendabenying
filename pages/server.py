@@ -11,7 +11,7 @@ Privacy / Security Notes:
 - Persisted data is limited to user-submitted site content: profile display data, signatures, forum posts,
   comments, Wiki submissions, identity cards, and private messages.
 """
-import json, os, time, sqlite3, hashlib, mimetypes, re, html, base64
+import json, os, time, sqlite3, hashlib, mimetypes, re, html, base64, secrets
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs, unquote
 import requests
@@ -28,8 +28,29 @@ RATE_BUCKET = {}
 RATE_LIMIT_WINDOW = 60
 RATE_LIMIT_MAX_AUTH = 90
 RATE_LIMIT_MAX_ANON = 180
+SESSION_TTL = 7 * 24 * 3600
+SESSIONS = {}
+
+def make_session(user):
+    sid = secrets.token_urlsafe(32)
+    SESSIONS[sid] = {"user": user, "exp": time.time() + SESSION_TTL}
+    return sid
+
+def user_from_session(sid):
+    data = SESSIONS.get(str(sid or ""))
+    if not data or data.get("exp", 0) < time.time():
+        SESSIONS.pop(str(sid or ""), None)
+        raise ValueError("未登录")
+    return dict(data.get("user") or {})
+
+def current_user_from_request(token):
+    if token and str(token).startswith("sess_"):
+        return user_from_session(str(token)[5:])
+    return get_user_by_token(token)
 
 def token_user_key(token):
+    if str(token or "").startswith("sess_"):
+        return "session:" + hashlib.sha256(str(token).encode()).hexdigest()[:16]
     # Best-effort JWT payload parse for rate limiting only. Does not store token.
     # 仅在内存中按用户标识做短期计数，不记录 IP，不保存 token。
     try:
@@ -896,7 +917,7 @@ class Server(BaseHTTPRequestHandler):
         elif p.path == "/api/identity-cards":
             token = self.headers.get("x-token", "")
             try:
-                user = get_user_by_token(token)
+                user = current_user_from_request(token)
             except Exception:
                 self._json({"error": "未登录"}, 401); return
             db = get_db()
@@ -927,7 +948,7 @@ class Server(BaseHTTPRequestHandler):
         elif p.path.startswith("/api/identity-cards/"):
             token = self.headers.get("x-token", "")
             try:
-                user = get_user_by_token(token)
+                user = current_user_from_request(token)
                 card_id = int(p.path.rsplit("/", 1)[-1])
             except Exception:
                 self._json({"error": "未登录或参数错误"}, 401); return
@@ -1062,7 +1083,7 @@ class Server(BaseHTTPRequestHandler):
             # 验证 token 后注册/更新用户，避免信任前端伪造的用户信息
             if not token: self._json({"error": "未登录"}, 401); return
             try:
-                r = requests.get(f"{API}/v1/user/", headers={"x-token": token}, timeout=10); r.raise_for_status(); user = r.json()
+                user = current_user_from_request(token)
             except Exception:
                 self._json({"error": "令牌无效"}, 401); return
             uuid = user.get("uuid", ""); name = user.get("nick_name") or user.get("name", "")
@@ -1075,12 +1096,13 @@ class Server(BaseHTTPRequestHandler):
             row = db.execute("SELECT signature,avatar_frame,role,title,creator_uuid,COALESCE(exp,0) AS exp,COALESCE(benzhen,0) AS benzhen FROM members WHERE uuid=?", [uuid]).fetchone()
             db.commit(); db.close()
             exp = int(row["exp"] if row else 0)
-            self._json({"ok": True, "me": {"uuid": uuid, "nick_name": name, "name": name, "avatar_url": avatar}, "signature": row["signature"] if row else "", "avatar_frame": row["avatar_frame"] if row else "none", "role": row["role"] if row else "member", "title": row["title"] if row else "", "creator_uuid": row["creator_uuid"] if row else uuid, "exp": exp, "benzhen": int(row["benzhen"] if row else 0), "level_label": forum_level_label(exp)})
+            session_id = token if str(token).startswith("sess_") else "sess_" + make_session({"uuid": uuid, "nick_name": name, "name": name, "avatar_url": avatar, "role": row["role"] if row else "member", "creator_uuid": row["creator_uuid"] if row else uuid})
+            self._json({"ok": True, "session": session_id, "me": {"uuid": uuid, "nick_name": name, "name": name, "avatar_url": avatar}, "signature": row["signature"] if row else "", "avatar_frame": row["avatar_frame"] if row else "none", "role": row["role"] if row else "member", "title": row["title"] if row else "", "creator_uuid": row["creator_uuid"] if row else uuid, "exp": exp, "benzhen": int(row["benzhen"] if row else 0), "level_label": forum_level_label(exp)})
 
         elif p.path == "/api/comments":
             if not token: self._json({"error": "未登录"}, 401); return
             try:
-                r = requests.get(f"{API}/v1/user/", headers={"x-token": token}, timeout=10); r.raise_for_status(); user = r.json()
+                user = current_user_from_request(token)
             except: self._json({"error": "令牌无效"}, 401); return
             eu = clean_text(body.get("entry_uuid", ""), 80); content = clean_text(body.get("content", ""), 2000)
             if not eu or not content: self._json({"error": "缺少参数"}, 400); return
@@ -1094,7 +1116,7 @@ class Server(BaseHTTPRequestHandler):
         elif p.path == "/api/forum/posts":
             if not token: self._json({"error": "未登录"}, 401); return
             try:
-                r = requests.get(f"{API}/v1/user/", headers={"x-token": token}, timeout=10); r.raise_for_status(); user = r.json()
+                user = current_user_from_request(token)
             except Exception:
                 self._json({"error": "令牌无效"}, 401); return
             channel = clean_text(body.get("channel", ""), 80)
@@ -1128,7 +1150,7 @@ class Server(BaseHTTPRequestHandler):
         elif p.path == "/api/bounty/submit":
             if not token: self._json({"error":"未登录"},401); return
             try:
-                r=requests.get(f"{API}/v1/user/",headers={"x-token":token},timeout=10); r.raise_for_status(); user=r.json()
+                user = current_user_from_request(token)
             except Exception:
                 self._json({"error":"令牌无效"},401); return
             task_id=int(body.get("task_id",0) or 0); content=clean_text(body.get("content",""),4000)
@@ -1152,7 +1174,7 @@ class Server(BaseHTTPRequestHandler):
         elif p.path == "/api/explore/run":
             if not token: self._json({"error":"未登录"},401); return
             try:
-                r=requests.get(f"{API}/v1/user/",headers={"x-token":token},timeout=10); r.raise_for_status(); user=r.json()
+                user = current_user_from_request(token)
             except Exception:
                 self._json({"error":"令牌无效"},401); return
             card_id=int(body.get("card_id",0) or 0)
@@ -1179,7 +1201,7 @@ class Server(BaseHTTPRequestHandler):
         elif p.path == "/api/purchase/avatar-frame":
             if not token: self._json({"error":"未登录"},401); return
             try:
-                r=requests.get(f"{API}/v1/user/",headers={"x-token":token},timeout=10); r.raise_for_status(); user=r.json()
+                user = current_user_from_request(token)
             except Exception:
                 self._json({"error":"令牌无效"},401); return
             frame=clean_text(body.get("avatar_frame",""),40)
@@ -1193,7 +1215,7 @@ class Server(BaseHTTPRequestHandler):
         elif p.path == "/api/explore/daily":
             if not token: self._json({"error": "未登录"}, 401); return
             try:
-                r = requests.get(f"{API}/v1/user/", headers={"x-token": token}, timeout=10); r.raise_for_status(); user = r.json()
+                user = current_user_from_request(token)
             except Exception:
                 self._json({"error": "令牌无效"}, 401); return
             db = get_db()
@@ -1208,7 +1230,7 @@ class Server(BaseHTTPRequestHandler):
         elif p.path == "/api/forum/revoke":
             if not token: self._json({"error": "未登录"}, 401); return
             try:
-                r = requests.get(f"{API}/v1/user/", headers={"x-token": token}, timeout=10); r.raise_for_status(); user = r.json()
+                user = current_user_from_request(token)
             except Exception:
                 self._json({"error": "令牌无效"}, 401); return
             db = get_db()
@@ -1223,7 +1245,7 @@ class Server(BaseHTTPRequestHandler):
         elif p.path == "/api/forum/channels":
             if not token: self._json({"error": "未登录"}, 401); return
             try:
-                r = requests.get(f"{API}/v1/user/", headers={"x-token": token}, timeout=10); r.raise_for_status(); user = r.json()
+                user = current_user_from_request(token)
             except Exception:
                 self._json({"error": "令牌无效"}, 401); return
             db = get_db()
@@ -1245,7 +1267,7 @@ class Server(BaseHTTPRequestHandler):
         elif p.path == "/api/forum/channels/delete":
             if not token: self._json({"error": "未登录"}, 401); return
             try:
-                r = requests.get(f"{API}/v1/user/", headers={"x-token": token}, timeout=10); r.raise_for_status(); user = r.json()
+                user = current_user_from_request(token)
             except Exception:
                 self._json({"error": "令牌无效"}, 401); return
             db = get_db(); role_row = db.execute("SELECT role FROM members WHERE uuid=?", [user.get("uuid", "")]).fetchone(); role = role_row["role"] if role_row else "member"
@@ -1257,7 +1279,7 @@ class Server(BaseHTTPRequestHandler):
         elif p.path == "/api/wiki/submissions":
             if not token: self._json({"error": "未登录"}, 401); return
             try:
-                r = requests.get(f"{API}/v1/user/", headers={"x-token": token}, timeout=10); r.raise_for_status(); user = r.json()
+                user = current_user_from_request(token)
             except Exception:
                 self._json({"error": "令牌无效"}, 401); return
             target = str(body.get("target") or body.get("category") or "").strip()[:80]
@@ -1284,7 +1306,7 @@ class Server(BaseHTTPRequestHandler):
         elif p.path == "/api/wiki/review":
             if not token: self._json({"error": "未登录"}, 401); return
             try:
-                r = requests.get(f"{API}/v1/user/", headers={"x-token": token}, timeout=10); r.raise_for_status(); user = r.json()
+                user = current_user_from_request(token)
             except Exception:
                 self._json({"error": "令牌无效"}, 401); return
             db = get_db(); role_row = db.execute("SELECT role FROM members WHERE uuid=?", [user.get("uuid", "")]).fetchone(); role = role_row["role"] if role_row else "member"
@@ -1309,7 +1331,7 @@ class Server(BaseHTTPRequestHandler):
         elif p.path == "/api/activities":
             if not token: self._json({"error": "未登录"}, 401); return
             try:
-                r = requests.get(f"{API}/v1/user/", headers={"x-token": token}, timeout=10); r.raise_for_status(); user = r.json()
+                user = current_user_from_request(token)
             except Exception:
                 self._json({"error": "令牌无效"}, 401); return
             db = get_db(); role_row = db.execute("SELECT role FROM members WHERE uuid=?", [user.get("uuid", "")]).fetchone(); role = role_row["role"] if role_row else "member"
@@ -1325,7 +1347,7 @@ class Server(BaseHTTPRequestHandler):
         elif p.path == "/api/activities/delete":
             if not token: self._json({"error": "未登录"}, 401); return
             try:
-                r = requests.get(f"{API}/v1/user/", headers={"x-token": token}, timeout=10); r.raise_for_status(); user = r.json()
+                user = current_user_from_request(token)
             except Exception:
                 self._json({"error": "令牌无效"}, 401); return
             db = get_db(); role_row = db.execute("SELECT role FROM members WHERE uuid=?", [user.get("uuid", "")]).fetchone(); role = role_row["role"] if role_row else "member"
@@ -1336,7 +1358,7 @@ class Server(BaseHTTPRequestHandler):
         elif p.path == "/api/members/title":
             if not token: self._json({"error": "未登录"}, 401); return
             try:
-                r = requests.get(f"{API}/v1/user/", headers={"x-token": token}, timeout=10); r.raise_for_status(); user = r.json()
+                user = current_user_from_request(token)
             except Exception:
                 self._json({"error": "令牌无效"}, 401); return
             target_uuid = str(body.get("uuid", "")).strip()
@@ -1356,7 +1378,7 @@ class Server(BaseHTTPRequestHandler):
         elif p.path == "/api/members/avatar-frame":
             if not token: self._json({"error": "未登录"}, 401); return
             try:
-                r = requests.get(f"{API}/v1/user/", headers={"x-token": token}, timeout=10); r.raise_for_status(); user = r.json()
+                user = current_user_from_request(token)
             except Exception:
                 self._json({"error": "令牌无效"}, 401); return
             frame = str(body.get("avatar_frame", "none")).strip()
@@ -1376,7 +1398,7 @@ class Server(BaseHTTPRequestHandler):
         elif p.path == "/api/members/signature":
             if not token: self._json({"error": "未登录"}, 401); return
             try:
-                r = requests.get(f"{API}/v1/user/", headers={"x-token": token}, timeout=10); r.raise_for_status(); user = r.json()
+                user = current_user_from_request(token)
             except Exception:
                 self._json({"error": "令牌无效"}, 401); return
             signature = clean_text(body.get("signature", ""), 50)
@@ -1424,7 +1446,7 @@ class Server(BaseHTTPRequestHandler):
                 self._json({"success": False, "error": str(e)}, 500)
         elif p.path == "/api/identity-cards":
             try:
-                user = get_user_by_token(token)
+                user = current_user_from_request(token)
                 card = body.get("card") if isinstance(body.get("card"), dict) else None
                 profile = body.get("profile") if isinstance(body.get("profile"), dict) else {}
                 if not card:
@@ -1437,7 +1459,7 @@ class Server(BaseHTTPRequestHandler):
                 self._json({"error": str(e)}, 500)
         elif p.path == "/api/identity-cards/delete":
             try:
-                user = get_user_by_token(token)
+                user = current_user_from_request(token)
                 card_id = int(body.get("id", 0) or 0)
                 db = get_db()
                 db.execute("UPDATE identity_cards SET status='deleted', updated_at=strftime('%s','now') WHERE id=? AND user_uuid=?", [card_id, user.get("uuid")])
@@ -1447,7 +1469,7 @@ class Server(BaseHTTPRequestHandler):
                 self._json({"error": str(e)}, 500)
         elif p.path == "/api/identity-cards/state":
             try:
-                user = get_user_by_token(token)
+                user = current_user_from_request(token)
                 card_id = int(body.get("id", 0) or 0)
                 hp_current = int(body.get("hp_current", 0))
                 status = "torn" if hp_current <= 0 else "active"
@@ -1460,7 +1482,7 @@ class Server(BaseHTTPRequestHandler):
         elif p.path == "/api/private/messages":
             if not token: self._json({"error": "未登录"}, 401); return
             try:
-                r = requests.get(f"{API}/v1/user/", headers={"x-token": token}, timeout=10); r.raise_for_status(); user = r.json()
+                user = current_user_from_request(token)
             except Exception:
                 self._json({"error": "令牌无效"}, 401); return
             to_uuid = clean_text(body.get("to_uuid", ""), 80)
