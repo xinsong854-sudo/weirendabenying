@@ -123,20 +123,29 @@
               <img :src="safeUrl(activeForumRoleCard?.avatar_img || session.me.avatar_url)" alt="">
               <input v-model.trim="forumText" type="text" :disabled="selectedForum === '主论坛' && !activeForumRoleCard" :placeholder="selectedForum === '主论坛' ? (activeForumRoleCard ? `以「${activeForumRoleCard.investigator?.name || activeForumRoleCard.source_name}」发言...` : '点右侧角色按钮选择/导入角色') : `在「${selectedForum}」发布讨论...`" @keydown.enter="postForumMessage">
               <button v-if="selectedForum === '主论坛'" class="compose-role-trigger" :class="{ empty: !activeForumRoleCard }" @click="rolePickerOpen = !rolePickerOpen" :title="activeForumRoleCard ? `当前角色：${activeForumRoleCard.investigator?.name || activeForumRoleCard.source_name}` : '选择或导入角色'">
+                <span class="role-trigger-orbit" aria-hidden="true"></span>
                 <img v-if="safeUrl(activeForumRoleCard?.avatar_img)" :src="safeUrl(activeForumRoleCard.avatar_img)" alt="">
-                <span v-else>{{ activeForumRoleCard ? initials(activeForumRoleCard.investigator?.name || activeForumRoleCard.source_name) : '角' }}</span>
+                <span v-else class="role-trigger-initial">{{ activeForumRoleCard ? initials(activeForumRoleCard.investigator?.name || activeForumRoleCard.source_name) : '＋' }}</span>
+                <i>{{ activeForumRoleCard ? 'RP' : 'NEW' }}</i>
               </button>
               <input ref="forumUploadInput" class="hidden-file" type="file" accept="image/*" multiple @change="onForumImages">
               <button @click="forumUploadInput?.click()">图片</button>
               <button :disabled="forumPosting || (selectedForum === '主论坛' && !activeForumRoleCard) || (!forumText && !uploadedForumImages.length)" @click="postForumMessage">{{ forumPosting ? '改写中' : '发送' }}</button>
             </div>
             <div v-if="rolePickerOpen && selectedForum === '主论坛'" class="compose-role-pop">
-              <header><b>选择发言角色</b><button @click="rolePickerOpen = false">×</button></header>
-              <button v-for="card in identityCards" :key="card.id" class="role-pick-item" :class="{ active: String(card.id) === String(selectedRoleCardId) }" @click="selectedRoleCardId = String(card.id); rolePickerOpen = false">
-                <img v-if="safeUrl(card.avatar_img)" :src="safeUrl(card.avatar_img)" alt=""><span v-else>{{ initials(card.investigator?.name || card.source_name) }}</span>
-                <em>{{ card.investigator?.name || card.source_name || '未命名角色' }}</em><i>HP {{ card.hp_current }}/{{ card.hp_max }}</i>
-              </button>
-              <button class="role-pick-import" @click="rolePickerOpen = false; openProfile()">＋ 导入角色卡</button>
+              <header><div><span>ROLE DOSSIER</span><b>选择发言角色</b></div><button @click="rolePickerOpen = false">×</button></header>
+              <section class="role-pop-current" :class="{ empty: !activeForumRoleCard }">
+                <img v-if="safeUrl(activeForumRoleCard?.avatar_img)" :src="safeUrl(activeForumRoleCard.avatar_img)" alt="">
+                <span v-else>{{ activeForumRoleCard ? initials(activeForumRoleCard.investigator?.name || activeForumRoleCard.source_name) : '未' }}</span>
+                <div><b>{{ activeForumRoleCard ? (activeForumRoleCard.investigator?.name || activeForumRoleCard.source_name) : '尚未选择角色' }}</b><small>{{ activeForumRoleCard ? '你的发言会被改写为该角色口吻' : '请选择角色，或先导入一张身份卡' }}</small></div>
+              </section>
+              <div class="role-pick-list">
+                <button v-for="card in identityCards" :key="card.id" class="role-pick-item" :class="{ active: String(card.id) === String(selectedRoleCardId) }" @click="selectedRoleCardId = String(card.id); rolePickerOpen = false">
+                  <img v-if="safeUrl(card.avatar_img)" :src="safeUrl(card.avatar_img)" alt=""><span v-else>{{ initials(card.investigator?.name || card.source_name) }}</span>
+                  <em>{{ card.investigator?.name || card.source_name || '未命名角色' }}</em><i>HP {{ card.hp_current }}/{{ card.hp_max }}</i>
+                </button>
+              </div>
+              <button class="role-pick-import" @click="rolePickerOpen = false; openProfile()">＋ 导入新的角色卡</button>
             </div>
           </section>
           <aside class="chat-info">
