@@ -96,14 +96,24 @@
               </article>
               <div v-if="!forumLoading && visibleThreads.length === 0" class="item muted">这个频道还没有发言，来发第一条吧。</div>
             </div>
+            <div v-if="selectedForum === '主论坛'" class="role-card-gate">
+              <template v-if="identityCards.length">
+                <b>主论坛强制角色扮演</b>
+                <select v-model="selectedRoleCardId"><option value="">选择发言角色卡</option><option v-for="card in identityCards" :key="card.id" :value="String(card.id)">{{ card.investigator?.name || card.source_name || '未命名角色' }}</option></select>
+                <small>你的发言会先被改写成所选角色的口吻，再显示在论坛中。</small>
+              </template>
+              <template v-else>
+                <b>主论坛需要角色卡</b><small>请先到个人中心导入带有“伪人大本营”标签、且由你本人创作的捏Ta角色。</small><button class="back-note primary" @click="openProfile">去导入角色</button>
+              </template>
+            </div>
             <div v-if="!['活动颁布','成员'].includes(selectedForum) && uploadedForumImages.length" class="upload-preview"><span v-for="img in uploadedForumImages" :key="img"><img :src="img" alt=""><button @click="removeUploadedImage(uploadedForumImages, img)">×</button></span></div>
             <div v-if="!['活动颁布','成员'].includes(selectedForum) && imageLibrary.length" class="local-image-library"><b>本地图片库</b><button v-for="item in imageLibrary.slice(0, 12)" :key="item.url" @click="useLibraryImage(uploadedForumImages, item.url)"><img :src="item.url" alt=""><span>使用</span></button></div>
             <div v-if="!['活动颁布','成员'].includes(selectedForum)" class="chat-compose">
-              <img :src="safeUrl(session.me.avatar_url)" alt="">
-              <input v-model.trim="forumText" type="text" :placeholder="`在「${selectedForum}」发布讨论...`" @keydown.enter="postForumMessage">
+              <img :src="safeUrl(activeForumRoleCard?.avatar_img || session.me.avatar_url)" alt="">
+              <input v-model.trim="forumText" type="text" :disabled="selectedForum === '主论坛' && !activeForumRoleCard" :placeholder="selectedForum === '主论坛' ? (activeForumRoleCard ? `以「${activeForumRoleCard.investigator?.name || activeForumRoleCard.source_name}」的口吻发言...` : '请先选择角色卡') : `在「${selectedForum}」发布讨论...`" @keydown.enter="postForumMessage">
               <input ref="forumUploadInput" class="hidden-file" type="file" accept="image/*" multiple @change="onForumImages">
               <button @click="forumUploadInput?.click()">图片</button>
-              <button :disabled="forumPosting || (!forumText && !uploadedForumImages.length)" @click="postForumMessage">{{ forumPosting ? '发送中' : '发送' }}</button>
+              <button :disabled="forumPosting || (selectedForum === '主论坛' && !activeForumRoleCard) || (!forumText && !uploadedForumImages.length)" @click="postForumMessage">{{ forumPosting ? '改写中' : '发送' }}</button>
             </div>
           </section>
           <aside class="chat-info">
@@ -549,6 +559,7 @@ const identityCardProgress = ref(0)
 const identityCardStage = ref('准备生成')
 let identityCardProgressTimer = null
 const identityCards = ref([])
+const selectedRoleCardId = ref('')
 const selectedIdentityCardDetail = ref(null)
 const wikiReviewStatus = ref('pending')
 const forumUploadInput = ref(null)
@@ -706,6 +717,7 @@ const filteredMembers = computed(() => {
 const currentUserProfile = computed(() => members.value.find(m => m.uuid === session.me?.uuid) || { role: session.role, title: '', signature: signatureText.value, exp: 0, level_label: '模仿外表' })
 const pseudoHumanLevel = computed(() => levelInfo(currentUserProfile.value?.exp || 0, currentUserProfile.value?.level_label))
 const currentAvatarFrame = computed(() => avatarFrames.find(f => f.id === avatarFrame.value && f.url) || null)
+const activeForumRoleCard = computed(() => identityCards.value.find(c => String(c.id) === String(selectedRoleCardId.value)) || null)
 const identityCardPortrait = computed(() => identityCardResult.value?.portrait?.avatar_img || identityCardResult.value?.source_character?.avatar_img || identityCardProfile.value?.avatar_img || identityCardResult.value?.portrait?.header_img || identityCardProfile.value?.header_img || '')
 const avatarFrameClass = computed(() => currentAvatarFrame.value ? (currentAvatarFrame.value.type === 'roach' ? 'has-roach-frame avatar-frame-roach' : `avatar-frame-${currentAvatarFrame.value.id}`) : '')
 function avatarFrameFor(member) {
@@ -970,6 +982,7 @@ async function loadIdentityCards(force = false) {
   if (!session.token) return
   if (!force && cacheFresh('identityCards') && identityCards.value.length) return
   identityCards.value = await api('/api/identity-cards', { headers: { 'x-token': session.token } }).catch(() => [])
+  if (!selectedRoleCardId.value && identityCards.value[0]) selectedRoleCardId.value = String(identityCards.value[0].id)
   markCache('identityCards')
 }
 async function saveGeneratedIdentityCard() {
@@ -1206,13 +1219,15 @@ async function loadForumPosts(force = false) {
 async function postForumMessage() {
   if (!session.token) { showMsg('请先登录后再发言'); return }
   if (['活动颁布', '成员'].includes(selectedForum.value)) { showMsg('当前栏目不是论坛发言区', 'muted'); return }
+  if (selectedForum.value === '主论坛' && !activeForumRoleCard.value) { showMsg('主论坛发言必须先选择角色卡'); return }
   if (forumPosting.value || (!forumText.value && !uploadedForumImages.value.length)) return
   forumPosting.value = true
   try {
-    const res = await api('/api/forum/posts', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ channel: selectedForum.value, content: forumText.value, images: uploadedForumImages.value }) })
+    const payload = { channel: selectedForum.value, content: forumText.value, images: uploadedForumImages.value, role_card_id: selectedForum.value === '主论坛' ? Number(selectedRoleCardId.value) : 0 }
+    const res = await api('/api/forum/posts', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify(payload) })
     forumText.value = ''; uploadedForumImages.value = []
     await Promise.all([loadForumPosts(true), loadMembers(true)])
-    showMsg(res?.exp_gained ? `已发送，获得 ${res.exp_gained} 点感悟` : '已发送', 'ok')
+    showMsg(res?.ooc_warning || (res?.exp_gained ? `已发送，获得 ${res.exp_gained} 点感悟` : '已发送'), res?.ooc_warning ? 'error' : 'ok')
   } catch (e) { showMsg(`发送失败：${e.message}`) } finally { forumPosting.value = false }
 }
 

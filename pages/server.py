@@ -416,6 +416,101 @@ def sync_entries_to_db():
 
 sync_entries_to_db()
 
+def get_user_by_token(token):
+    if not token:
+        raise ValueError("未登录")
+    r = requests.get(f"{API}/v1/user/", headers={"x-token": token}, timeout=10)
+    r.raise_for_status()
+    user = r.json()
+    if not user.get("uuid"):
+        raise ValueError("令牌无效")
+    return user
+
+def card_summary(row):
+    try: card = json.loads(row["card_json"] or "{}")
+    except Exception: card = {}
+    inv = card.get("investigator") or card.get("source_character") or {}
+    return {"id": row["id"], "source_uuid": row["source_uuid"], "source_name": row["source_name"], "avatar_img": row["avatar_img"], "investigator": inv, "hp_current": row["hp_current"], "hp_max": row["hp_max"], "created_at": row["created_at"], "updated_at": row["updated_at"]}
+
+def save_identity_card_for_user(user, card, profile):
+    source_uuid = clean_text(profile.get("uuid") or profile.get("id") or card.get("source_character", {}).get("uuid") or "", 120)
+    source_name = clean_text(profile.get("name") or profile.get("oc_bio", {}).get("name") or card.get("investigator", {}).get("name") or "未命名角色", 120)
+    avatar_img = safe_public_url(profile.get("avatar_img") or profile.get("config", {}).get("avatar_img") or card.get("portrait", {}).get("avatar_img") or "")
+    hp = int((card.get("derived") or {}).get("HP") or card.get("hp_max") or 10)
+    db = get_db()
+    db.execute("""INSERT INTO identity_cards(user_uuid,user_name,source_uuid,source_name,avatar_img,card_json,profile_json,hp_current,hp_max)
+                  VALUES(?,?,?,?,?,?,?,?,?)""", [user.get("uuid"), user.get("nick_name") or user.get("name"), source_uuid, source_name, avatar_img, json.dumps(card, ensure_ascii=False), json.dumps(profile, ensure_ascii=False), hp, hp])
+    row = db.execute("SELECT * FROM identity_cards WHERE id=last_insert_rowid()").fetchone()
+    db.commit(); db.close()
+    return card_summary(row)
+
+def extract_character_uuid(link):
+    s = str(link or "").strip()
+    m = re.search(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}", s)
+    if m: return m.group(0)
+    return clean_text(s, 120)
+
+def fetch_neta_character_profile(user_token, link):
+    uuid = extract_character_uuid(link)
+    if not uuid:
+        raise ValueError("缺少角色链接或 UUID")
+    r = requests.get(f"{API}/v2/travel/parent/{uuid}/profile", headers={"x-token": user_token}, timeout=15)
+    r.raise_for_status()
+    p = r.json() or {}
+    if not p.get("uuid"):
+        raise ValueError("未读取到角色资料")
+    return p
+
+def validate_character_for_user(profile, user):
+    tags = profile.get("hashtags") or profile.get("tags") or []
+    tag_text = " ".join([str(x) for x in tags])
+    if "伪人大本营" not in tag_text:
+        raise ValueError("分享角色必须带有“伪人大本营”标签")
+    uid = str(user.get("uuid") or "")
+    owner_uuid = str((profile.get("owner_profile") or {}).get("uuid") or profile.get("owner_uuid") or "")
+    user_id = profile.get("user_id")
+    if owner_uuid and owner_uuid != uid:
+        raise ValueError("只能使用你本人创作的角色")
+    if user_id is not None and str(user_id) != str(user.get("id")):
+        raise ValueError("只能使用你本人创作的角色")
+    if not owner_uuid and user_id is None:
+        raise ValueError("角色资料缺少创作者字段，无法确认归属")
+
+def generate_coc_card(profile):
+    bio = profile.get("oc_bio") or {}
+    name = profile.get("name") or bio.get("name") or "未命名角色"
+    desc = bio.get("description") or bio.get("persona") or ""
+    avatar = profile.get("avatar_img") or profile.get("config", {}).get("avatar_img") or ""
+    return {"source_character": {"uuid": profile.get("uuid"), "name": name, "avatar_img": avatar}, "investigator": {"name": name, "occupation": bio.get("occupation") or "伪人", "age": bio.get("age") or "未知"}, "portrait": {"avatar_img": avatar, "visual_summary": desc[:160]}, "derived": {"HP": 10, "SAN": 50, "MP": 10, "MOV": 8}, "roleplay": {"persona": bio.get("persona") or desc, "description": desc, "interests": bio.get("interests") or ""}}
+
+def rewrite_for_role_card(text, row):
+    original = clean_text(text, 2000)
+    try: card = json.loads(row["card_json"] or "{}")
+    except Exception: card = {}
+    try: profile = json.loads(row["profile_json"] or "{}")
+    except Exception: profile = {}
+    name = row["source_name"] or (card.get("investigator") or {}).get("name") or "角色"
+    persona = json.dumps(card.get("roleplay") or profile.get("oc_bio") or profile, ensure_ascii=False)[:1800]
+    ooc = ""
+    rewritten = original
+    if LLM_API_KEY:
+        try:
+            prompt = f"你是论坛角色扮演改写器。用户不是在和角色对话，而是必须成为角色发言。请把用户原文改写成角色【{name}】会说的话，保留核心意思，第一人称按角色口癖调整。若原文明显超游、提及现实系统/模型/后台/玩家信息且难以角色化，返回OOC警告。只返回JSON: {{\"text\":\"改写后\",\"ooc_warning\":\"没有则空\"}}\n角色资料：{persona}\n用户原文：{original}"
+            rr = requests.post(LLM_URL, headers={"Authorization": f"Bearer {LLM_API_KEY}", "Content-Type": "application/json"}, json={"model": LLM_FAST_MODEL or LLM_MODEL, "messages": [{"role": "user", "content": prompt}], "temperature": 0.35}, timeout=25)
+            rr.raise_for_status()
+            content = rr.json()["choices"][0]["message"]["content"]
+            m = re.search(r"\{.*\}", content, re.S)
+            data = json.loads(m.group(0) if m else content)
+            rewritten = clean_text(data.get("text") or original, 2000)
+            ooc = clean_text(data.get("ooc_warning") or "", 300)
+        except Exception:
+            pass
+    if name in ("营长", "安诺涅") or "营长" in name:
+        rewritten = re.sub(r"(?<![我你他她它])我(?!们)", "我们", rewritten)
+    if not ooc and re.search(r"后台|模型|LLM|prompt|玩家|现实中|系统", original, re.I):
+        ooc = "OOC 警告：该发言含明显超游信息，已尽量角色化处理。"
+    return rewritten, ooc
+
 # ═══════════ 前端由 dist/ 构建产物提供；不再保留旧版内联页面 fallback ═══════════
 
 # ═══════════ 后端 API ═══════════
@@ -776,13 +871,26 @@ class Server(BaseHTTPRequestHandler):
             images = [x for x in images if x]
             if not channel or (not content and not images): self._json({"error": "缺少内容"}, 400); return
             if len(content) > 2000: self._json({"error": "发言过长"}, 400); return
+            role_card_id = int(body.get("role_card_id", 0) or 0)
+            if channel == "主论坛" and not role_card_id:
+                self._json({"error": "主论坛发言必须选择已导入的角色卡"}, 400); return
             db = get_db()
+            role_row = None
+            ooc_warning = ""
+            if role_card_id:
+                role_row = db.execute("SELECT * FROM identity_cards WHERE id=? AND user_uuid=? AND status='active'", [role_card_id, user["uuid"]]).fetchone()
+                if not role_row:
+                    db.close(); self._json({"error": "角色卡不存在或不属于当前用户"}, 403); return
+                content, ooc_warning = rewrite_for_role_card(content, role_row)
+            post_name = role_row["source_name"] if role_row else (user.get("nick_name") or user.get("name", ""))
+            post_avatar = role_row["avatar_img"] if role_row else user.get("avatar_url", "")
+            final_content = (f"【OOC警告】{ooc_warning}\n" if ooc_warning else "") + content
             db.execute("""INSERT INTO forum_posts(channel,user_uuid,user_name,user_avatar,content,images_json)
-                       VALUES(?,?,?,?,?,?)""", [channel, user["uuid"], user.get("nick_name") or user.get("name", ""), user.get("avatar_url", ""), content, json.dumps(images, ensure_ascii=False)])
+                       VALUES(?,?,?,?,?,?)""", [channel, user["uuid"], post_name, post_avatar, final_content, json.dumps(images, ensure_ascii=False)])
             gained = award_daily_exp(db, user["uuid"], "forum_post", 10)
             db.execute("UPDATE members SET online=1,last_seen=? WHERE uuid=?", (int(time.time()), user["uuid"]))
             db.commit(); db.close()
-            self._json({"ok": True, "exp_gained": gained})
+            self._json({"ok": True, "exp_gained": gained, "rewritten": content, "ooc_warning": ooc_warning})
         elif p.path == "/api/explore/daily":
             if not token: self._json({"error": "未登录"}, 401); return
             try:
@@ -990,6 +1098,7 @@ class Server(BaseHTTPRequestHandler):
                 if active_count >= 3:
                     self._json({"success": False, "error": "每人最多保存三张身份卡，请先删除旧卡"}, 400); return
                 profile = body.get("profile") if isinstance(body.get("profile"), dict) else fetch_neta_character_profile(user_token, link)
+                validate_character_for_user(profile, user)
                 card = generate_coc_card(profile)
                 saved = save_identity_card_for_user(user, card, profile)
                 self._json({"success": True, "profile": profile, "card": card, "saved": saved})
@@ -1002,6 +1111,8 @@ class Server(BaseHTTPRequestHandler):
                 profile = body.get("profile") if isinstance(body.get("profile"), dict) else {}
                 if not card:
                     self._json({"error": "缺少车卡数据"}, 400); return
+                if profile:
+                    validate_character_for_user(profile, user)
                 saved = save_identity_card_for_user(user, card, profile)
                 self._json({"ok": True, "card": saved})
             except Exception as e:
