@@ -226,7 +226,7 @@
               </div>
               <section class="artifact-codex-grid">
                 <button v-for="entry in artifactGalleryEntries" :key="entry.uuid" class="artifact-codex-card" :class="artifactRiskOf(entry).value" @click="selectedArtifactEntry = entry">
-                  <i>{{ artifactRiskOf(entry).icon }}</i><b>{{ entry.name }}</b><p>{{ artifactSummary(entry) }}</p><small>{{ artifactRiskOf(entry).label }} · ARCHIVE</small>
+                  <img v-if="safeUrl(entry.image)" :src="safeUrl(entry.image)" alt="" loading="lazy"><i>{{ artifactRiskOf(entry).icon }}</i><b>{{ entry.name }}</b><p>{{ artifactSummary(entry) }}</p><small>{{ artifactRiskOf(entry).label }} · {{ entry.artifact_id || 'ARCHIVE' }}</small>
                 </button>
               </section>
               <div v-if="!artifactGalleryEntries.length" class="wiki-empty-tip">当前等级暂无伪物记录。</div>
@@ -234,7 +234,7 @@
             <div v-if="selectedArtifactEntry" class="form-dialog-mask artifact-modal-mask" @click.self="selectedArtifactEntry = null">
               <section class="form-dialog-card artifact-modal-card">
                 <header><span class="ritual-label">ARTIFACT FILE</span><h2>{{ selectedArtifactEntry.name }}</h2><p><b :class="['artifact-risk-pill', artifactRiskOf(selectedArtifactEntry).value]">{{ artifactRiskOf(selectedArtifactEntry).icon }} {{ artifactRiskOf(selectedArtifactEntry).label }}</b></p></header>
-                <div class="artifact-modal-body"><div class="artifact-modal-seal">{{ selectedArtifactEntry.name.slice(0, 2) }}</div><p v-for="line in artifactLines(selectedArtifactEntry)" :key="line">{{ line }}</p></div>
+                <div class="artifact-modal-body"><img v-if="safeUrl(selectedArtifactEntry.image)" class="artifact-modal-image" :src="safeUrl(selectedArtifactEntry.image)" alt=""><div v-else class="artifact-modal-seal">{{ selectedArtifactEntry.name.slice(0, 2) }}</div><p v-for="line in artifactLines(selectedArtifactEntry)" :key="line">{{ line }}</p></div>
                 <footer><button class="back-note" @click="openEntry(selectedArtifactEntry.uuid); selectedArtifactEntry = null">打开 Wiki 词条</button><button class="back-note primary" @click="selectedArtifactEntry = null">返回图鉴</button></footer>
               </section>
             </div>
@@ -922,6 +922,8 @@ function filterEntries(list, q) {
   return list.filter(e => `${e.name}\n${e.description}`.toLowerCase().includes(needle))
 }
 function artifactRiskOf(entry = {}) {
+  const explicit = String(entry.risk || '').toLowerCase()
+  if (artifactRiskLevels.some(x => x.value === explicit)) return artifactRiskLevels.find(x => x.value === explicit)
   const text = `${entry.name || ''}\n${entry.description || ''}`.toLowerCase()
   if (/🟥|hazard|危害|禁忌|高危/.test(text)) return artifactRiskLevels.find(x => x.value === 'hazard')
   if (/🟧|danger|危险/.test(text)) return artifactRiskLevels.find(x => x.value === 'danger')
@@ -1165,8 +1167,10 @@ function addImageToLibrary(url, name = '') {
   imageLibrary.value = [{ url, name, time: Date.now() }, ...imageLibrary.value.filter(x => x.url !== url)].slice(0, 60)
   saveImageLibrary()
 }
+function resolveListTarget(target) { return Array.isArray(target) ? target : (target?.value || []) }
 function useLibraryImage(target, url) {
-  if (!target.value.includes(url)) target.value.push(url)
+  const list = resolveListTarget(target)
+  if (!list.includes(url)) list.push(url)
   showMsg('已从本地图片库添加', 'ok')
 }
 function captchaImages() {
@@ -1294,7 +1298,14 @@ async function handleImageFiles(files, target) {
 }
 function onForumImages(e) { handleImageFiles(e.target.files, uploadedForumImages); e.target.value = '' }
 function onWikiImages(e) { handleImageFiles(e.target.files, uploadedWikiImages); e.target.value = '' }
-function removeUploadedImage(target, url) { target.value = target.value.filter(x => x !== url) }
+function removeUploadedImage(target, url) {
+  if (Array.isArray(target)) {
+    const idx = target.indexOf(url)
+    if (idx >= 0) target.splice(idx, 1)
+    return
+  }
+  target.value = (target.value || []).filter(x => x !== url)
+}
 async function loadBountyTasks(force = false) {
   if (!force && bountyTasks.value.length) return
   bountyTasks.value = await api('/api/bounty/tasks').catch(() => [])

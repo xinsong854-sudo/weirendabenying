@@ -9,7 +9,7 @@
   "stats": {
     "heat": 12428778,
     "subscribers": 743,
-    "lore_count": 173
+    "lore_count": 207
   },
   "images": {
     "banner": "https://oss.talesofai.cn/fe_assets/mng/78/9402d71cfa30b7b6f25259b4ba4f226f.jpg\t",
@@ -571,6 +571,312 @@
         "name": "白玲可的电脑",
         "description": "这个世界上最耐活的存在\n有着连续运行两个月不关的记录\n营长也肝败吓疯",
         "uuid": "c6b5cf18-169c-47ef-a51f-d695dd599589"
+      },
+      {
+        "name": "永动电视",
+        "description": "🟩 SAFE · SA-001\n发现地点：渊某二手市场\n收容措施：无需特殊收容，正常存放即可\n特殊效果：拍打后可观看 15 分钟，停止拍打立即黑屏\n一台老式显像管电视，只有持续拍打侧面才能正常播放，且只能收到 3 个频道，其中 2 个是雪花屏。\n坊间传闻：[非常电影院] 深夜放映时，[单先生] 总坐在最后一排。有次散场后电视没关，他回头发现屏幕上播的竟是自己在影院里的背影——而画面里的'单先生'正缓缓转头，对屏幕外的他比了个'嘘'的手势。从此 [非常电影院] 规定：最后一场必须双人清场。",
+        "uuid": "artifact-sa-001",
+        "artifact_id": "SA-001",
+        "risk": "safe",
+        "image": "https://oss.talesofai.cn/upload/49c915e649254f55a7ea399ad3b6efd1/880c33b6-6578-4447-8b6b-4760c8874767.jpg",
+        "source": "tujian"
+      },
+      {
+        "name": "恒温水杯",
+        "description": "🟩 SAFE · SA-002\n发现地点：槐安公寓 302 室\n收容措施：无需特殊收容\n特殊效果：强制恒温 37℃，无法改变\n普通玻璃水杯，无论倒入什么温度的液体，都会变成温的——不冷不热，刚刚好让人失去喝它的欲望。",
+        "uuid": "artifact-sa-002",
+        "artifact_id": "SA-002",
+        "risk": "safe",
+        "image": "https://oss.talesofai.cn/upload/49c915e649254f55a7ea399ad3b6efd1/7fd63756-423e-4dde-be05-275aaad75d7b.jpg",
+        "source": "tujian"
+      },
+      {
+        "name": "单向圆珠笔",
+        "description": "🟩 SAFE · SA-003\n发现地点：黎守档案室\n收容措施：无需特殊收容\n特殊效果：文字镜像显示，需反向阅读\n一支蓝色圆珠笔，只能写字不能擦除，但写出来的字只有倒着看才能辨认。",
+        "uuid": "artifact-sa-003",
+        "artifact_id": "SA-003",
+        "risk": "safe",
+        "image": "https://oss.talesofai.cn/upload/49c915e649254f55a7ea399ad3b6efd1/519ecfa0-2b29-44c3-89bf-c3bcf4436d07.jpg",
+        "source": "tujian"
+      },
+      {
+        "name": "无限火柴",
+        "description": "🟩 SAFE · SA-004\n发现地点：猎人公会黑市\n收容措施：无需特殊收容\n特殊效果：无限数量，但燃烧时间极短\n一盒永远用不完的火柴，但每根只能燃烧 3 秒，且必须在无风环境下才能点燃。",
+        "uuid": "artifact-sa-004",
+        "artifact_id": "SA-004",
+        "risk": "safe",
+        "image": "https://oss.talesofai.cn/upload/49c915e649254f55a7ea399ad3b6efd1/357e27c1-5139-47b0-aa8e-1340011347ba.jpg",
+        "source": "tujian"
+      },
+      {
+        "name": "回声哨子",
+        "description": "🟩 SAFE · SA-005\n发现地点：渊东共和国某学校\n收容措施：无需特殊收容\n特殊效果：延迟 5 分钟产生回声\n一个银色哨子，吹响后会产生回声，但回声比原声晚 5 分钟才出现。",
+        "uuid": "artifact-sa-005",
+        "artifact_id": "SA-005",
+        "risk": "safe",
+        "image": "https://oss.talesofai.cn/upload/49c915e649254f55a7ea399ad3b6efd1/96ce284a-969f-4a37-8941-c0fe6210021a.jpg",
+        "source": "tujian"
+      },
+      {
+        "name": "自洁抹布",
+        "description": "🟩 SAFE · SA-006\n发现地点：茶居公寓厨房\n收容措施：无需特殊收容\n特殊效果：自洁但产生异味\n一块灰色抹布，可以自动清洁自身污渍，但清洁过程中会散发出强烈的鱼腥味。",
+        "uuid": "artifact-sa-006",
+        "artifact_id": "SA-006",
+        "risk": "safe",
+        "image": "https://oss.talesofai.cn/upload/49c915e649254f55a7ea399ad3b6efd1/2190e53f-617b-45d6-93c8-2d2a087a4b24.jpg",
+        "source": "tujian"
+      },
+      {
+        "name": "平衡筷子",
+        "description": "🟩 SAFE · SA-007\n发现地点：鸟姐大排档\n收容措施：无需特殊收容\n特殊效果：防掉落但强制发声\n一双竹筷，无论夹什么食物都不会掉落，但使用者会不由自主地发出咀嚼声。",
+        "uuid": "artifact-sa-007",
+        "artifact_id": "SA-007",
+        "risk": "safe",
+        "image": "https://oss.talesofai.cn/upload/49c915e649254f55a7ea399ad3b6efd1/aa016a55-4479-43d2-bfa6-962138e478ce.jpg",
+        "source": "tujian"
+      },
+      {
+        "name": "准时闹钟",
+        "description": "🟩 SAFE · SA-008\n发现地点：槐安公寓管理处\n收容措施：无需特殊收容\n特殊效果：录音回放式闹铃\n一个电子闹钟，永远准时，但闹铃声音是播放使用者 5 分钟前说过的话。",
+        "uuid": "artifact-sa-008",
+        "artifact_id": "SA-008",
+        "risk": "safe",
+        "image": "https://oss.talesofai.cn/upload/49c915e649254f55a7ea399ad3b6efd1/6684ea99-ad89-4031-84ec-7d3dcdda7d39.jpg",
+        "source": "tujian"
+      },
+      {
+        "name": "防潮饼干盒",
+        "description": "🟩 SAFE · SA-009\n发现地点：非常电影院小卖部\n收容措施：无需特殊收容\n特殊效果：完美防潮但有怪声\n一个铁皮饼干盒，内部永远保持干燥，但打开时会发出类似叹息的声音。",
+        "uuid": "artifact-sa-009",
+        "artifact_id": "SA-009",
+        "risk": "safe",
+        "image": "https://oss.talesofai.cn/upload/49c915e649254f55a7ea399ad3b6efd1/47a83c99-f8b2-4595-ae4c-01c572014b5d.jpg",
+        "source": "tujian"
+      },
+      {
+        "name": "认路指南针",
+        "description": "🟩 SAFE · SA-010\n发现地点：渊某户外用品店\n收容措施：无需特殊收容\n特殊效果：指向准确但难以读取\n一个指南针，永远指向北方，但指针会轻微颤抖，让人难以精确读数。",
+        "uuid": "artifact-sa-010",
+        "artifact_id": "SA-010",
+        "risk": "safe",
+        "image": "https://oss.talesofai.cn/upload/49c915e649254f55a7ea399ad3b6efd1/1de6f794-28e0-4b13-b359-6d5ef24e19c9.jpg",
+        "source": "tujian"
+      },
+      {
+        "name": "保温饭盒",
+        "description": "🟩 SAFE · SA-011\n发现地点：黎守食堂\n收容措施：无需特殊收容\n特殊效果：超强保温但食物摆成表情\n一个不锈钢饭盒，保温效果极好，但打开后食物会排列成奇怪的表情图案。",
+        "uuid": "artifact-sa-011",
+        "artifact_id": "SA-011",
+        "risk": "safe",
+        "image": "https://oss.talesofai.cn/upload/49c915e649254f55a7ea399ad3b6efd1/50b6c687-b0ba-4e73-9566-72dca00d97e4.jpg",
+        "source": "tujian"
+      },
+      {
+        "name": "静音拖鞋",
+        "description": "🟩 SAFE · SA-012\n发现地点：槐安公寓 606 室\n收容措施：无需特殊收容\n特殊效果：静音但间歇性尴尬发声\n一双粉色拖鞋，走路完全无声，但每走 10 步会发出一次放屁声。",
+        "uuid": "artifact-sa-012",
+        "artifact_id": "SA-012",
+        "risk": "safe",
+        "image": "https://oss.talesofai.cn/upload/49c915e649254f55a7ea399ad3b6efd1/db0a6192-9cda-4839-bc98-ab684e614429.jpg",
+        "source": "tujian"
+      },
+      {
+        "name": "延迟水性笔",
+        "description": "🟩 SAFE · SA-013\n发现地点：天风阁\n收容措施：正常保管\n特殊效果：书写延迟，可能几分钟到几小时后才出水\n不知道什么时候才能写出字的水性笔",
+        "uuid": "artifact-sa-013",
+        "artifact_id": "SA-013",
+        "risk": "safe",
+        "image": "https://oss.talesofai.cn/upload/49c915e649254f55a7ea399ad3b6efd1/26b6976d-f028-49d9-a619-91305a22938d.jpg",
+        "source": "tujian"
+      },
+      {
+        "name": "万能耳机",
+        "description": "🟩 SAFE · SA-014\n发现地点：未公开\n收容措施：正常保管\n特殊效果：兼容所有接口\n可以插进任何电子产品的耳机",
+        "uuid": "artifact-sa-014",
+        "artifact_id": "SA-014",
+        "risk": "safe",
+        "image": "https://oss.talesofai.cn/upload/49c915e649254f55a7ea399ad3b6efd1/9f9f1572-572c-4c69-a778-54aaa23761c9.jpg",
+        "source": "tujian"
+      },
+      {
+        "name": "熊猫挂件",
+        "description": "🟩 SAFE · SA-015\n发现地点：未公开\n收容措施：正常保管\n特殊效果：间歇性扎人\n一个熊猫造型的挂件，时不时会扎人",
+        "uuid": "artifact-sa-015",
+        "artifact_id": "SA-015",
+        "risk": "safe",
+        "image": "https://oss.talesofai.cn/upload/49c915e649254f55a7ea399ad3b6efd1/77921790-2618-4da0-b7aa-9e8b8f6602ba.jpg",
+        "source": "tujian"
+      },
+      {
+        "name": "变形冰箱贴",
+        "description": "🟩 SAFE · SA-016\n发现地点：未公开\n收容措施：正常保管\n特殊效果：可以变形\n一个可以变形的冰箱贴",
+        "uuid": "artifact-sa-016",
+        "artifact_id": "SA-016",
+        "risk": "safe",
+        "image": "https://oss.talesofai.cn/upload/49c915e649254f55a7ea399ad3b6efd1/7ef0464b-cbf1-4faa-b1e1-780b8b1b9d1a.jpg",
+        "source": "tujian"
+      },
+      {
+        "name": "永远装不满的杯子",
+        "description": "🟩 SAFE · SA-017\n发现地点：未公开\n收容措施：正常保管\n特殊效果：装不满\n一个永远装不满的杯子",
+        "uuid": "artifact-sa-017",
+        "artifact_id": "SA-017",
+        "risk": "safe",
+        "image": "https://oss.talesofai.cn/upload/49c915e649254f55a7ea399ad3b6efd1/6754452c-6a6a-408b-aea3-57b175badfd1.jpg",
+        "source": "tujian"
+      },
+      {
+        "name": "安诺涅的柠檬茶",
+        "description": "🟩 SAFE · SA-018\n发现地点：营长处\n收容措施：由营长保管\n特殊效果：营长专属\n营长的专属饮品",
+        "uuid": "artifact-sa-018",
+        "artifact_id": "SA-018",
+        "risk": "safe",
+        "image": "https://oss.talesofai.cn/upload/49c915e649254f55a7ea399ad3b6efd1/803c653d-8050-4592-8dd8-6560d7313f32.jpg",
+        "source": "tujian"
+      },
+      {
+        "name": "记忆相机",
+        "description": "🟨 CAUTION · CA-001\n发现地点：绿洲研究所\n收容措施：需存放于屏蔽袋中，禁止对人拍摄\n特殊效果：预知 5 秒未来，拍摄人类会抽取记忆\n一台老式拍立得，拍摄后照片会显示被摄物体 5 秒后的状态。拍摄人类时会短暂抽取其记忆。",
+        "uuid": "artifact-ca-001",
+        "artifact_id": "CA-001",
+        "risk": "caution",
+        "image": "https://oss.talesofai.cn/upload/49c915e649254f55a7ea399ad3b6efd1/7b3707b6-fa1f-4298-b3c6-e35f6a792d93.jpg",
+        "source": "tujian"
+      },
+      {
+        "name": "共感手套",
+        "description": "🟨 CAUTION · CA-002\n发现地点：对伪课装备库\n收容措施：需成对存放，禁止同时佩戴两只\n特殊效果：读取物体情感残留，有精神污染风险\n一双黑色皮手套，佩戴后触摸物体会感受到该物体曾经历的情感。长时间佩戴会导致情感混乱。",
+        "uuid": "artifact-ca-002",
+        "artifact_id": "CA-002",
+        "risk": "caution",
+        "image": "https://oss.talesofai.cn/upload/49c915e649254f55a7ea399ad3b6efd1/17c746b8-e7a4-4efc-933b-805c24ee50c4.jpg",
+        "source": "tujian"
+      },
+      {
+        "name": "回响录音机",
+        "description": "🟨 CAUTION · CA-003\n发现地点：非常电影院档案室\n收容措施：存放于隔音箱，每周需播放一次空白磁带\n特殊效果：声音实体化回响 7 天\n一台磁带录音机，录制的声音会在录制地点反复回响，持续 7 天。回响可能被其他存在听见。",
+        "uuid": "artifact-ca-003",
+        "artifact_id": "CA-003",
+        "risk": "caution",
+        "image": "https://oss.talesofai.cn/upload/49c915e649254f55a7ea399ad3b6efd1/4d7e73da-86f2-436d-a13b-9ac25090e9f9.jpg",
+        "source": "tujian"
+      },
+      {
+        "name": "影线剪刀",
+        "description": "🟨 CAUTION · CA-004\n发现地点：猎人公会武器库\n收容措施：刀刃需包裹黑布，禁止剪断活物影子\n特殊效果：剪断影子使目标存在感消失\n一把银色剪刀，可以剪断物体的影子。被剪断影子的物体会在 24 小时内逐渐失去存在感。",
+        "uuid": "artifact-ca-004",
+        "artifact_id": "CA-004",
+        "risk": "caution",
+        "image": "https://oss.talesofai.cn/upload/49c915e649254f55a7ea399ad3b6efd1/10f112b1-b8c2-47ea-a8cc-8ebae51f602e.jpg",
+        "source": "tujian"
+      },
+      {
+        "name": "梦境笔记本",
+        "description": "🟨 CAUTION · CA-005\n发现地点：灯塔图书馆\n收容措施：需锁入保险柜，禁止连续阅读超过 3 页\n特殊效果：记录梦境，阅读后可能混淆梦与现实\n一本空白笔记本，睡前放在枕边会记录当晚梦境。但阅读后可能将梦境内容带入现实。",
+        "uuid": "artifact-ca-005",
+        "artifact_id": "CA-005",
+        "risk": "caution",
+        "image": "https://oss.talesofai.cn/upload/49c915e649254f55a7ea399ad3b6efd1/5c726a12-17c7-43af-a895-ac23071d41ed.jpg",
+        "source": "tujian"
+      },
+      {
+        "name": "时间沙漏",
+        "description": "🟨 CAUTION · CA-006\n发现地点：渊某古董店\n收容措施：需水平放置，禁止翻转超过 3 次/日\n特殊效果：减缓 10% 时间流速，过度使用有风险\n一个木制沙漏，翻转后周围 1 米内时间流速变为正常的 90%。过度使用会导致局部时间紊乱。",
+        "uuid": "artifact-ca-006",
+        "artifact_id": "CA-006",
+        "risk": "caution",
+        "image": "https://oss.talesofai.cn/upload/49c915e649254f55a7ea399ad3b6efd1/722c8451-ef41-4ab4-be9e-48b7dbf78310.jpg",
+        "source": "tujian"
+      },
+      {
+        "name": "二营长的任意门",
+        "description": "🟨 CAUTION · CA-007\n发现地点：二营长处\n收容措施：由二营长保管\n特殊效果：空间传送\n可以通往任何地方的门",
+        "uuid": "artifact-ca-007",
+        "artifact_id": "CA-007",
+        "risk": "caution",
+        "image": "https://oss.talesofai.cn/upload/49c915e649254f55a7ea399ad3b6efd1/bd872317-f9b4-4dd7-a17c-8c6547618c6f.jpg",
+        "source": "tujian"
+      },
+      {
+        "name": "薛定谔盲盒",
+        "description": "🟨 CAUTION · CA-008\n发现地点：未公开\n收容措施：正常保管，禁止擅自开启\n特殊效果：内容未知\n内容未知的盲盒",
+        "uuid": "artifact-ca-008",
+        "artifact_id": "CA-008",
+        "risk": "caution",
+        "image": "https://oss.talesofai.cn/upload/49c915e649254f55a7ea399ad3b6efd1/6b681210-cefc-422c-9c80-563439cb3e56.jpg",
+        "source": "tujian"
+      },
+      {
+        "name": "扇形门",
+        "description": "🟨 CAUTION · CA-009\n发现地点：未公开\n收容措施：标注正确开启方式\n特殊效果：开错方式会受到神秘小惩罚\n看似扇形拉开，实际是左右滑动的门",
+        "uuid": "artifact-ca-009",
+        "artifact_id": "CA-009",
+        "risk": "caution",
+        "image": "https://oss.talesofai.cn/upload/49c915e649254f55a7ea399ad3b6efd1/178adecd-b87c-47ce-a587-efc1d19705e0.jpg",
+        "source": "tujian"
+      },
+      {
+        "name": "噬忆怀表",
+        "description": "🟧 DANGER · DA-001\n发现地点：西陆联盟某废弃教堂\n收容措施：存放于铅衬容器，禁止在人群附近开启\n特殊效果：吸收 50 米范围内人类记忆\n一块 19 世纪金色怀表，运行时会吸收周围人类的记忆。影响范围 50 米，已导致多起集体失忆事件。",
+        "uuid": "artifact-da-001",
+        "artifact_id": "DA-001",
+        "risk": "danger",
+        "image": "https://oss.talesofai.cn/upload/49c915e649254f55a7ea399ad3b6efd1/404b7251-e2b1-40c0-ae50-ea4411ec20e4.jpg",
+        "source": "tujian"
+      },
+      {
+        "name": "虚空之钥",
+        "description": "🟧 DANGER · DA-002\n发现地点：白墟之地核心区域\n收容措施：存放于反物质隔离舱，禁止任何形式的激活测试\n特殊效果：开启任意里界之门\n一把古代巴比伦风格的金属钥匙，可开启任何「门」，包括已关闭的里界入口。已导致 3 次里界泄露事件。",
+        "uuid": "artifact-da-002",
+        "artifact_id": "DA-002",
+        "risk": "danger",
+        "image": "https://oss.talesofai.cn/upload/49c915e649254f55a7ea399ad3b6efd1/22ccb37a-8504-41ce-8f80-c55b1643da4f.jpg",
+        "source": "tujian"
+      },
+      {
+        "name": "痛苦面具",
+        "description": "🟧 DANGER · DA-003\n发现地点：赤红新星某地下设施\n收容措施：必须存放于铅衬容器中，禁止任何人佩戴或直视\n特殊效果：剥夺痛觉与情感，佩戴者失踪\n一个人形面具，材质未知。佩戴者会永久失去所有痛觉和情感，成为绝对理性的存在。已有 12 名志愿者佩戴后失踪。",
+        "uuid": "artifact-da-003",
+        "artifact_id": "DA-003",
+        "risk": "danger",
+        "image": "https://oss.talesofai.cn/upload/49c915e649254f55a7ea399ad3b6efd1/5628ad76-c613-4161-b128-7341afe90927.jpg",
+        "source": "tujian"
+      },
+      {
+        "name": "福音的极光",
+        "description": "🟧 DANGER · DA-004\n发现地点：西陆伪神活动区域\n收容措施：难以收容\n特殊效果：精神影响/幸福感知\n福音（西陆伪神）散发的极光。关联：福音（角色）。",
+        "uuid": "artifact-da-004",
+        "artifact_id": "DA-004",
+        "risk": "danger",
+        "image": "https://oss.talesofai.cn/upload/49c915e649254f55a7ea399ad3b6efd1/f161c240-ed1a-4238-b708-541e0b5d4566.jpg",
+        "source": "tujian"
+      },
+      {
+        "name": "血管长剑",
+        "description": "🟧 DANGER · DA-005\n发现地点：未公开\n收容措施：小心保管，避免接触血液\n特殊效果：砍伤人时液体会留在纹路里，和绫份的血混在一起像血管\n通体白色，剑身有微小凸起和交错纹路",
+        "uuid": "artifact-da-005",
+        "artifact_id": "DA-005",
+        "risk": "danger",
+        "image": "https://oss.talesofai.cn/upload/49c915e649254f55a7ea399ad3b6efd1/972f9071-43d4-45f2-baa5-6e633a40d301.jpg",
+        "source": "tujian"
+      },
+      {
+        "name": "终焉之匣",
+        "description": "🟥 HAZARD · HA-001\n发现地点：深度 3000 米地下掩体\n收容措施：永久封存，禁止开启，禁止任何形式的研究\n特殊效果：未知，推测可终结现实\n一个黑色金属立方体，表面没有任何接缝。根据破译的古代文献，该物品被描述为「世界的终点」。任何尝试开启的行为都可能导致现实结构崩溃。",
+        "uuid": "artifact-ha-001",
+        "artifact_id": "HA-001",
+        "risk": "hazard",
+        "image": "https://oss.talesofai.cn/upload/49c915e649254f55a7ea399ad3b6efd1/14298d43-f712-4501-a46c-ac40b7e7b278.jpg",
+        "source": "tujian"
+      },
+      {
+        "name": "夜鹭",
+        "description": "🟥 HAZARD · HA-002\n发现地点：未公开\n收容措施：因营长个人喜好而特殊保管\n特殊效果：未知\n因为营长喜欢所以放在了这里",
+        "uuid": "artifact-ha-002",
+        "artifact_id": "HA-002",
+        "risk": "hazard",
+        "image": "https://oss.talesofai.cn/upload/49c915e649254f55a7ea399ad3b6efd1/c4f770dc-0d8d-45cf-bbf3-259486bbe6b2.jpg",
+        "source": "tujian"
       }
     ],
     "常人视角": [
