@@ -32,3 +32,4 @@
 [data-page-phone-login-root] input{border:0!important;padding:0!important;background:transparent!important;border-radius:0!important}
 [data-page-phone-login-root] button{border:0!important;border-radius:18px!important}
 [data-page-phone-login-root] .prefix{color:#222!important;font-size:17px!important}
+@media(max-width:640px){[data-page-phone-login-root] .field{flex-direction:row!important}}
