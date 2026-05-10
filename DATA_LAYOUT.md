@@ -57,7 +57,8 @@ runtime/backups/db/YYYY-MM-DD/pseudo_human.db
 | `pages/vue-app/src/` | 是 | Vue 前端源码 |
 | `pages/vue-app/package.json` / `package-lock.json` | 是 | 依赖声明和锁定版本 |
 | `pages/vue-app/node_modules/` | 否 | 本地依赖，可 `npm ci` 重装 |
-| `pages/dist/` | 是 | GitHub Pages / 后端静态服务使用的构建产物 |
+| `pages/dist/` | 是 | 前端构建产物；后端静态服务使用 |
+| 根目录 `index.html` / `assets/` | 是 | GitHub Pages 分支根目录部署入口，由 `scripts/sync-pages-root.sh` 从 `pages/dist/` 同步 |
 
 ## 4. 后端源码与依赖
 
@@ -93,7 +94,7 @@ pages/               # 当前伪人大本营后端和数据
 skills/              # 可复用技能说明
 ```
 
-## 7. 已清理的旧资源
+## 6. 已清理的旧资源
 
 以下旧资源/旧 demo/旧审计产物不属于当前伪人大本营主线，已从 Git 主线移除：
 
@@ -114,10 +115,11 @@ VERIFY_LLM_BACKENDS.md
 
 如果之后确实需要某个旧项目，请从 Git 历史恢复，不要重新散放到根目录。
 
-## 6. 清理原则
+## 7. 清理原则
 
 1. 依赖目录不提交，只提交 `package.json` / `package-lock.json`。
 2. 运行缓存不提交。
 3. 用户数据只进入数据库，不散落到根目录。
 4. 大文件先判断是否是运行必需；不是就放 `runtime/` 或外部备份。
 5. GitHub 和 Cohub 的 `main` 保持同一套源码历史；不要再单独维护根目录 Pages 分支作为主线。
+6. 每次 `pages/vue-app` 构建后，执行 `./scripts/sync-pages-root.sh`，确保 GitHub Pages 根目录入口和 `pages/dist` 一致。
