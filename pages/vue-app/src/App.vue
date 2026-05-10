@@ -941,6 +941,7 @@ function cleanApiError(data, fallback = '请求失败') {
   return text.length > 180 ? text.slice(0, 180) + '…' : text
 }
 const BACKEND_BASE_KEY = 'WEIREN_BACKEND_BASE'
+const DEFAULT_BACKEND_BASE = 'https://s-63a86395-de5c-46f9-a54d-0f7d02aa0671-3000.cohub.run'
 function normalizeBackendBase(value) {
   const raw = String(value || '').trim().replace(/\/$/, '')
   if (!raw || !/^https:\/\//i.test(raw)) return ''
@@ -958,7 +959,7 @@ function initBackendBase() {
       return fromQuery
     }
   } catch {}
-  return normalizeBackendBase(window.__BACKEND_BASE__) || normalizeBackendBase(localStorage.getItem(BACKEND_BASE_KEY))
+  return normalizeBackendBase(window.__BACKEND_BASE__) || normalizeBackendBase(localStorage.getItem(BACKEND_BASE_KEY)) || normalizeBackendBase(DEFAULT_BACKEND_BASE)
 }
 const BACKEND_BASE = initBackendBase()
 function apiUrl(path) {
