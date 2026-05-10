@@ -33,6 +33,12 @@
 
   <section v-else class="labyrinth-app">
     <div v-if="message" class="global-toast" :class="messageType">{{ message }}</div>
+    <div v-if="uploadTasks.length" class="upload-task-panel">
+      <div class="upload-task-head"><b>图片上传任务</b><span>{{ uploadInProgress ? '上传中，请勿关闭页面' : '上传完成' }}</span></div>
+      <div v-for="task in uploadTasks" :key="task.id" class="upload-task-row" :class="task.status">
+        <span>{{ task.name }}</span><em>{{ task.status === 'error' ? task.error : `${Math.round(task.progress)}%` }}</em><i><b :style="{ width: task.progress + '%' }"></b></i>
+      </div>
+    </div>
     <main class="stage-main">
       <Transition name="page-shift">
       <section v-if="view === 'forum'" key="forum" class="forum-theater chat-forum">
@@ -90,6 +96,7 @@
               <div v-if="!forumLoading && visibleThreads.length === 0" class="item muted">这个频道还没有发言，来发第一条吧。</div>
             </div>
             <div v-if="!['活动颁布','成员'].includes(selectedForum) && uploadedForumImages.length" class="upload-preview"><span v-for="img in uploadedForumImages" :key="img"><img :src="img" alt=""><button @click="removeUploadedImage(uploadedForumImages, img)">×</button></span></div>
+            <div v-if="!['活动颁布','成员'].includes(selectedForum) && imageLibrary.length" class="local-image-library"><b>本地图片库</b><button v-for="item in imageLibrary.slice(0, 12)" :key="item.url" @click="useLibraryImage(uploadedForumImages, item.url)"><img :src="item.url" alt=""><span>使用</span></button></div>
             <div v-if="!['活动颁布','成员'].includes(selectedForum)" class="chat-compose">
               <img :src="safeUrl(session.me.avatar_url)" alt="">
               <input v-model.trim="forumText" type="text" :placeholder="`在「${selectedForum}」发布讨论...`" @keydown.enter="postForumMessage">
@@ -145,6 +152,7 @@
                 </div>
                 <label class="wiki-content-label">正文内容<textarea v-model.trim="wikiSubmitContent" rows="6" placeholder="写条目正文、修订内容、设定说明等。照片可在下方一起上传，不需要单独开上传入口。"></textarea></label>
                 <div class="wiki-photo-row"><input ref="wikiUploadInput" class="hidden-file" type="file" accept="image/*" multiple @change="onWikiImages"><button class="back-note" @click="wikiUploadInput?.click()">添加照片</button><span>{{ uploadedWikiImages.length ? `已添加 ${uploadedWikiImages.length} 张照片` : '可选：上传条目配图 / 证明图' }}</span></div>
+                <div v-if="imageLibrary.length" class="local-image-library wiki-library"><b>本地图片库</b><button v-for="item in imageLibrary.slice(0, 12)" :key="item.url" @click="useLibraryImage(uploadedWikiImages, item.url)"><img :src="item.url" alt=""><span>使用</span></button></div>
                 <div v-if="uploadedWikiImages.length" class="upload-preview wiki-preview"><span v-for="img in uploadedWikiImages" :key="img"><img :src="img" alt=""><button @click="removeUploadedImage(uploadedWikiImages, img)">×</button></span></div>
                 <button class="back-note primary" :disabled="!canSubmitWiki" @click="submitWikiChange">提交给管理员审核</button>
               </div>
@@ -170,6 +178,7 @@
                 </div>
                 <label class="wiki-content-label">正文内容<textarea v-model.trim="wikiSubmitContent" rows="6" placeholder="写条目正文、修订内容、设定说明等。照片可在下方一起上传。"></textarea></label>
                 <div class="wiki-photo-row"><input ref="wikiUploadInput" class="hidden-file" type="file" accept="image/*" multiple @change="onWikiImages"><button class="back-note" @click="wikiUploadInput?.click()">添加照片</button><span>{{ uploadedWikiImages.length ? `已添加 ${uploadedWikiImages.length} 张照片` : '可选：上传条目配图 / 证明图' }}</span></div>
+                <div v-if="imageLibrary.length" class="local-image-library wiki-library"><b>本地图片库</b><button v-for="item in imageLibrary.slice(0, 12)" :key="item.url" @click="useLibraryImage(uploadedWikiImages, item.url)"><img :src="item.url" alt=""><span>使用</span></button></div>
                 <div v-if="uploadedWikiImages.length" class="upload-preview wiki-preview"><span v-for="img in uploadedWikiImages" :key="img"><img :src="img" alt=""><button @click="removeUploadedImage(uploadedWikiImages, img)">×</button></span></div>
                 <button class="back-note primary" :disabled="!canSubmitWiki" @click="submitWikiChange">提交给管理员审核</button>
               </div>
@@ -505,6 +514,10 @@ const forumUploadInput = ref(null)
 const wikiUploadInput = ref(null)
 const uploadedForumImages = ref([])
 const uploadedWikiImages = ref([])
+const IMAGE_LIBRARY_KEY = 'WEIREN_IMAGE_LIBRARY'
+const uploadTasks = ref([])
+const imageLibrary = ref(loadImageLibrary())
+const uploadInProgress = computed(() => uploadTasks.value.some(t => t.status === 'uploading'))
 const savedFrame = localStorage.getItem('NIETA_AVATAR_FRAME')
 const avatarFrame = ref(['none', 'roach', 'moonrise'].includes(savedFrame) ? savedFrame : 'roach')
 const session = reactive({ me: null, role: 'member', token: '' })
@@ -984,34 +997,69 @@ async function api(path, options = {}) {
   }
 }
 function fileExt(file) { return (file?.name?.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '') || 'png' }
-function fileToBase64(file) {
+function loadImageLibrary() {
+  try { return JSON.parse(localStorage.getItem(IMAGE_LIBRARY_KEY) || '[]').filter(x => x?.url).slice(0, 60) } catch { return [] }
+}
+function saveImageLibrary() { localStorage.setItem(IMAGE_LIBRARY_KEY, JSON.stringify(imageLibrary.value.slice(0, 60))) }
+function addImageToLibrary(url, name = '') {
+  if (!url) return
+  imageLibrary.value = [{ url, name, time: Date.now() }, ...imageLibrary.value.filter(x => x.url !== url)].slice(0, 60)
+  saveImageLibrary()
+}
+function useLibraryImage(target, url) {
+  if (!target.value.includes(url)) target.value.push(url)
+  showMsg('已从本地图片库添加', 'ok')
+}
+function fileToBase64(file, task) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result || '').split(',', 2)[1] || '')
+    reader.onload = () => { if (task) task.progress = Math.max(task.progress, 35); resolve(String(reader.result || '').split(',', 2)[1] || '') }
     reader.onerror = () => reject(new Error('图片读取失败'))
+    reader.onprogress = e => { if (task && e.lengthComputable) task.progress = Math.min(30, Math.round((e.loaded / e.total) * 30)) }
     reader.readAsDataURL(file)
   })
 }
-async function uploadImageToGallery(file) {
+async function uploadImageToGallery(file, task) {
   if (!session.token) throw new Error('请先登录')
   if (file.size > 5 * 1024 * 1024) throw new Error('图片不能超过 5MB')
-  const data = await fileToBase64(file)
-  const res = await api('/api/proxy/upload-image', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-token': session.token },
-    body: JSON.stringify({ suffix: fileExt(file), data }),
-    timeout: 90000
-  })
-  return res?.url
+  const data = await fileToBase64(file, task)
+  if (task) task.progress = Math.max(task.progress, 42)
+  const progressTimer = setInterval(() => { if (task && task.status === 'uploading') task.progress = Math.min(88, task.progress + 3) }, 700)
+  try {
+    const res = await api('/api/proxy/upload-image', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-token': session.token },
+      body: JSON.stringify({ suffix: fileExt(file), data }),
+      timeout: 90000
+    })
+    if (task) task.progress = 100
+    return res?.url
+  } finally {
+    clearInterval(progressTimer)
+  }
 }
 async function handleImageFiles(files, target) {
   const list = Array.from(files || []).filter(f => f.type.startsWith('image/'))
   if (!list.length) return
-  showMsg('图片上传到你的捏他图库中...', 'muted')
-  try {
-    for (const file of list) target.value.push(await uploadImageToGallery(file))
-    showMsg('图片已上传到你的捏他图库，并使用图库链接显示', 'ok')
-  } catch (e) { showMsg(`图片上传失败：${e.message}`) }
+  showMsg(`开始上传 ${list.length} 张图片...`, 'muted')
+  for (const file of list) {
+    const task = reactive({ id: `${Date.now()}-${Math.random()}`, name: file.name || '图片', progress: 0, status: 'uploading', error: '' })
+    uploadTasks.value.unshift(task)
+    try {
+      const url = await uploadImageToGallery(file, task)
+      if (url) {
+        target.value.push(url)
+        addImageToLibrary(url, file.name || '图片')
+        task.status = 'done'; task.progress = 100
+      } else {
+        throw new Error('未返回图片链接')
+      }
+    } catch (e) {
+      task.status = 'error'; task.error = e.message || '上传失败'; task.progress = Math.max(task.progress, 6)
+      showMsg(`图片上传失败：${task.error}`)
+    }
+  }
+  if (!uploadTasks.value.some(t => t.status === 'uploading')) showMsg('图片上传完成，可在页面预览或从本地图片库复用', 'ok')
 }
 function onForumImages(e) { handleImageFiles(e.target.files, uploadedForumImages); e.target.value = '' }
 function onWikiImages(e) { handleImageFiles(e.target.files, uploadedWikiImages); e.target.value = '' }
@@ -1138,14 +1186,18 @@ async function searchEntries() {
     if (seq === searchSeq.value) searchLoading.value = false
   }
 }
-function navigate(nextView) { view.value = nextView; currentEntry.value = null; window.scrollTo({ top: 0, behavior: 'instant' }) }
+function confirmPendingUpload() {
+  if (!uploadInProgress.value) return true
+  return window.confirm('还有图片上传任务未完成，切换页面可能导致上传结果没有加入当前编辑内容。确定要离开吗？')
+}
+function navigate(nextView) { if (!confirmPendingUpload()) return; view.value = nextView; currentEntry.value = null; window.scrollTo({ top: 0, behavior: 'instant' }) }
 function openForum() { navigate('forum'); globalQuery.value = ''; serverResults.value = []; loadMembers(); loadForumMeta(); loadForumPosts() }
 function openArchive() { navigate('archive'); currentCat.value = ''; catQuery.value = ''; selectedWikiGroup.value = ''; selectedWikiSubsection.value = ''; selectedWikiCategory.value = ''; selectedArtifactCategory.value = ''; wikiSubmitOpen.value = false; loadMembers(); loadWikiArchive(); loadForumMeta() }
 function enterWikiGroup(group) { selectedWikiGroup.value = group; selectedWikiSubsection.value = ''; selectedWikiCategory.value = ''; selectedArtifactCategory.value = ''; wikiSubmitOpen.value = false; window.scrollTo(0, 0) }
 function leaveWikiLevel() { if (selectedWikiGroup.value === '世界信息') { if (selectedWikiCategory.value) { selectedWikiCategory.value = ''; wikiSubmitOpen.value = false; return } if (selectedWikiSubsection.value) { selectedWikiSubsection.value = ''; return } selectedWikiGroup.value = ''; return } if (selectedWikiGroup.value === '伪物档案') { if (selectedArtifactCategory.value) { selectedArtifactCategory.value = ''; wikiSubmitOpen.value = false; return } selectedWikiGroup.value = '' } }
 function openExplore() { navigate('explore') }
 function openCategory(cat) { currentCat.value = cat; catQuery.value = ''; navigate('category') }
-async function openEntry(uuid, fromGlobal = false) { const entry = allEntries.value.find(e => e.uuid === uuid); if (!entry) return; currentEntry.value = entry; currentCat.value = entry.category; view.value = 'entry'; if (fromGlobal) globalQuery.value = ''; window.scrollTo({ top: 0, behavior: 'instant' }); await loadComments(uuid) }
+async function openEntry(uuid, fromGlobal = false) { if (!confirmPendingUpload()) return; const entry = allEntries.value.find(e => e.uuid === uuid); if (!entry) return; currentEntry.value = entry; currentCat.value = entry.category; view.value = 'entry'; if (fromGlobal) globalQuery.value = ''; window.scrollTo({ top: 0, behavior: 'instant' }); await loadComments(uuid) }
 async function loadComments(uuid) { comments.value = await api(`/api/comments?entry_uuid=${encodeURIComponent(uuid)}`).catch(() => []); commentCounts.value = { ...commentCounts.value, [uuid]: comments.value.length } }
 async function postComment() { if (!currentEntry.value || !commentText.value) return; posting.value = true; try { await api('/api/comments', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ entry_uuid: currentEntry.value.uuid, content: commentText.value }) }); commentText.value = ''; await loadComments(currentEntry.value.uuid) } finally { posting.value = false } }
 function logout() { localStorage.removeItem(TOKEN_KEY); session.me = null; session.token = ''; session.role = 'member'; view.value = 'forum' }
@@ -1160,9 +1212,15 @@ function tickLiveUsers() {
   liveUserCount.value = Math.max(24, Math.min(52, base + wave + jitter))
 }
 
-onBeforeUnmount(() => { clearInterval(identityCardProgressTimer); clearInterval(liveUserTimer) })
+function beforeUnloadUploadGuard(e) {
+  if (!uploadInProgress.value) return
+  e.preventDefault()
+  e.returnValue = '还有图片上传任务未完成，确定要离开吗？'
+}
+onBeforeUnmount(() => { clearInterval(identityCardProgressTimer); clearInterval(liveUserTimer); window.removeEventListener('beforeunload', beforeUnloadUploadGuard) })
 
 onMounted(async () => {
+  window.addEventListener('beforeunload', beforeUnloadUploadGuard)
   tickLiveUsers()
   liveUserTimer = setInterval(tickLiveUsers, 4500)
   await loadWikiArchive()
