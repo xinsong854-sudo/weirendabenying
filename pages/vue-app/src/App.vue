@@ -940,11 +940,38 @@ function cleanApiError(data, fallback = '请求失败') {
   if (/<!doctype html|<html|error response|nothing matches the given uri/i.test(text)) return '接口暂未生效，请刷新后重试；若仍失败请联系管理员。'
   return text.length > 180 ? text.slice(0, 180) + '…' : text
 }
+const BACKEND_BASE_KEY = 'WEIREN_BACKEND_BASE'
+function normalizeBackendBase(value) {
+  const raw = String(value || '').trim().replace(/\/$/, '')
+  if (!raw || !/^https:\/\//i.test(raw)) return ''
+  return raw
+}
+function initBackendBase() {
+  try {
+    const url = new URL(window.location.href)
+    const fromQuery = normalizeBackendBase(url.searchParams.get('backend') || url.searchParams.get('api'))
+    if (fromQuery) {
+      localStorage.setItem(BACKEND_BASE_KEY, fromQuery)
+      url.searchParams.delete('backend')
+      url.searchParams.delete('api')
+      window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`)
+      return fromQuery
+    }
+  } catch {}
+  return normalizeBackendBase(window.__BACKEND_BASE__) || normalizeBackendBase(localStorage.getItem(BACKEND_BASE_KEY))
+}
+const BACKEND_BASE = initBackendBase()
+function apiUrl(path) {
+  const raw = String(path || '')
+  if (/^https?:\/\//i.test(raw)) return raw
+  if (raw.startsWith('/api/') && BACKEND_BASE) return `${BACKEND_BASE}${raw}`
+  return raw
+}
 async function api(path, options = {}) {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), options.timeout || 20000)
   try {
-    const res = await fetch(path, { ...options, signal: controller.signal })
+    const res = await fetch(apiUrl(path), { ...options, signal: controller.signal })
     const data = await readJson(res)
     if (!res.ok) throw new Error(cleanApiError(data, res.statusText))
     return data
