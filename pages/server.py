@@ -23,6 +23,7 @@ BASE_DIR = os.path.dirname(__file__) or "."
 DATA = os.path.join(BASE_DIR, "pseudo-human-data.json")
 DIST_DIR = os.path.join(BASE_DIR, "dist")
 MAX_BODY_BYTES = 1024 * 1024
+UPLOAD_MAX_BODY_BYTES = 6 * 1024 * 1024
 RATE_BUCKET = {}
 RATE_LIMIT_WINDOW = 60
 RATE_LIMIT_MAX_AUTH = 90
@@ -592,8 +593,10 @@ class Server(BaseHTTPRequestHandler):
     def do_POST(self):
         if not self._origin_allowed():
             self._json({"error": "Origin not allowed"}, 403); return
+        p = urlparse(self.path)
         length = int(self.headers.get("Content-Length", 0) or 0)
-        if length > MAX_BODY_BYTES:
+        max_body = UPLOAD_MAX_BODY_BYTES if p.path == "/api/proxy/upload-image" else MAX_BODY_BYTES
+        if length > max_body:
             self._json({"error": "请求体过大"}, 413); return
         raw_body = self.rfile.read(length) if length > 0 else b"{}"
         try:
@@ -603,7 +606,6 @@ class Server(BaseHTTPRequestHandler):
         except Exception:
             self._json({"error": "JSON 格式错误"}, 400); return
         token = clean_text(self.headers.get("x-token", ""), 4096)
-        p = urlparse(self.path)
         rate_key = token_user_key(token)
         max_count = RATE_LIMIT_MAX_AUTH if rate_key != "anon" else RATE_LIMIT_MAX_ANON
         if rate_limited_key(rate_key, max_count):
@@ -644,6 +646,42 @@ class Server(BaseHTTPRequestHandler):
                 except Exception:
                     data = {"error": r.text[:500] or r.reason}
                 self._json(data, r.status_code)
+            except Exception as e:
+                self._json({"error": str(e)}, 502)
+            return
+
+        if p.path == "/api/proxy/upload-image":
+            if not token: self._json({"error": "请先登录"}, 401); return
+            suffix = clean_text(body.get("suffix", "png"), 12).lower().lstrip(".")
+            if suffix not in ("png", "jpg", "jpeg", "webp", "gif"):
+                suffix = "png"
+            try:
+                raw_b64 = str(body.get("data", ""))
+                if "," in raw_b64:
+                    raw_b64 = raw_b64.split(",", 1)[1]
+                raw = base64.b64decode(raw_b64, validate=True)
+                if not raw or len(raw) > 5 * 1024 * 1024:
+                    self._json({"error": "图片过大或为空"}, 413); return
+                headers = {"x-token": token}
+                signed = requests.get(f"{API}/v1/oss/upload-signed-url?suffix={suffix}", headers=headers, timeout=15)
+                signed.raise_for_status()
+                signed_data = signed.json()
+                upload_url = signed_data.get("upload_url")
+                view_url = signed_data.get("view_url")
+                if not upload_url or not view_url:
+                    self._json({"error": "未获取到上传地址"}, 502); return
+                put = requests.put(upload_url, data=raw, timeout=30, headers={"Content-Type": ""})
+                if put.status_code >= 400:
+                    self._json({"error": f"OSS 上传失败：{put.status_code}"}, 502); return
+                artifact = requests.post(f"{API}/v1/artifact/picture", headers={"Content-Type": "application/json", "x-token": token}, json={"url": view_url}, timeout=15)
+                try:
+                    artifact_data = artifact.json()
+                except Exception:
+                    artifact_data = {"error": artifact.text[:500] or artifact.reason}
+                if artifact.status_code >= 400:
+                    self._json(artifact_data, artifact.status_code); return
+                final_url = artifact_data.get("url") or (artifact_data.get("detail") or {}).get("url") or view_url
+                self._json({"url": final_url})
             except Exception as e:
                 self._json({"error": str(e)}, 502)
             return

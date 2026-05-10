@@ -984,14 +984,25 @@ async function api(path, options = {}) {
   }
 }
 function fileExt(file) { return (file?.name?.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '') || 'png' }
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || '').split(',', 2)[1] || '')
+    reader.onerror = () => reject(new Error('图片读取失败'))
+    reader.readAsDataURL(file)
+  })
+}
 async function uploadImageToGallery(file) {
   if (!session.token) throw new Error('请先登录')
-  const signed = await api(`${API}/v1/oss/upload-signed-url?suffix=${encodeURIComponent(fileExt(file))}`, { headers: { 'x-token': session.token } })
-  const rawBlob = new Blob([file], { type: '' })
-  const put = await fetch(signed.upload_url, { method: 'PUT', body: rawBlob })
-  if (!put.ok) throw new Error(`OSS 上传失败：${put.status}`)
-  const artifact = await api(`${API}/v1/artifact/picture`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': session.token }, body: JSON.stringify({ url: signed.view_url }) })
-  return artifact?.url || artifact?.detail?.url || signed.view_url
+  if (file.size > 5 * 1024 * 1024) throw new Error('图片不能超过 5MB')
+  const data = await fileToBase64(file)
+  const res = await api('/api/proxy/upload-image', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-token': session.token },
+    body: JSON.stringify({ suffix: fileExt(file), data }),
+    timeout: 90000
+  })
+  return res?.url
 }
 async function handleImageFiles(files, target) {
   const list = Array.from(files || []).filter(f => f.type.startsWith('image/'))
