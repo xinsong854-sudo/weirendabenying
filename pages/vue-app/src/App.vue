@@ -117,21 +117,13 @@
               </article>
               <div v-if="!forumLoading && visibleThreads.length === 0" class="item muted">这个频道还没有发言，来发第一条吧。</div>
             </div>
-            <div v-if="selectedForum === '主论坛'" class="role-card-gate compact-role-gate">
-              <template v-if="identityCards.length">
-                <b>RP</b>
-                <select v-model="selectedRoleCardId" aria-label="选择发言角色卡"><option value="">选择角色卡</option><option v-for="card in identityCards" :key="card.id" :value="String(card.id)">{{ card.investigator?.name || card.source_name || '未命名角色' }}</option></select>
-                <small>主论坛发言将按所选角色改写。</small>
-              </template>
-              <template v-else>
-                <b>RP</b><small>需先导入一张角色卡。</small><button class="back-note primary mini" @click="openProfile">导入</button>
-              </template>
-            </div>
             <div v-if="!['活动颁布','成员','悬赏栏目'].includes(selectedForum) && uploadedForumImages.length" class="upload-preview"><span v-for="img in uploadedForumImages" :key="img"><img :src="img" alt=""><button @click="removeUploadedImage(uploadedForumImages, img)">×</button></span></div>
             <div v-if="!['活动颁布','成员','悬赏栏目'].includes(selectedForum) && imageLibrary.length" class="local-image-library"><b>本地图片库</b><button v-for="item in imageLibrary.slice(0, 12)" :key="item.url" @click="useLibraryImage(uploadedForumImages, item.url)"><img :src="item.url" alt=""><span>使用</span></button></div>
-            <div v-if="!['活动颁布','成员','悬赏栏目'].includes(selectedForum)" class="chat-compose">
+            <div v-if="!['活动颁布','成员','悬赏栏目'].includes(selectedForum)" class="chat-compose" :class="{ 'with-role-picker': selectedForum === '主论坛' }">
               <img :src="safeUrl(activeForumRoleCard?.avatar_img || session.me.avatar_url)" alt="">
-              <input v-model.trim="forumText" type="text" :disabled="selectedForum === '主论坛' && !activeForumRoleCard" :placeholder="selectedForum === '主论坛' ? (activeForumRoleCard ? `以「${activeForumRoleCard.investigator?.name || activeForumRoleCard.source_name}」的口吻发言...` : '请先选择角色卡') : `在「${selectedForum}」发布讨论...`" @keydown.enter="postForumMessage">
+              <select v-if="selectedForum === '主论坛' && identityCards.length" v-model="selectedRoleCardId" class="compose-role-select" aria-label="选择发言角色卡"><option value="">角色卡</option><option v-for="card in identityCards" :key="card.id" :value="String(card.id)">{{ card.investigator?.name || card.source_name || '未命名角色' }}</option></select>
+              <button v-else-if="selectedForum === '主论坛'" class="compose-role-import" @click="openProfile">导入角色</button>
+              <input v-model.trim="forumText" type="text" :disabled="selectedForum === '主论坛' && !activeForumRoleCard" :placeholder="selectedForum === '主论坛' ? (activeForumRoleCard ? `以「${activeForumRoleCard.investigator?.name || activeForumRoleCard.source_name}」发言...` : '先选择/导入角色') : `在「${selectedForum}」发布讨论...`" @keydown.enter="postForumMessage">
               <input ref="forumUploadInput" class="hidden-file" type="file" accept="image/*" multiple @change="onForumImages">
               <button @click="forumUploadInput?.click()">图片</button>
               <button :disabled="forumPosting || (selectedForum === '主论坛' && !activeForumRoleCard) || (!forumText && !uploadedForumImages.length)" @click="postForumMessage">{{ forumPosting ? '改写中' : '发送' }}</button>
