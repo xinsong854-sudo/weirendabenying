@@ -1,6 +1,6 @@
 <template>
   <section class="panel forum-view-rich">
-    <header class="forum-head"><div><span class="ritual-label">Artificial Human Base Camp</span><h2>{{ channel }}</h2><p>{{ channelDesc }}</p></div><button class="primary" @click="loadAll">刷新</button></header>
+    <header class="forum-head"><div><span class="ritual-label">REVERSE ARCHIVE / 1999</span><h2>{{ channel }}</h2><p>{{ channelDesc }}</p></div><button class="primary" @click="loadAll">刷新</button></header>
     <nav class="forum-channel-tabs"><button v-for="c in channels" :key="c.name" :class="{on:channel===c.name}" @click="switchChannel(c.name)"><b>{{ c.name }}</b><small>{{ c.desc }}</small></button></nav>
     <section v-if="channel !== '主论坛'" class="daily-news"><header><b>{{ news.title || `${channel} 当日新闻` }}</b><button @click="loadNews">换一批</button></header><ul><li v-for="item in news.items||[]" :key="item">{{ item }}</li></ul></section>
 
