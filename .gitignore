@@ -8,8 +8,17 @@
 __pycache__/
 *.pyc
 node_modules/
+.pytest_cache/
+.vite/
+.cache/
+
+# Local scratch / runtime backups
+tmp/
+runtime/
 
 # Local DB journals / backups
 *.db-wal
 *.db-shm
 *.bak
+*.sqlite-wal
+*.sqlite-shm
