@@ -231,14 +231,7 @@
               </section>
               <div v-if="!artifactGalleryEntries.length" class="wiki-empty-tip">当前等级暂无伪物记录。</div>
             </main>
-            <div v-if="false && selectedArtifactEntry" class="form-dialog-mask artifact-modal-mask" @click.self="selectedArtifactEntry = null">
-              <section class="form-dialog-card artifact-modal-card">
-                <header><span class="ritual-label">ARTIFACT FILE</span><h2>{{ selectedArtifactEntry.name }}</h2><p><b :class="['artifact-risk-pill', artifactRiskOf(selectedArtifactEntry).value]">{{ artifactRiskOf(selectedArtifactEntry).icon }} {{ artifactRiskOf(selectedArtifactEntry).label }}</b></p></header>
-                <div class="artifact-modal-body"><img v-if="safeUrl(selectedArtifactEntry.image)" class="artifact-modal-image" :src="safeUrl(selectedArtifactEntry.image)" alt=""><div v-else class="artifact-modal-seal">{{ selectedArtifactEntry.name.slice(0, 2) }}</div><p v-for="line in artifactLines(selectedArtifactEntry)" :key="line">{{ line }}</p></div>
-                <footer><button class="back-note" @click="openEntry(selectedArtifactEntry.uuid); selectedArtifactEntry = null">打开 Wiki 词条</button><button class="back-note primary" @click="selectedArtifactEntry = null">返回图鉴</button></footer>
               </section>
-            </div>
-          </section>
         </div>
       </section>
 
@@ -276,13 +269,6 @@
           </section>
           <div v-if="!artifactGalleryEntries.length" class="wiki-empty-tip">当前等级暂无伪物记录。</div>
         </main>
-        <div v-if="false && selectedArtifactEntry" class="form-dialog-mask artifact-modal-mask" @click.self="selectedArtifactEntry = null">
-          <section class="form-dialog-card artifact-modal-card standalone-artifact-modal">
-            <header><span class="ritual-label">ARTIFACT FILE</span><h2>{{ selectedArtifactEntry.name }}</h2><p><b :class="['artifact-risk-pill', artifactRiskOf(selectedArtifactEntry).value]">{{ artifactRiskOf(selectedArtifactEntry).icon }} {{ artifactRiskOf(selectedArtifactEntry).label }}</b></p></header>
-            <div class="artifact-modal-body"><img v-if="safeUrl(selectedArtifactEntry.image)" class="artifact-modal-image" :src="safeUrl(selectedArtifactEntry.image)" alt=""><div v-else class="artifact-modal-seal">{{ selectedArtifactEntry.name.slice(0, 2) }}</div><p v-for="line in artifactLines(selectedArtifactEntry)" :key="line">{{ line }}</p></div>
-            <footer><button class="back-note" @click="openEntry(selectedArtifactEntry.uuid); selectedArtifactEntry = null">打开 Wiki 词条</button><button class="back-note primary" @click="selectedArtifactEntry = null">返回图鉴</button></footer>
-          </section>
-        </div>
       </section>
 
       <section v-else-if="view === 'artifactDetail' && selectedArtifactEntry" key="artifactDetail" class="artifact-detail-theater">
@@ -569,7 +555,7 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import archiveSeed from './pseudo-human-data.json'
 
 const API = 'https://api.talesofai.cn'
@@ -1535,7 +1521,7 @@ function navigate(nextView) { if (!confirmPendingUpload()) return; view.value = 
 function openForum() { navigate('forum'); globalQuery.value = ''; serverResults.value = []; loadMembers(); loadForumMeta(); loadForumPosts(); forumLibraryOpen.value = false; wikiLibraryOpen.value = false }
 function openArchive() { navigate('archive'); currentCat.value = ''; catQuery.value = ''; selectedWikiGroup.value = ''; selectedWikiSubsection.value = ''; selectedWikiCategory.value = ''; selectedArtifactCategory.value = ''; selectedArtifactRisk.value = 'all'; selectedArtifactEntry.value = null; wikiSubmitOpen.value = false; forumLibraryOpen.value = false; wikiLibraryOpen.value = false; loadMembers(); loadWikiArchive(); loadForumMeta() }
 function openArtifactCodex() { navigate('artifactCodex'); selectedWikiGroup.value = ''; selectedArtifactCategory.value = '伪物档案'; selectedArtifactEntry.value = null; wikiSubmitOpen.value = false; loadWikiArchive(); window.scrollTo({ top: 0, behavior: 'instant' }) }
-function openArtifactDetail(entry) { if (!entry) return; selectedArtifactEntry.value = entry; view.value = 'artifactDetail'; window.scrollTo({ top: 0, behavior: 'instant' }) }
+function openArtifactDetail(entry) { if (!entry) return; selectedArtifactEntry.value = entry; currentEntry.value = null; view.value = 'artifactDetail'; nextTick(() => window.scrollTo({ top: 0, left: 0, behavior: 'instant' })) }
 function enterWikiGroup(group) { selectedWikiGroup.value = group; selectedWikiSubsection.value = ''; selectedWikiCategory.value = ''; selectedArtifactCategory.value = group === '伪物档案' ? '伪物档案' : ''; selectedArtifactRisk.value = 'all'; selectedArtifactEntry.value = null; wikiSubmitOpen.value = false; window.scrollTo(0, 0) }
 function leaveWikiLevel() { if (selectedWikiGroup.value === '世界信息') { if (selectedWikiCategory.value) { selectedWikiCategory.value = ''; wikiSubmitOpen.value = false; return } if (selectedWikiSubsection.value) { selectedWikiSubsection.value = ''; return } selectedWikiGroup.value = ''; return } if (selectedWikiGroup.value === '伪物档案') { if (selectedArtifactCategory.value) { selectedArtifactCategory.value = ''; wikiSubmitOpen.value = false; return } selectedWikiGroup.value = '' } }
 function openExplore() { navigate('explore'); loadIdentityCards(); loadExploreRuns() }
