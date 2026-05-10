@@ -80,8 +80,26 @@
               </section>
             </div>
             <div v-else-if="selectedForum === '悬赏栏目'" class="activity-board bounty-board">
-              <section><div class="activity-head"><h2>每日悬赏 · 本真委托</h2><button class="back-note" @click="loadBountyTasks(true)">刷新查看</button></div><article v-for="task in bountyTasks" :key="task.id" class="activity-card bounty-card" @click="openBountyTask(task)"><b>{{ task.title }}</b><span>{{ task.difficulty }} · {{ task.reward_min }}-{{ task.reward_max }} 本真</span><p>委托人：{{ task.client }}</p><p>{{ task.summary }}</p></article><div v-if="!bountyTasks.length" class="item muted">正在生成今日委托...</div></section>
-              <section v-if="selectedBountyTask" class="bounty-detail"><h2>{{ selectedBountyTask.title }}</h2><p><b>委托人：</b>{{ selectedBountyTask.client }}</p><p>{{ selectedBountyTask.details }}</p><textarea v-model.trim="bountySubmitText" rows="5" placeholder="写下你完成委托的过程、行动选择与故事细节..."></textarea><button class="back-note primary" :disabled="bountySubmitting || bountySubmitText.length < 20" @click="submitBounty">{{ bountySubmitting ? '审核中...' : '提交委托故事' }}</button><div v-if="bountyReview" class="item muted">{{ bountyReview }}</div><h3>其他人的提交</h3><article v-for="s in bountySubmissions" :key="s.id" class="activity-card past"><b>{{ s.user_name }} · {{ s.reward }} 本真</b><span>评分 {{ s.score }}</span><p>{{ s.content }}</p><small>{{ s.review }}</small></article></section>
+              <section class="bounty-list-pane">
+                <div class="activity-head bounty-head"><div><h2>每日悬赏 · 本真委托</h2><p>选择一份委托，右侧会直接显示详情与提交档案。</p></div><button class="back-note" @click="loadBountyTasks(true)">刷新查看</button></div>
+                <article v-for="task in bountyTasks" :key="task.id" class="activity-card bounty-card" :class="{ active: selectedBountyTask?.id === task.id }" @click="openBountyTask(task)">
+                  <header><b>{{ task.title }}</b><span>{{ task.difficulty }} · {{ task.reward_min }}-{{ task.reward_max }} 本真</span></header>
+                  <p class="bounty-client">委托人：{{ task.client }}</p>
+                  <p>{{ task.summary }}</p>
+                  <small>{{ selectedBountyTask?.id === task.id ? '当前委托 / 可在右侧提交' : '点击切换到此委托' }}</small>
+                </article>
+                <div v-if="!bountyTasks.length" class="item muted">正在生成今日委托...</div>
+              </section>
+              <section v-if="selectedBountyTask" class="bounty-detail">
+                <div class="bounty-file-head"><span>BOUNTY FILE</span><h2>{{ selectedBountyTask.title }}</h2><p><b>委托人：</b>{{ selectedBountyTask.client }}</p></div>
+                <article class="bounty-brief"><b>委托详情</b><p>{{ selectedBountyTask.details }}</p></article>
+                <section class="bounty-submit-card">
+                  <label><span>提交委托故事</span><textarea v-model.trim="bountySubmitText" rows="6" placeholder="写下你完成委托的过程、行动选择与故事细节；至少 20 字，系统会按世界观一致性与完成度结算本真。"></textarea></label>
+                  <div class="bounty-submit-actions"><small>{{ bountySubmitText.length }}/20</small><button class="back-note primary" :disabled="bountySubmitting || bountySubmitText.length < 20" @click="submitBounty">{{ bountySubmitting ? '审核中...' : '提交委托故事' }}</button></div>
+                  <div v-if="bountyReview" class="bounty-review-result">{{ bountyReview }}</div>
+                </section>
+                <section class="bounty-history"><h3>其他人的提交</h3><article v-for="s in bountySubmissions" :key="s.id" class="activity-card past bounty-submission"><b>{{ s.user_name }} · {{ s.reward }} 本真</b><span>评分 {{ s.score }}</span><p>{{ s.content }}</p><small>{{ s.review }}</small></article><div v-if="!bountySubmissions.length" class="item muted">还没有归档提交，来写第一份吧。</div></section>
+              </section>
             </div>
             <div v-else-if="selectedForum === '活动颁布'" class="activity-board">
               <section><div class="activity-head"><h2>当前活动</h2><button v-if="isAdmin" class="back-note" @click="createActivity">＋ 新增活动</button></div><article v-for="event in currentActivities" :key="event.title" class="activity-card"><b>{{ event.title }}</b><span>{{ event.status }}</span><p>{{ event.desc }}</p><button v-if="isAdmin && event.custom" class="activity-delete" @click="deleteActivity(event)">删除活动</button></article></section>
