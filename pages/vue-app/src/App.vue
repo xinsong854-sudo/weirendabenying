@@ -1134,6 +1134,8 @@ function startWelcomeDecode() {
 }
 async function finishHumanCaptcha() {
   humanCaptchaOpen.value = false
+  welcomeText.value = '■■■■■■■■■■■■'
+  welcomeLoading.value = true
   const token = pendingLoginToken.value
   pendingLoginToken.value = ''
   if (token && !session.me) {
@@ -1141,7 +1143,6 @@ async function finishHumanCaptcha() {
     try { await useToken(token, false) } catch (e) { welcomeLoading.value = false; showMsg(`登录失败：${e.message}`); return } finally { logging.value = false }
   }
   if (session.me?.uuid) sessionStorage.setItem(`WEIREN_HUMAN_CHECK_${session.me.uuid}`, 'ok')
-  welcomeLoading.value = true
   const finalText = startWelcomeDecode()
   setTimeout(() => { welcomeLoading.value = false; showMsg(finalText, 'ok') }, 1700)
 }
