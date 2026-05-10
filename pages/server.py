@@ -202,12 +202,19 @@ def resolve_original_url(text):
     data = r.json()
     if not r.ok:
         raise ValueError((data or {}).get('detail') or '短链解析失败')
-    return data if isinstance(data, str) else json.dumps(data, ensure_ascii=False)
+    if isinstance(data, str):
+        return data
+    return data.get('original_url') or data.get('url') or data.get('data') or json.dumps(data, ensure_ascii=False)
+
+def extract_creator_hint(text):
+    m = re.search(r'(?:from_user|creator_uuid|owner_uuid|user_uuid|author_uuid)=([0-9a-fA-F]{32}|[0-9a-fA-F-]{36})', str(text or ''))
+    return m.group(1) if m else ''
 
 def resolve_knight(raw):
     import requests
     text = resolve_original_url(raw)
     uuid = extract_uuid(text)
+    creator_hint = extract_creator_hint(text)
     if not uuid:
         raise ValueError('未找到角色 UUID')
     r = requests.get(f'https://api.talesofai.cn/v2/travel/parent/{uuid}/profile', headers={
@@ -241,7 +248,7 @@ def resolve_knight(raw):
             }
         },
         'author': {
-            'uuid': author.get('uuid') or '',
+            'uuid': author.get('uuid') or creator_hint or '',
             'nick_name': author.get('nick_name') or author.get('name') or '未知用户',
             'avatar_url': author.get('avatar_url') or author.get('avatar') or '',
             'subscriber_count': author.get('subscriber_count') or 0,
