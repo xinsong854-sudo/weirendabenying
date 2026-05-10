@@ -1,1 +1,0 @@
-import{m as n,e as r}from"./talesofai-framework-DDGVqry5.js";const a=()=>{const[e,t]=n(Date.now());return r(()=>{const o=setInterval(()=>{t(Date.now())},1e3);return()=>{window.clearInterval(o)}}),e};export{a as u};

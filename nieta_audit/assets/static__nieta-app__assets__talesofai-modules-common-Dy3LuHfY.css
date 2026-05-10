@@ -1,1 +1,0 @@
-.auto-textarea{display:grid;width:100%}.auto-textarea:after{content:attr(data-value) " ";white-space:pre-wrap;visibility:hidden}.auto-textarea>textarea{resize:none;outline:none;overflow:hidden;background:transparent}.auto-textarea>textarea,.auto-textarea:after{font:inherit;word-break:break-all;grid-area:1 / 1 / 2 / 2}

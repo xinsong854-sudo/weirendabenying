@@ -120,7 +120,6 @@ def load_env_file(path):
 
 load_env_file(os.path.join(BASE_DIR, ".env"))
 load_env_file(os.path.join(os.path.dirname(BASE_DIR), ".env"))
-load_env_file(os.path.join(os.path.dirname(BASE_DIR), "dtags-backend", ".env"))
 
 LLM_URL = os.environ.get("LLM_URL", "https://litellm.talesofai.cn/v1/chat/completions")
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "")

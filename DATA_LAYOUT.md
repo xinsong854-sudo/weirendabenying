@@ -64,7 +64,7 @@ runtime/backups/db/YYYY-MM-DD/pseudo_human.db
 | 路径 | 是否提交 | 说明 |
 | --- | --- | --- |
 | `pages/server.py` | 是 | 当前 3000 后端主服务 |
-| `backend/`, `dtags-backend/` | 视项目需要 | 旧/辅助项目源码 |
+| `backend/`, `dtags-backend/` | 否 | 旧辅助项目，已从当前主线移除；如需恢复请从 Git 历史查找 |
 | `*/node_modules/` | 否 | 依赖目录不再提交，使用 lockfile 恢复 |
 
 ## 5. 临时目录与缓存
@@ -92,6 +92,27 @@ pages/vue-app/src/   # 前端源码
 pages/               # 当前伪人大本营后端和数据
 skills/              # 可复用技能说明
 ```
+
+## 7. 已清理的旧资源
+
+以下旧资源/旧 demo/旧审计产物不属于当前伪人大本营主线，已从 Git 主线移除：
+
+```txt
+avatar-frame-demo/
+geo-mosaic/
+my-page/
+web-beautification/
+dtags-frontend/
+dtags-frontend-full/
+backend/
+dtags-backend/
+nieta_parse/
+nieta_audit/
+logo-animation.html
+VERIFY_LLM_BACKENDS.md
+```
+
+如果之后确实需要某个旧项目，请从 Git 历史恢复，不要重新散放到根目录。
 
 ## 6. 清理原则
 

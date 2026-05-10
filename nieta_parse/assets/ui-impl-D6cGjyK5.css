@@ -1,1 +1,0 @@
-.animation-inherit-button{transform:translate(calc(100% + 16px));animation:inherit-button-anim .83s cubic-bezier(.33,0,0,1) .13s forwards}@keyframes inherit-button-anim{0%{transform:translate(calc(100% + 16px))}to{transform:translate(0)}}@keyframes inherit-count-scroll-anim{0%{transform:translateY(0)}to{transform:translateY(var(--inherit-count-num-tranlate-y))}}
