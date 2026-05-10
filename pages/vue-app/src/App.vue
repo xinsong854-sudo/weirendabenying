@@ -14,7 +14,7 @@
       <ForumView v-if="view==='forum'" :session="session" />
       <CardsView v-else-if="view==='cards'" :session="session" />
       <MembersView v-else-if="view==='members'" />
-      <WikiView v-else-if="view==='wiki'" />
+      <WikiView v-else-if="view==='wiki'" :session="session" />
       <CodexView v-else-if="view==='codex'" />
       <ProfileView v-else :session="session" :user="me" @updated="onProfileUpdated" />
     </section>

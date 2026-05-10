@@ -238,6 +238,10 @@ class Server(BaseHTTPRequestHandler):
                     except Exception: d['images']=[]
                     out.append(d)
                 return self.send_json(out)
+            if p.path == '/api/wiki/submissions':
+                u=self.user(); con=db(); role=con.execute('SELECT role FROM members WHERE uuid=?',[u['uuid']]).fetchone(); status=clean(parse_qs(p.query).get('status',['pending'])[0],20)
+                if not role or role['role'] not in ('chief','deputy','admin'): con.close(); return self.send_json([])
+                rows=con.execute('SELECT * FROM wiki_submissions WHERE status=? ORDER BY created_at DESC LIMIT 100',[status]).fetchall(); con.close(); return self.send_json([dict(r) for r in rows])
             if p.path == '/api/identity-cards':
                 u = self.user(); con = db(); rows = con.execute("SELECT * FROM identity_cards WHERE user_uuid=? AND status='active' ORDER BY updated_at DESC", [u['uuid']]).fetchall(); con.close()
                 return self.send_json([self.card_summary(r) for r in rows])
@@ -267,6 +271,14 @@ class Server(BaseHTTPRequestHandler):
                 return self.send_json({'ok': True, 'session': sess, 'me': u, 'role': row['role'] if row else 'member', 'title': row['title'] if row else '', 'signature': row['signature'] if row else ''})
             if p.path == '/api/profile':
                 u=self.user(); sig=clean(body.get('signature'),80); frame=clean(body.get('avatar_frame') or 'none',20); con=db(); con.execute('UPDATE members SET signature=?,avatar_frame=? WHERE uuid=?',[sig,frame,u['uuid']]); con.commit(); con.close(); return self.send_json({'ok':True,'signature':sig,'avatar_frame':frame,'me':{'signature':sig,'avatar_frame':frame}})
+            if p.path == '/api/wiki/submissions':
+                u=self.user(); target=clean(body.get('target'),80); submit_type=clean(body.get('submit_type') or '新增词条',20); title=clean(body.get('title'),120); content=clean(body.get('content'),5000)
+                if not target or not content: return self.send_json({'error':'缺少分类或正文'},400)
+                con=db(); con.execute('INSERT INTO wiki_submissions(target,submit_type,content,user_uuid,user_name) VALUES(?,?,?,?,?)',[target,submit_type,(f'【{title}】\n' if title else '')+content,u['uuid'],u['nick_name']]); con.commit(); con.close(); return self.send_json({'ok':True})
+            if p.path == '/api/wiki/review':
+                u=self.user(); con=db(); role=con.execute('SELECT role FROM members WHERE uuid=?',[u['uuid']]).fetchone()
+                if not role or role['role'] not in ('chief','deputy','admin'): con.close(); return self.send_json({'error':'权限不足'},403)
+                sid=int(body.get('id') or 0); action='approved' if body.get('action')=='approved' else 'rejected'; con.execute('UPDATE wiki_submissions SET status=? WHERE id=?',[action,sid]); con.commit(); con.close(); return self.send_json({'ok':True,'status':action})
             if p.path == '/api/forum/posts':
                 u = self.user(); channel=clean(body.get('channel') or '主论坛',80); content=clean(body.get('content'),2000); images=body.get('images') if isinstance(body.get('images'),list) else []
                 role_id = int(body.get('role_card_id') or 0)
