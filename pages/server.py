@@ -384,6 +384,14 @@ class Server(BaseHTTPRequestHandler):
         except Exception as e: return self.send_json({'error': str(e)}, 400)
         p = urlparse(self.path)
         try:
+            if p.path == '/api/proxy/request-code':
+                import requests
+                r=requests.post('https://api.talesofai.cn/v1/user/request-verification-code', json=body, timeout=15, headers={'Accept':'application/json','Content-Type':'application/json','Origin':'https://app.nieta.art','Referer':'https://app.nieta.art/','User-Agent':'Mozilla/5.0'})
+                return self.send_json(r.json() if r.text else {}, r.status_code)
+            if p.path == '/api/proxy/verify-code':
+                import requests
+                r=requests.post('https://api.talesofai.cn/v1/user/verify-with-phone-num', json=body, timeout=15, headers={'Accept':'application/json','Content-Type':'application/json','Origin':'https://app.nieta.art','Referer':'https://app.nieta.art/','User-Agent':'Mozilla/5.0'})
+                return self.send_json(r.json() if r.text else {}, r.status_code)
             if p.path == '/api/session/create':
                 user = body.get('user') if isinstance(body.get('user'), dict) else {}
                 if not user.get('uuid'): return self.send_json({'error':'缺少用户 UUID'},400)
