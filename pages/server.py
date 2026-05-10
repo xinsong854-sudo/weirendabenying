@@ -765,7 +765,7 @@ class Server(BaseHTTPRequestHandler):
             self.send_header("Access-Control-Allow-Origin", origin)
             self.send_header("Vary", "Origin")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "x-token, content-type")
+        self.send_header("Access-Control-Allow-Headers", "x-token, x-neta-token, content-type, authorization")
         self.send_header("Access-Control-Max-Age", "600")
 
     def _json(self, data, code=200):
@@ -999,6 +999,10 @@ class Server(BaseHTTPRequestHandler):
         except Exception:
             self._json({"error": "JSON 格式错误"}, 400); return
         token = clean_text(self.headers.get("x-token", ""), 4096)
+        neta_token = clean_text(self.headers.get("x-neta-token", ""), 4096)
+        auth_header = clean_text(self.headers.get("authorization", ""), 4096)
+        if not neta_token and auth_header.lower().startswith("bearer "):
+            neta_token = auth_header.split(" ", 1)[1].strip()
         rate_key = token_user_key(token)
         max_count = RATE_LIMIT_MAX_AUTH if rate_key != "anon" else RATE_LIMIT_MAX_ANON
         if rate_limited_key(rate_key, max_count):
