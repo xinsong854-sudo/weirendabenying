@@ -27,7 +27,8 @@
       <label class="agree"><input v-model="agree" type="checkbox"><span>我已阅读并同意 <a href="https://oss.talesofai.cn/static/blackboard/protocol-page/user-agreement.html" target="_blank" rel="noopener noreferrer">用户协议</a> 和 <a href="https://oss.talesofai.cn/static/blackboard/protocol-page/privacy-policy.html" target="_blank" rel="noopener noreferrer">隐私政策</a></span></label>
       <button class="submit" :disabled="logging" @click="login">{{ logging ? '登录中...' : '踏入世间' }}</button>
       <div class="msg" :class="messageType">{{ message }}</div>
-      <div class="foot">未注册手机号验证后将自动登录 · t.nieta.art/UTLCFvWs</div>
+      <div class="foot">未注册手机号完成捏Ta官方验证码验证后，将进入捏Ta账号登录/注册流程。</div>
+      <nav class="site-legal-links" aria-label="站点信息"><button @click="openLegal('about')">关于我们</button><button @click="openLegal('privacy')">隐私政策</button><button @click="openLegal('contact')">联系我们</button></nav>
     </div>
   </section>
 
@@ -429,6 +430,8 @@
       </section>
     </div>
 
+    <nav class="site-legal-links app-legal-links" aria-label="站点信息"><button @click="openLegal('about')">关于我们</button><button @click="openLegal('privacy')">隐私政策</button><button @click="openLegal('contact')">联系我们</button></nav>
+
     <footer class="bottom-dock">
       <button :class="{ active: view === 'forum' }" @click="openForum">论坛</button>
       <button :class="{ active: view === 'archive' || view === 'category' || view === 'entry' }" @click="openArchive">Wiki</button>
@@ -436,6 +439,16 @@
       <button :class="{ active: view === 'profile' }" @click="openProfile">个人中心</button>
     </footer>
   </section>
+
+  <div v-if="legalDialog.open" class="form-dialog-mask" @click.self="legalDialog.open = false">
+    <section class="form-dialog-card legal-dialog-card">
+      <header><span class="ritual-label">SITE INFORMATION</span><h2>{{ legalDialog.title }}</h2><p>{{ legalDialog.desc }}</p></header>
+      <div class="legal-dialog-body">
+        <p v-for="line in legalDialog.lines" :key="line">{{ line }}</p>
+      </div>
+      <footer><button class="back-note primary" @click="legalDialog.open = false">我知道了</button></footer>
+    </section>
+  </div>
 
   <div v-if="humanCaptchaOpen" class="captcha-mask">
     <section class="pseudo-captcha-card labyrinth-window">
@@ -560,6 +573,7 @@ const savedFrame = localStorage.getItem('NIETA_AVATAR_FRAME')
 const avatarFrame = ref(['none', 'roach', 'moonrise'].includes(savedFrame) ? savedFrame : 'roach')
 const session = reactive({ me: null, role: 'member', token: '' })
 const formDialog = reactive({ open: false, title: '', desc: '', fields: [], values: {}, confirmText: '确认', cancelText: '取消', resolve: null })
+const legalDialog = reactive({ open: false, title: '', desc: '', lines: [] })
 const avatarFrames = [
   { id: 'none', name: '无头像框', url: '', type: 'none' },
   { id: 'roach', name: '乱爬蟑螂', url: 'https://oss.talesofai.cn/sts/49c915e649254f55a7ea399ad3b6efd1/53710f82-1ad8-4863-98ee-4d7bed45f215.png', type: 'roach' },
@@ -709,6 +723,14 @@ function levelInfo(exp = 0, label = '') {
 }
 function memberLevelLabel(member) { return member?.level_label || levelInfo(member?.exp || 0).label }
 
+function openLegal(type) {
+  const data = {
+    about: { title: '关于我们', desc: '伪人大本营站点说明', lines: ['伪人大本营是面向成员的社区前端页面，提供捏Ta账号登录、论坛交流、Wiki 浏览、身份卡展示与里界探索等功能。', '本站不提供软件下载，不诱导转账，不收集银行卡或支付信息。', '动态接口由当前 3000 后端提供，GitHub Pages 仅托管静态前端。'] },
+    privacy: { title: '隐私政策', desc: '数据使用与保护说明', lines: ['手机号仅用于捏Ta官方验证码登录与身份验证。', '验证码验证完成后即时失效，不会在当前网站服务器留存。', '登录 token 仅保存在用户浏览器本地；后端只在每次请求中临时验证身份，不会持久化保存 token、手机号、验证码、IP 或设备指纹。', '用户主动提交的论坛发言、Wiki 投稿、签名、身份卡等站内内容会保存在后端，用于站点功能展示。'] },
+    contact: { title: '联系我们', desc: '站点联系信息', lines: ['联系 QQ：1062624601', '如遇到账号登录、误拦截、内容删除或安全问题，可通过该联系方式反馈。'] }
+  }[type]
+  Object.assign(legalDialog, { open: true, ...data })
+}
 function openFormDialog(options) {
   formDialog.title = options.title || '操作'
   formDialog.desc = options.desc || ''
